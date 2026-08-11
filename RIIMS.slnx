@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RIIMS.API/RIIMS.API.csproj" />
+    <Project Path="src/RIIMS.Application/RIIMS.Application.csproj" />
+    <Project Path="src/RIIMS.Domain/RIIMS.Domain.csproj" />
+    <Project Path="src/RIIMS.Infrastructure/RIIMS.Infrastructure.csproj" />
+    <Project Path="src/RIIMS.Jobs/RIIMS.Jobs.csproj" />
+  </Folder>
+</Solution>

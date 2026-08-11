@@ -1,0 +1,184 @@
+# Phase 2 Implementation Plan — Core Operations Engine
+
+> **Scope:** Product Master, Client Master, Product-Client Mapping, Work Task Engine, Break Engine, Support Activity Engine, Activity Timeline.
+
+---
+
+## Overview & Business Rules
+
+Phase 2 builds the core production tracking engine of RIIMS.
+
+### Enforced Business Rules
+1. **Single Active Task**: Only 1 task can be actively `Running` per employee at any given time.
+2. **Auto-Hold Cascading**:
+   - Starting a new Task while Task A is `Running` automatically puts Task A `OnHold` (closes `TaskTimeLog`), starts the new Task B as `Running`, and writes an `ActivityTimeline` event.
+   - Starting a Break or Support Activity automatically puts the currently `Running` task `OnHold` and stores `HeldTaskId`.
+3. **Auto-Resume Cascading**:
+   - Stopping an active Break or Support Activity automatically resumes the `HeldTaskId` (changes status back to `Running`, opens a new `TaskTimeLog`), and writes an `ActivityTimeline` event.
+4. **Time Classification**:
+   - Tasks = **Productive** hours.
+   - Breaks = **Non-Productive** hours.
+   - Support Activities = **Productive** hours.
+5. **Support Activity Validation**:
+   - Stopping **any** support activity (Support Call, Call, Meeting, Discussion, Demo) requires `Remarks`, `ProductId`, and `ClientId` before it can be stopped.
+6. **Activity Timeline Audit**:
+   - Every start/hold/resume/stop event across Task, Break, and Support Activity modules writes a row to `ActivityTimeline`.
+
+---
+
+## Proposed Changes
+
+### Component 1: Product Master (Admin)
+
+#### DTOs & Services
+- [NEW] `ProductDtos.cs` (`ProductDto`, `CreateProductRequest`, `UpdateProductRequest`)
+- [NEW] `ProductValidator.cs` (Code uppercase auto-formatting, unique code check)
+- [NEW] `IProductService.cs` / `ProductService.cs` (CRUD with soft delete)
+
+#### API Controller
+- [NEW] `ProductsController.cs`:
+  - `GET /api/products` (Admin/Employee dropdowns)
+  - `POST /api/products` (Admin)
+  - `PUT /api/products/{id}` (Admin)
+  - `DELETE /api/products/{id}` (Admin)
+
+---
+
+### Component 2: Client Master (Admin)
+
+#### DTOs & Services
+- [NEW] `ClientDtos.cs` (`ClientDto`, `CreateClientRequest`, `UpdateClientRequest`)
+- [NEW] `ClientValidator.cs` (Regex validation for PAN, GSTNo, CIN)
+- [NEW] `IClientService.cs` / `ClientService.cs` (CRUD with soft delete and statutory ID validation)
+
+#### API Controller
+- [NEW] `ClientsController.cs`:
+  - `GET /api/clients` (Admin/Employee)
+  - `POST /api/clients` (Admin)
+  - `PUT /api/clients/{id}` (Admin)
+  - `DELETE /api/clients/{id}` (Admin)
+
+---
+
+### Component 3: Product-Client Mapping (Admin)
+
+#### DTOs & Services
+- [NEW] `ProductClientMappingDtos.cs` (`MappingDto`, `CreateMappingRequest`)
+- [NEW] `IProductClientMappingService.cs` / `ProductClientMappingService.cs`:
+  - `GET /api/mappings?clientId=` & `GET /api/mappings/by-product/{productId}`
+  - Prevents duplicate mappings (`UQ_Product_Client`)
+
+#### API Controller
+- [NEW] `ProductClientMappingsController.cs`:
+  - `GET /api/mappings`
+  - `POST /api/mappings`
+  - `DELETE /api/mappings/{id}`
+
+---
+
+### Component 4: Work Task Engine (Employee)
+
+#### DTOs & Services
+- [NEW] `TaskDtos.cs` (`StartTaskRequest`, `TaskDto`, `ActiveTaskDto`, `TaskHistoryDto`)
+- [NEW] `ITaskService.cs` / `TaskService.cs`:
+  - `StartTaskAsync`: Auto-holds current running task if any, opens new task & `TaskTimeLog`, writes `ActivityTimeline`.
+  - `HoldTaskAsync`: Changes status to `OnHold`, closes `TaskTimeLog`, writes `ActivityTimeline`.
+  - `ResumeTaskAsync`: Changes status to `Running`, opens new `TaskTimeLog`, writes `ActivityTimeline`.
+  - `CompleteTaskAsync`: Changes status to `Completed`, closes open `TaskTimeLog`, writes `ActivityTimeline`.
+  - `GetActiveTaskAsync`: Returns currently running or held task for employee.
+  - `GetTaskHistoryAsync`: Returns date-filtered task history.
+
+#### API Controller
+- [NEW] `TasksController.cs`:
+  - `POST /api/tasks/start`
+  - `POST /api/tasks/{id}/hold`
+  - `POST /api/tasks/{id}/resume`
+  - `POST /api/tasks/{id}/complete`
+  - `GET /api/tasks/active/{employeeId}`
+  - `GET /api/tasks/history/{employeeId}?from=&to=`
+
+---
+
+### Component 5: Break Engine (Employee)
+
+#### DTOs & Services
+- [NEW] `BreakDtos.cs` (`StartBreakRequest`, `BreakLogDto`)
+- [NEW] `IBreakService.cs` / `BreakService.cs`:
+  - `StartBreakAsync`: Pauses current running task (auto-hold), opens `BreakLog` with `HeldTaskId`, writes `ActivityTimeline`.
+  - `StopBreakAsync`: Closes `BreakLog`, auto-resumes `HeldTaskId` if present, writes `ActivityTimeline`.
+
+#### API Controller
+- [NEW] `BreaksController.cs`:
+  - `POST /api/breaks/start`
+  - `POST /api/breaks/{id}/stop`
+  - `GET /api/breaks/active/{employeeId}`
+
+---
+
+### Component 6: Support Activity Engine (Employee)
+
+#### DTOs & Services
+- [NEW] `SupportActivityDtos.cs` (`StartSupportRequest`, `StopSupportRequest`, `SupportLogDto`)
+- [NEW] `ISupportActivityService.cs` / `SupportActivityService.cs`:
+  - `StartSupportAsync`: Auto-holds running task, opens `SupportActivityLog` with `HeldTaskId`, writes `ActivityTimeline`.
+  - `StopSupportAsync`: Validates `Remarks`, `ProductId`, and `ClientId`, closes log, auto-resumes `HeldTaskId`, writes `ActivityTimeline`.
+
+#### API Controller
+- [NEW] `SupportController.cs`:
+  - `POST /api/support/start`
+  - `POST /api/support/{id}/stop`
+  - `GET /api/support/active/{employeeId}`
+
+---
+
+### Component 7: Activity Timeline API
+
+- [NEW] `TimelineController.cs`:
+  - `GET /api/timeline/{employeeId}?date=` (Returns full activity timeline for day)
+
+---
+
+### Component 8: Frontend Screens (Phase 2)
+
+#### Admin Screens
+1. **`ProductListPage.tsx`**: Product data table + modal form (Code auto-uppercase).
+2. **`ClientListPage.tsx`**: Client data table + modal form grouped into "Company Info", "Address", and "Statutory IDs" sections with PAN/GST/CIN validation.
+3. **`ProductClientMappingPage.tsx`**: Two-column drag-drop/selection assignment UI with table of active mappings.
+
+#### Employee Screens
+1. **`WorkTaskPage.tsx`**:
+   - Top: Product dropdown (filtered by assigned clients), Client dropdown, Module name, Description textarea.
+   - Middle: Live Active Task widget with live timer counter (hh:mm:ss), Hold button, Complete button.
+   - Bottom: Task history table.
+2. **`PersistentActivityBar.tsx`**:
+   - Fixed top or bottom bar across the Employee portal.
+   - Quick action buttons: `Bio Break`, `Tea Break`, `Lunch Break`, `Support Call`, `Call`, `Meeting`, `Discussion`, `Demo`.
+   - Active state displays live duration counter & Stop button.
+   - Stop popup for Support Activities with required `Remarks`, `Product`, `Client` dropdowns.
+
+---
+
+## Verification Plan
+
+### Automated Build Verification
+```powershell
+# Verify backend compiles cleanly
+dotnet build
+
+# Verify frontend compiles cleanly
+cd frontend && npm run build
+```
+
+### Manual Verification Matrix (Test Cases 3–10 from Blueprint)
+| # | Test Case | Steps | Expected Result |
+|---|---|---|---|
+| 1 | Product Creation | Admin creates product `PRD-001` | Code uppercase auto-formatted, saved |
+| 2 | Client Creation | Admin creates client with PAN & GST | Validated & saved |
+| 3 | Product-Client Mapping | Admin maps Product 1 to Client 2 | Saved; mapping again throws duplicate error |
+| 4 | Start Task | Employee selects Product, Client, Module, clicks Start | Task status `Running`, `TaskTimeLog` opened, `ActivityTimeline` logged |
+| 5 | Start Second Task | Employee starts Task B while Task A is running | Confirmation toast, Task A `OnHold`, Task B `Running` |
+| 6 | Lunch Break | Employee clicks Lunch Break while task running | Active task `OnHold`, `BreakLog` opened, timer stops |
+| 7 | Stop Lunch Break | Employee clicks Stop Lunch Break | `BreakLog` closed, held task auto-resumes with new `TaskTimeLog` |
+| 8 | Start Meeting | Employee clicks Meeting | Active task `OnHold`, `SupportActivityLog` opened |
+| 9 | Stop Meeting without Remarks | Click Stop on Meeting without remarks | Blocked, validation error shown |
+| 10 | Stop Meeting with Remarks | Fill Remarks, Product, Client, click Stop | `SupportActivityLog` closed, held task auto-resumes |

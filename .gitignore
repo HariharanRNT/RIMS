@@ -1,0 +1,27 @@
+## Build outputs & Published files
+[Bb]in/
+[Oo]bj/
+[Dd]ist/
+publish/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio & IDEs
+.vs/
+.vscode/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+## Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+
+## OS & Temp files
+.DS_Store
+Thumbs.db
+*.tmp
