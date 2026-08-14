@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import apiClient from '../api/client';
+import { useHeartbeat } from '../hooks/useHeartbeat';
 
 interface User {
   token: string;
@@ -26,6 +27,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const savedUser = localStorage.getItem('riims_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
+
+  // Attach 60-second non-destructive heartbeat
+  useHeartbeat(!!user);
+
+  // Validate server state on boot
+  useEffect(() => {
+    if (user) {
+      apiClient.get('/sessions/current-state').catch(() => {
+        // Interceptor will handle 401 if session is expired or belongs to previous workday
+      });
+    }
+  }, []);
 
   const login = async (email: string, password: string): Promise<User> => {
     const response = await apiClient.post('/auth/login', { email, password });

@@ -17,7 +17,7 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task SendEmailAsync(string to, string subject, string body)
+    public async Task SendEmailAsync(string to, string subject, string body, string? cc = null)
     {
         var smtpSettings = _configuration.GetSection("Smtp");
         var host = smtpSettings["Host"] ?? "localhost";
@@ -27,7 +27,7 @@ public class EmailService : IEmailService
         var from = smtpSettings["From"] ?? "noreply@riims.local";
         var enableSsl = bool.Parse(smtpSettings["EnableSsl"] ?? "false");
 
-        _logger.LogInformation("Attempting to send email to {To} with Subject: '{Subject}'", to, subject);
+        _logger.LogInformation("Attempting to send email to {To} (CC: {CC}) with Subject: '{Subject}'", to, cc ?? "None", subject);
 
         try
         {
@@ -43,13 +43,18 @@ public class EmailService : IEmailService
                 IsBodyHtml = body.Contains("<html") || body.Contains("<div") || body.Contains("<p>")
             };
 
+            if (!string.IsNullOrWhiteSpace(cc))
+            {
+                message.CC.Add(cc.Trim());
+            }
+
             await client.SendMailAsync(message);
-            _logger.LogInformation("Email successfully dispatched to {To} via SMTP {Host}:{Port}", to, host, port);
+            _logger.LogInformation("Email successfully dispatched to {To} (CC: {CC}) via SMTP {Host}:{Port}", to, cc ?? "None", host, port);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "SMTP dispatch failed ({Host}:{Port}). Logging email contents to console for local dev:\nTO: {To}\nSUBJECT: {Subject}\nBODY:\n{Body}",
-                host, port, to, subject, body);
+            _logger.LogWarning(ex, "SMTP dispatch failed ({Host}:{Port}). Logging email contents to console for local dev:\nTO: {To}\nCC: {CC}\nSUBJECT: {Subject}\nBODY:\n{Body}",
+                host, port, to, cc ?? "None", subject, body);
         }
     }
 }

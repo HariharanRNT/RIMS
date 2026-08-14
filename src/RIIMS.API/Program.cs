@@ -41,7 +41,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
 .AddEntityFrameworkStores<RiimsDbContext>()
 .AddDefaultTokenProviders();
 
-builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PlaintextPasswordHasher>();
+// builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PlaintextPasswordHasher>(); // Using standard ASP.NET Core Identity PasswordHasher
 
 // 3. JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -78,6 +78,7 @@ builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IDesignationService, DesignationService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
+builder.Services.AddScoped<IAttendanceCalendarService, AttendanceCalendarService>();
 builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IProductService, ProductService>();
@@ -90,7 +91,11 @@ builder.Services.AddScoped<ITimelineService, TimelineService>();
 builder.Services.AddScoped<ILeaveService, LeaveService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IPayrollService, PayrollService>();
+builder.Services.AddScoped<ISessionService, SessionService>();
+builder.Services.AddScoped<ISalaryStructureService, SalaryStructureService>();
+builder.Services.AddScoped<IMonthlyEmployeeReportService, MonthlyEmployeeReportService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddHostedService<RIIMS.Jobs.WorkdayEodCleanupJob>();
 
 // 6. Validation
 builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
@@ -189,6 +194,7 @@ app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<SessionValidationMiddleware>();
 
 app.MapControllers();
 

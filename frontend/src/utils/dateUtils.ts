@@ -27,3 +27,16 @@ export const formatDateIST = (isoStr: string | null | undefined): string => {
     year: 'numeric'
   });
 };
+
+/**
+ * Converts decimal hours into HHh MMm formatted string (e.g. 0.27 hrs -> "00h 16m", 1.5 hrs -> "01h 30m").
+ */
+export const formatDurationToHoursMinutes = (hours: number | null | undefined): string => {
+  if (hours == null || isNaN(hours) || hours <= 0) {
+    return '00h 00m';
+  }
+  const totalMins = Math.max(0, Math.round(hours * 60));
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return `${h.toString().padStart(2, '0')}h ${m.toString().padStart(2, '0')}m`;
+};

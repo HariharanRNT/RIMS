@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import apiClient from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { Send, AlertCircle, CheckCircle, UserCheck } from 'lucide-react';
+import { GlassDatePicker } from '../../components/ui/GlassDatePicker';
+import { GlassTimePicker } from '../../components/ui/GlassTimePicker';
 
 interface PermissionRequestItem {
   id: number;
@@ -95,7 +97,7 @@ export const PermissionRequestPage: React.FC = () => {
 
       {error && (
         <div style={{
-          backgroundColor: '#FEF2F2',
+          backgroundColor: 'rgba(240,96,96,0.12)',
           border: '1px solid #FECACA',
           color: 'var(--danger)',
           padding: '0.75rem 1rem',
@@ -135,38 +137,30 @@ export const PermissionRequestPage: React.FC = () => {
 
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Request Date *</label>
-              <input
-                type="date"
-                className="form-input"
-                value={requestDate}
-                onChange={(e) => setRequestDate(e.target.value)}
-                required
-              />
-            </div>
+            <GlassDatePicker
+              label="Request Date"
+              required
+              value={requestDate}
+              onChange={(val) => setRequestDate(val)}
+              minDate={new Date().toISOString().split('T')[0]}
+              placeholder="Select Date"
+            />
 
-            <div className="form-group">
-              <label className="form-label">From Time *</label>
-              <input
-                type="time"
-                className="form-input"
-                value={fromTime}
-                onChange={(e) => setFromTime(e.target.value)}
-                required
-              />
-            </div>
+            <GlassTimePicker
+              label="From Time"
+              required
+              value={fromTime}
+              onChange={(val) => setFromTime(val)}
+              placeholder="Select From Time"
+            />
 
-            <div className="form-group">
-              <label className="form-label">To Time *</label>
-              <input
-                type="time"
-                className="form-input"
-                value={toTime}
-                onChange={(e) => setToTime(e.target.value)}
-                required
-              />
-            </div>
+            <GlassTimePicker
+              label="To Time"
+              required
+              value={toTime}
+              onChange={(val) => setToTime(val)}
+              placeholder="Select To Time"
+            />
           </div>
 
           <div className="form-group" style={{ marginBottom: '1.25rem' }}>

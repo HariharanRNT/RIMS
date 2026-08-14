@@ -19,7 +19,9 @@ import { ClientListPage } from './pages/admin/clients/ClientListPage';
 import { ProductClientMappingPage } from './pages/admin/mappings/ProductClientMappingPage';
 import { ApprovalsPage } from './pages/admin/approvals/ApprovalsPage';
 import { PayrollProcessingPage } from './pages/admin/payroll/PayrollProcessingPage';
+import { MonthlyEmployeePayrollReportPage } from './pages/admin/payroll/MonthlyEmployeePayrollReportPage';
 import { ReportsPage } from './pages/admin/reports/ReportsPage';
+import { MonthlyCalendarPage } from './pages/admin/attendance/MonthlyCalendarPage';
 
 import { EmployeeDashboardPage } from './pages/employee/DashboardPage';
 import { WorkTaskPage } from './pages/employee/WorkTaskPage';
@@ -27,6 +29,9 @@ import { LeaveRequestPage } from './pages/employee/LeaveRequestPage';
 import { PermissionRequestPage } from './pages/employee/PermissionRequestPage';
 import { PayslipPage } from './pages/employee/PayslipPage';
 import { ProfilePage } from './pages/employee/ProfilePage';
+import { EmployeeCalendarPage } from './pages/employee/EmployeeCalendarPage';
+
+import { TaskAllocationPage } from './pages/admin/tasks/TaskAllocationPage';
 
 export const App: React.FC = () => {
   return (
@@ -58,7 +63,9 @@ export const App: React.FC = () => {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="payroll" element={<PayrollProcessingPage />} />
+            <Route path="payroll/monthly-report" element={<MonthlyEmployeePayrollReportPage />} />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="tasks" element={<TaskAllocationPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
             <Route path="departments" element={<DepartmentListPage />} />
             <Route path="designations" element={<DesignationListPage />} />
@@ -67,6 +74,7 @@ export const App: React.FC = () => {
             <Route path="mappings" element={<ProductClientMappingPage />} />
             <Route path="lookups" element={<LookupListPage />} />
             <Route path="settings" element={<SystemSettingsPage />} />
+            <Route path="attendance-calendar" element={<MonthlyCalendarPage />} />
           </Route>
 
           {/* Employee Routes */}
@@ -85,6 +93,7 @@ export const App: React.FC = () => {
             <Route path="leave" element={<LeaveRequestPage />} />
             <Route path="permission" element={<PermissionRequestPage />} />
             <Route path="payslip" element={<PayslipPage />} />
+            <Route path="calendar" element={<EmployeeCalendarPage />} />
           </Route>
 
           {/* Fallback */}

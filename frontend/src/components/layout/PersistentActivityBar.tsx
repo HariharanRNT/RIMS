@@ -4,6 +4,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   Coffee,
   PhoneCall,
+  Phone,
+  PhoneOff,
+  Headphones,
+  Users,
+  MessageSquare,
+  Monitor,
+  Utensils,
+  User,
+  MoreHorizontal,
   StopCircle,
   Clock,
   Check,
@@ -11,6 +20,7 @@ import {
   Sparkles,
   AlertCircle,
   X,
+  Info,
 } from 'lucide-react';
 
 interface LookupItem {
@@ -43,6 +53,47 @@ interface Client {
   companyName: string;
 }
 
+const getBreakIcon = (name: string, isActive: boolean = false, size: number = 16) => {
+  const iconColor = isActive ? '#E8873C' : 'rgba(255, 255, 255, 0.7)';
+  const lower = name.toLowerCase();
+
+  if (lower.includes('bio')) {
+    return <User size={size} style={{ color: iconColor }} />;
+  }
+  if (lower.includes('tea') || lower.includes('coffee')) {
+    return <Coffee size={size} style={{ color: iconColor }} />;
+  }
+  if (lower.includes('lunch') || lower.includes('food') || lower.includes('meal')) {
+    return <Utensils size={size} style={{ color: iconColor }} />;
+  }
+  if (lower.includes('call') || lower.includes('phone')) {
+    return <PhoneOff size={size} style={{ color: iconColor }} />;
+  }
+  return <MoreHorizontal size={size} style={{ color: iconColor }} />;
+};
+
+const getSupportIcon = (name: string, isActive: boolean = false, size: number = 16) => {
+  const iconColor = isActive ? '#E8873C' : 'rgba(255, 255, 255, 0.7)';
+  const lower = name.toLowerCase();
+
+  if (lower.includes('support')) {
+    return <Headphones size={size} style={{ color: iconColor }} />;
+  }
+  if (lower.includes('meeting')) {
+    return <Users size={size} style={{ color: iconColor }} />;
+  }
+  if (lower.includes('discussion') || lower.includes('chat')) {
+    return <MessageSquare size={size} style={{ color: iconColor }} />;
+  }
+  if (lower.includes('demo') || lower.includes('presentation')) {
+    return <Monitor size={size} style={{ color: iconColor }} />;
+  }
+  if (lower.includes('call') || lower.includes('phone')) {
+    return <Phone size={size} style={{ color: iconColor }} />;
+  }
+  return <PhoneCall size={size} style={{ color: iconColor }} />;
+};
+
 export const PersistentActivityBar: React.FC = () => {
   const { user } = useAuth();
   const employeeId = user?.employeeId || 0;
@@ -59,8 +110,17 @@ export const PersistentActivityBar: React.FC = () => {
   // Stop / Demo Modal State
   const [showStopModal, setShowStopModal] = useState(false);
   const [stopRemarks, setStopRemarks] = useState('');
-  const [stopProductId, setStopProductId] = useState<number | ''>('');
-  const [stopClientId, setStopClientId] = useState<number | ''>('');
+  const [stopProductId, setStopProductId] = useState<number | 'CUSTOM' | ''>('');
+  const [isCustomProduct, setIsCustomProduct] = useState(false);
+  const [customProductName, setCustomProductName] = useState('');
+
+  const [stopClientId, setStopClientId] = useState<number | 'CUSTOM' | ''>('');
+  const [isCustomClient, setIsCustomClient] = useState(false);
+  const [customClientName, setCustomClientName] = useState('');
+
+  const [productError, setProductError] = useState('');
+  const [clientError, setClientError] = useState('');
+
   const [followUpDate, setFollowUpDate] = useState('');
   const [stopError, setStopError] = useState('');
   const [stopping, setStopping] = useState(false);
@@ -92,13 +152,13 @@ export const PersistentActivityBar: React.FC = () => {
   };
 
   const availableClients = React.useMemo(() => {
-    if (!stopProductId) return [];
+    if (!stopProductId || isCustomProduct) return [];
     const mappedClientIds = mappings
       .filter((m) => m.productId === Number(stopProductId) && m.isActive !== false)
       .map((m) => m.clientId);
 
     return clients.filter((c) => mappedClientIds.includes(c.id));
-  }, [stopProductId, clients, mappings]);
+  }, [stopProductId, isCustomProduct, clients, mappings]);
 
   const fetchActiveSessions = async () => {
     if (!employeeId) return;
@@ -212,7 +272,7 @@ export const PersistentActivityBar: React.FC = () => {
       if (res.data.success) {
         fetchActiveSessions();
         window.dispatchEvent(new Event('activity-changed'));
-        
+
         // If Demo activity clicked directly, prompt modal automatically or notify
         if (typeName === 'Demo') {
           handleOpenStopSupport();
@@ -227,8 +287,14 @@ export const PersistentActivityBar: React.FC = () => {
   const handleOpenStopSupport = () => {
     setStopRemarks('');
     setStopProductId('');
+    setIsCustomProduct(false);
+    setCustomProductName('');
     setStopClientId('');
+    setIsCustomClient(false);
+    setCustomClientName('');
     setStopError('');
+    setProductError('');
+    setClientError('');
     // Default follow-up date to tomorrow
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -241,32 +307,65 @@ export const PersistentActivityBar: React.FC = () => {
     e.preventDefault();
     if (!activeSupport) return;
 
-    const isDemo = activeSupport.activityTypeName === 'Demo';
+    setStopError('');
+    setProductError('');
+    setClientError('');
 
-    if (!stopRemarks || !stopProductId || !stopClientId || (isDemo && !followUpDate)) {
-      setStopError(isDemo ? 'Product, Client, Review remarks, and Follow-Up Date are required.' : 'Product, Client, and Remarks are required.');
-      return;
+    let hasError = false;
+
+    // Product validation
+    if (isCustomProduct) {
+      if (!customProductName.trim()) {
+        setProductError('Custom product name cannot be empty or only spaces.');
+        hasError = true;
+      }
+    } else if (!stopProductId || stopProductId === 'CUSTOM') {
+      setProductError('Please select a Product or choose "+ Add Other Product".');
+      hasError = true;
     }
 
+    // Client validation
+    if (isCustomClient) {
+      if (!customClientName.trim()) {
+        setClientError('Custom client company name cannot be empty or only spaces.');
+        hasError = true;
+      }
+    } else if (!stopClientId || stopClientId === 'CUSTOM') {
+      setClientError('Please select a Client or choose "+ Add Other Client".');
+      hasError = true;
+    }
+
+    const isDemo = activeSupport.activityTypeName === 'Demo';
+    if (!stopRemarks.trim() || (isDemo && !followUpDate)) {
+      setStopError(isDemo ? 'Review remarks and Follow-Up Date are required.' : 'Remarks are required.');
+      hasError = true;
+    }
+
+    if (hasError) return;
+
     setStopping(true);
-    setStopError('');
+
+    const payload = {
+      productId: isCustomProduct ? null : Number(stopProductId),
+      customProductName: isCustomProduct ? customProductName.trim() : null,
+      clientId: isCustomClient ? null : Number(stopClientId),
+      customClientName: isCustomClient ? customClientName.trim() : null,
+    };
 
     try {
       if (isDemo) {
         await apiClient.post('/support/demo/complete', {
           supportLogId: activeSupport.id,
-          productId: Number(stopProductId),
-          clientId: Number(stopClientId),
-          reviewRemarks: stopRemarks,
+          ...payload,
+          reviewRemarks: stopRemarks.trim(),
           followUpDate,
         });
 
         setToastNotification(`Demo follow-up reminder has been scheduled for ${new Date(followUpDate).toLocaleDateString()}.`);
       } else {
         await apiClient.post(`/support/${activeSupport.id}/stop`, {
-          remarks: stopRemarks,
-          productId: Number(stopProductId),
-          clientId: Number(stopClientId),
+          remarks: stopRemarks.trim(),
+          ...payload,
         });
 
         setToastNotification(`Activity "${activeSupport.activityTypeName}" completed successfully.`);
@@ -305,9 +404,9 @@ export const PersistentActivityBar: React.FC = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.8)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           zIndex: 999999,
           display: 'flex',
           alignItems: 'center',
@@ -316,87 +415,133 @@ export const PersistentActivityBar: React.FC = () => {
           userSelect: 'none',
         }}>
           <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 'var(--radius-lg)',
+            background: 'rgba(255, 255, 255, 0.08)',
+            backdropFilter: 'blur(20px) saturate(140%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: '20px',
             width: '100%',
-            maxWidth: '350px',
-            padding: '1.5rem 1.25rem',
+            maxWidth: '360px',
+            padding: '1.75rem 1.5rem',
             textAlign: 'center',
-            boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.3)',
-            border: '1px solid var(--border-color)',
-            animation: 'modalSlideIn 0.2s ease-out',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+            animation: 'modalIn 0.2s ease-out',
           }}>
-            {/* Icon Pill Header */}
+            {/* Amber Circular Icon Badge */}
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '52px',
-              height: '52px',
+              width: '56px',
+              height: '56px',
               borderRadius: '50%',
-              backgroundColor: '#FEF3C7',
-              color: '#D97706',
-              marginBottom: '0.75rem',
-              boxShadow: '0 3px 10px rgba(245, 158, 11, 0.15)',
+              backgroundColor: 'rgba(232, 135, 60, 0.15)',
+              color: '#E8873C',
+              marginBottom: '0.85rem',
+              boxShadow: '0 0 16px rgba(232, 135, 60, 0.2)',
             }}>
-              <Coffee size={26} />
+              {getBreakIcon(activeBreak.breakTypeName, true, 26)}
             </div>
 
             {/* Break Title */}
             <h2 style={{
-              fontSize: '1.3rem',
+              fontSize: '1.35rem',
               fontWeight: 700,
               color: 'var(--text-main)',
-              marginBottom: '0.25rem',
+              marginBottom: '0.35rem',
               letterSpacing: '-0.02em',
             }}>
-              ☕ {activeBreak.breakTypeName}
+              {activeBreak.breakTypeName}
             </h2>
 
-            {/* Break in Progress Badge */}
+            {/* Status Badge ("Break in Progress") */}
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.2rem 0.65rem',
+              gap: '0.4rem',
+              padding: '0.25rem 0.75rem',
               borderRadius: '9999px',
-              backgroundColor: '#FEF3C7',
-              color: '#B45309',
-              fontSize: '0.725rem',
+              backgroundColor: 'rgba(232, 135, 60, 0.15)',
+              border: '1px solid rgba(232, 135, 60, 0.3)',
+              color: '#F5C060',
+              fontSize: '0.75rem',
               fontWeight: 600,
-              marginBottom: '1rem',
+              marginBottom: '1.25rem',
             }}>
-              <span style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: '#D97706',
-                boxShadow: '0 0 0 2px rgba(217, 119, 6, 0.2)',
-                display: 'inline-block',
-              }} />
+              <span className="pulse-dot" />
               <span>Break in Progress</span>
             </div>
 
-            {/* Live Monospace Timer Card */}
+            {/* Live Monospace Timer Card with Amber Arc Ring Accent */}
             <div style={{
-              backgroundColor: '#F8FAFC',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--radius-md)',
-              padding: '0.75rem 0.5rem',
-              marginBottom: '0.85rem',
+              background: 'rgba(255, 255, 255, 0.05)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '16px',
+              padding: '1.25rem 1rem',
+              marginBottom: '1rem',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
             }}>
+              {/* Thin Amber Circular Arc Progress Indicator Accent */}
+              <svg
+                width="140"
+                height="140"
+                viewBox="0 0 140 140"
+                style={{
+                  position: 'absolute',
+                  pointerEvents: 'none',
+                  filter: 'drop-shadow(0 0 8px rgba(232, 135, 60, 0.45))',
+                  animation: 'spin 8s linear infinite',
+                }}
+              >
+                <circle
+                  cx="70"
+                  cy="70"
+                  r="58"
+                  fill="none"
+                  stroke="rgba(255, 255, 255, 0.08)"
+                  strokeWidth="2.5"
+                />
+                <circle
+                  cx="70"
+                  cy="70"
+                  r="58"
+                  fill="none"
+                  stroke="rgba(232, 135, 60, 0.65)"
+                  strokeWidth="3"
+                  strokeDasharray="95 270"
+                  strokeLinecap="round"
+                />
+              </svg>
+
               <div style={{
                 fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                fontSize: '2.2rem',
+                fontSize: '2.35rem',
                 fontWeight: 700,
-                color: '#1E1B4B',
+                color: '#FFFFFF',
                 lineHeight: 1,
-                letterSpacing: '0.02em',
-                marginBottom: '0.3rem',
+                letterSpacing: '0.04em',
+                marginBottom: '0.4rem',
+                position: 'relative',
+                zIndex: 1,
               }}>
                 {formatTimer(elapsedSec)}
               </div>
-              <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                color: 'rgba(255, 255, 255, 0.5)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                position: 'relative',
+                zIndex: 1,
+              }}>
                 Break Duration
               </span>
             </div>
@@ -405,44 +550,51 @@ export const PersistentActivityBar: React.FC = () => {
             <p style={{
               fontSize: '0.8rem',
               color: 'var(--text-secondary)',
-              marginBottom: '1rem',
+              marginBottom: '1.1rem',
             }}>
               Started at <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>{formatStartTime(activeBreak.startTime)}</strong>
             </p>
 
-            {/* Stop Break Action Button */}
+            {/* Stop Break Action Glass Button */}
             <button
+              type="button"
               onClick={handleStopBreak}
-              className="btn btn-danger"
+              className="btn-danger-glass"
               style={{
-                width: '100%',
-                padding: '0.65rem 1rem',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                borderRadius: 'var(--radius-md)',
-                boxShadow: '0 3px 10px rgba(239, 68, 68, 0.2)',
+                background: 'rgba(239, 68, 68, 0.15)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: '12px',
+                color: '#F87171',
+                boxShadow: '0 0 12px rgba(239, 68, 68, 0.15)',
                 marginBottom: '0.85rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.4rem',
               }}
             >
-              <StopCircle size={17} />
+              <StopCircle size={17} style={{ color: '#F87171' }} />
               <span>Stop Break</span>
             </button>
 
-            {/* Helpful Notice Callout Box */}
+            {/* Helpful Glass Inset Callout */}
             <div style={{
-              backgroundColor: '#EFF6FF',
-              border: '1px solid #BFDBFE',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.5rem 0.65rem',
+              background: 'rgba(255, 255, 255, 0.05)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255, 255, 255, 0.10)',
+              borderRadius: '12px',
+              padding: '0.65rem 0.85rem',
               fontSize: '0.75rem',
-              color: '#1E40AF',
+              color: 'rgba(255, 255, 255, 0.65)',
               lineHeight: 1.4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              textAlign: 'left',
             }}>
-              Your current task is temporarily <strong>on hold</strong> until you stop the break.
+              <Info size={16} style={{ color: 'rgba(255, 255, 255, 0.5)', flexShrink: 0 }} />
+              <span>
+                Your current task is temporarily <strong>on hold</strong> until you stop the break.
+              </span>
             </div>
           </div>
         </div>
@@ -466,20 +618,21 @@ export const PersistentActivityBar: React.FC = () => {
 
       {/* Persistent Activity Bar Header */}
       <div style={{
-        backgroundColor: '#FFFFFF',
-        borderBottom: '1px solid var(--border-color)',
+        background: 'linear-gradient(135deg, rgba(12, 45, 43, 0.85) 0%, rgba(16, 87, 82, 0.75) 100%)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderBottom: '1px solid rgba(255,255,255,0.10)',
         padding: '0.6rem 1.5rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '0.75rem',
-        boxShadow: 'var(--shadow-subtle)',
       }}>
         {/* Active Session Badge & Counter */}
         {(activeBreak || activeSupport) ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            <span className={`badge ${activeBreak ? 'badge-warning' : 'badge-info'}`} style={{ fontSize: '0.825rem', padding: '0.35rem 0.75rem' }}>
+            <span className={`badge ${activeBreak ? 'badge-warning' : 'badge-primary'}`} style={{ fontSize: '0.825rem', padding: '0.35rem 0.75rem' }}>
               <Clock size={14} />
               Active: <strong>{activeBreak ? activeBreak.breakTypeName : activeSupport?.activityTypeName}</strong> ({formatTimer(elapsedSec)})
             </span>
@@ -513,42 +666,50 @@ export const PersistentActivityBar: React.FC = () => {
         <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Breaks Group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
+            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.5)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
               Breaks:
             </span>
-            {breakTypes.map((bt) => (
-              <button
-                key={`break-${bt.id}`}
-                className="btn btn-secondary btn-sm"
-                disabled={!!activeBreak || !!activeSupport}
-                onClick={() => handleStartBreak(bt.id)}
-                style={{ fontSize: '0.785rem', padding: '0.25rem 0.55rem' }}
-              >
-                <Coffee size={13} style={{ color: 'var(--warning)' }} />
-                <span>{bt.name}</span>
-              </button>
-            ))}
+            {breakTypes.map((bt) => {
+              const isThisActive = activeBreak?.breakTypeId === bt.id;
+              return (
+                <button
+                  key={`break-${bt.id}`}
+                  type="button"
+                  className={`activity-btn ${isThisActive ? 'active' : ''}`}
+                  disabled={!!activeSupport || (!!activeBreak && !isThisActive)}
+                  onClick={() => handleStartBreak(bt.id)}
+                >
+                  {getBreakIcon(bt.name, isThisActive, 15)}
+                  <span>{bt.name}</span>
+                  {isThisActive && <Check size={13} style={{ color: '#E8873C', marginLeft: '0.1rem' }} />}
+                </button>
+              );
+            })}
           </div>
 
-          <div style={{ width: '1px', height: '22px', backgroundColor: 'var(--border-color)' }} />
+          <div style={{ width: '1px', height: '22px', backgroundColor: 'rgba(255,255,255,0.12)' }} />
 
           {/* Support Activities Group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
+            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.5)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
               Support Activities:
             </span>
-            {supportTypes.map((st) => (
-              <button
-                key={`support-${st.id}`}
-                className={`btn ${st.name === 'Demo' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
-                disabled={!!activeBreak || !!activeSupport}
-                onClick={() => handleStartSupport(st.id, st.name)}
-                style={{ fontSize: '0.785rem', padding: '0.25rem 0.55rem' }}
-              >
-                <PhoneCall size={13} />
-                <span>{st.name}</span>
-              </button>
-            ))}
+            {supportTypes.map((st) => {
+              const isThisActive = activeSupport?.activityTypeId === st.id;
+              return (
+                <button
+                  key={`support-${st.id}`}
+                  type="button"
+                  className={`activity-btn ${isThisActive ? 'active' : ''}`}
+                  disabled={!!activeBreak || (!!activeSupport && !isThisActive)}
+                  onClick={() => handleStartSupport(st.id, st.name)}
+                >
+                  {getSupportIcon(st.name, isThisActive, 15)}
+                  <span>{st.name}</span>
+                  {isThisActive && <Check size={13} style={{ color: '#E8873C', marginLeft: '0.1rem' }} />}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -578,9 +739,9 @@ export const PersistentActivityBar: React.FC = () => {
 
             {stopError && (
               <div style={{
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
-                color: 'var(--danger)',
+                background: 'rgba(240,96,96,0.12)',
+                border: '1px solid rgba(240,96,96,0.25)',
+                color: '#FF7B7B',
                 padding: '0.6rem 0.85rem',
                 borderRadius: 'var(--radius-sm)',
                 marginBottom: '1rem',
@@ -596,44 +757,176 @@ export const PersistentActivityBar: React.FC = () => {
 
             <form onSubmit={handleConfirmStopSupport}>
               <div className="form-group">
-                <label className="form-label">Product Name *</label>
-                <select
-                  className="form-select"
-                  value={stopProductId}
-                  onChange={(e) => {
-                    const val = e.target.value ? Number(e.target.value) : '';
-                    setStopProductId(val);
-                    setStopClientId('');
-                  }}
-                  required
-                >
-                  <option value="">Select Product</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Product Name *</label>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--primary)',
+                      fontSize: '0.785rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      padding: 0
+                    }}
+                    onClick={() => {
+                      const newMode = !isCustomProduct;
+                      setIsCustomProduct(newMode);
+                      setStopProductId(newMode ? 'CUSTOM' : '');
+                      setCustomProductName('');
+                      setStopClientId('');
+                      setCustomClientName('');
+                      setIsCustomClient(false);
+                      setProductError('');
+                      setClientError('');
+                    }}
+                  >
+                    {isCustomProduct ? '← Select Existing Product' : '+ Add Other Product'}
+                  </button>
+                </div>
+
+                {isCustomProduct ? (
+                  <div>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={customProductName}
+                      maxLength={150}
+                      onChange={(e) => {
+                        setCustomProductName(e.target.value);
+                        if (e.target.value.trim()) setProductError('');
+                      }}
+                      placeholder="Enter Product Name manually..."
+                      required
+                    />
+                    <span style={{ fontSize: '0.725rem', color: 'var(--primary)', marginTop: '0.25rem', display: 'inline-block', fontWeight: 500 }}>
+                      ✨ Custom Product Name (Stored on this activity)
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    className="form-select"
+                    value={stopProductId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setProductError('');
+                      if (val === 'CUSTOM') {
+                        setIsCustomProduct(true);
+                        setStopProductId('CUSTOM');
+                        setCustomProductName('');
+                      } else {
+                        setIsCustomProduct(false);
+                        setStopProductId(val ? Number(val) : '');
+                      }
+                      setStopClientId('');
+                      setCustomClientName('');
+                      setIsCustomClient(false);
+                    }}
+                    required
+                  >
+                    <option value="">Select Product</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                    ))}
+                    <option value="CUSTOM" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+                      + Add Other Product...
+                    </option>
+                  </select>
+                )}
+                {productError && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: '0.2rem', display: 'block' }}>
+                    {productError}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
-                <label className="form-label">Client Name *</label>
-                <select
-                  className="form-select"
-                  value={stopClientId}
-                  onChange={(e) => setStopClientId(e.target.value ? Number(e.target.value) : '')}
-                  required
-                  disabled={!stopProductId}
-                >
-                  <option value="">
-                    {!stopProductId
-                      ? 'Select Product First'
-                      : availableClients.length === 0
-                      ? 'No Clients Mapped to Product'
-                      : 'Select Client'}
-                  </option>
-                  {availableClients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.companyName}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Client Name *</label>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--primary)',
+                      fontSize: '0.785rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      padding: 0
+                    }}
+                    onClick={() => {
+                      const newMode = !isCustomClient;
+                      setIsCustomClient(newMode);
+                      setStopClientId(newMode ? 'CUSTOM' : '');
+                      setCustomClientName('');
+                      setClientError('');
+                    }}
+                    disabled={!isCustomProduct && !stopProductId}
+                  >
+                    {isCustomClient ? '← Select Existing Client' : '+ Add Other Client'}
+                  </button>
+                </div>
+
+                {isCustomClient ? (
+                  <div>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={customClientName}
+                      maxLength={150}
+                      onChange={(e) => {
+                        setCustomClientName(e.target.value);
+                        if (e.target.value.trim()) setClientError('');
+                      }}
+                      placeholder="Enter Client Name manually..."
+                      required
+                    />
+                    <span style={{ fontSize: '0.725rem', color: 'var(--primary)', marginTop: '0.25rem', display: 'inline-block', fontWeight: 500 }}>
+                      ✨ Custom Client Name (Stored on this activity)
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    className="form-select"
+                    value={stopClientId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClientError('');
+                      if (val === 'CUSTOM') {
+                        setIsCustomClient(true);
+                        setStopClientId('CUSTOM');
+                        setCustomClientName('');
+                      } else {
+                        setIsCustomClient(false);
+                        setStopClientId(val ? Number(val) : '');
+                      }
+                    }}
+                    required
+                    disabled={!isCustomProduct && !stopProductId}
+                  >
+                    <option value="">
+                      {!isCustomProduct && !stopProductId
+                        ? 'Select Product First'
+                        : availableClients.length === 0 && !isCustomProduct
+                          ? 'No Mapped Clients (Use + Add Other Client)'
+                          : 'Select Client'}
+                    </option>
+                    {availableClients.map((c) => (
+                      <option key={c.id} value={c.id}>{c.companyName}</option>
+                    ))}
+                    <option value="CUSTOM" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+                      + Add Other Client...
+                    </option>
+                  </select>
+                )}
+                {clientError && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: '0.2rem', display: 'block' }}>
+                    {clientError}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
@@ -678,7 +971,15 @@ export const PersistentActivityBar: React.FC = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={!stopRemarks || !stopProductId || !stopClientId || (activeSupport?.activityTypeName === 'Demo' && !followUpDate) || stopping}
+                  disabled={
+                    !stopRemarks ||
+                    (!isCustomProduct && !stopProductId) ||
+                    (isCustomProduct && !customProductName.trim()) ||
+                    (!isCustomClient && !stopClientId) ||
+                    (isCustomClient && !customClientName.trim()) ||
+                    (activeSupport?.activityTypeName === 'Demo' && !followUpDate) ||
+                    stopping
+                  }
                 >
                   <Check size={16} />
                   <span>{stopping ? 'Saving...' : activeSupport?.activityTypeName === 'Demo' ? 'Start Demo / Save Follow-Up' : 'Complete Activity'}</span>

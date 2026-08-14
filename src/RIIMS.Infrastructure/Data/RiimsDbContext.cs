@@ -27,15 +27,20 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
     // Employee
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<EmployeeWorkDetail> EmployeeWorkDetails => Set<EmployeeWorkDetail>();
+    public DbSet<EmployeeSession> EmployeeSessions => Set<EmployeeSession>();
 
     // Time Tracking
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
     public DbSet<TaskTimeLog> TaskTimeLogs => Set<TaskTimeLog>();
+    public DbSet<TaskTimelineEvent> TaskTimelineEvents => Set<TaskTimelineEvent>();
     public DbSet<AttendanceLog> AttendanceLogs => Set<AttendanceLog>();
     public DbSet<BreakLog> BreakLogs => Set<BreakLog>();
     public DbSet<SupportActivityLog> SupportActivityLogs => Set<SupportActivityLog>();
+    public DbSet<IdleTimeLog> IdleTimeLogs => Set<IdleTimeLog>();
     public DbSet<DemoFollowUp> DemoFollowUps => Set<DemoFollowUp>();
     public DbSet<ActivityTimeline> ActivityTimelines => Set<ActivityTimeline>();
+    public DbSet<AttendanceCalendar> AttendanceCalendars => Set<AttendanceCalendar>();
+    public DbSet<AttendanceCalendarAudit> AttendanceCalendarAudits => Set<AttendanceCalendarAudit>();
 
     // Leave / Permission
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
@@ -45,6 +50,8 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
     public DbSet<GraceTimeViolation> GraceTimeViolations => Set<GraceTimeViolation>();
     public DbSet<LOPCalculation> LOPCalculations => Set<LOPCalculation>();
     public DbSet<PayslipDetail> PayslipDetails => Set<PayslipDetail>();
+    public DbSet<EmployeeSalaryStructure> EmployeeSalaryStructures => Set<EmployeeSalaryStructure>();
+    public DbSet<SalaryComponent> SalaryComponents => Set<SalaryComponent>();
 
     // Reports
     public DbSet<MonthlyReportLog> MonthlyReportLogs => Set<MonthlyReportLog>();
@@ -55,6 +62,34 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
 
         // Apply all IEntityTypeConfiguration classes from this assembly
         builder.ApplyConfigurationsFromAssembly(typeof(RiimsDbContext).Assembly);
+
+        builder.Entity<EmployeeSession>(entity =>
+        {
+            entity.HasIndex(e => e.SessionId).IsUnique();
+            entity.HasIndex(e => e.TokenJti);
+            entity.HasIndex(e => new { e.EmployeeId, e.IsActive, e.WorkDate });
+        });
+
+        builder.Entity<WorkTask>(entity =>
+        {
+            entity.HasOne(t => t.AssignedByEmployee)
+                .WithMany()
+                .HasForeignKey(t => t.AssignedByEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<TaskTimelineEvent>(entity =>
+        {
+            entity.HasOne(e => e.WorkTask)
+                .WithMany(t => t.TimelineEvents)
+                .HasForeignKey(e => e.WorkTaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.PerformedByEmployee)
+                .WithMany()
+                .HasForeignKey(e => e.PerformedByEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         // Global query filter for soft delete on all BaseEntity-derived entities
         foreach (var entityType in builder.Model.GetEntityTypes())

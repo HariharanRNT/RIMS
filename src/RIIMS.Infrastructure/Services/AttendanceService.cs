@@ -53,21 +53,131 @@ public class AttendanceService : IAttendanceService
         var officeStart = settings.OfficeStartTime;
         var graceEnd = officeStart.Add(TimeSpan.FromMinutes(settings.GraceMinutes));
         var loginTimeOfDay = nowIst.TimeOfDay;
+        // Check if an AttendanceLog for this employee already exists on today's WorkDate (in IST)
+        var todayLogs = await _context.AttendanceLogs
+            .Where(a => a.EmployeeId == employeeId)
+            .ToListAsync();
 
-        bool isLate = loginTimeOfDay > graceEnd;
-        string status = isLate ? "Late" : "Normal";
+        var existingTodayLog = todayLogs
+            .Where(a => TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone).Date == nowIst.Date)
+            .OrderBy(a => a.LoginTime)
+            .FirstOrDefault();
+
+        // Daily First Login Rule: Only the earliest valid login event of the day is evaluated for late login.
+        // Subsequent login events after a logout on the same date are break returns / additional sessions and MUST NEVER be marked late.
+        bool isLate;
+        string status;
+
+        if (existingTodayLog != null)
+        {
+            isLate = false;
+            status = "Normal";
+        }
+        else
+        {
+            isLate = loginTimeOfDay > graceEnd;
+            status = isLate ? "Late" : "Normal";
+        }
+
+        DateTime allowedEndTimeUtc;
+
+        if (existingTodayLog != null && existingTodayLog.AllowedEndTime.HasValue)
+        {
+            // Reuse single authoritative AllowedEndTime from the first login of the WorkDate
+            allowedEndTimeUtc = existingTodayLog.AllowedEndTime.Value;
+        }
+        else
+        {
+            // First login of the WorkDate: Calculate authoritative AllowedEndTime in IST, then convert to UTC
+            var officeEnd = settings.OfficeEndTime;
+            DateTime todayOfficeEndIst = nowIst.Date.Add(officeEnd);
+            DateTime allowedEndTimeIst;
+
+            if (loginTimeOfDay <= officeStart)
+            {
+                // Rule A: On or before OfficeStartTime -> OfficeEndTime
+                allowedEndTimeIst = todayOfficeEndIst;
+            }
+            else if (loginTimeOfDay <= graceEnd)
+            {
+                // Rule B: Grace Period (10:01 AM - 10:15 AM) -> Extend by actual delay minutes
+                TimeSpan delay = loginTimeOfDay - officeStart;
+                allowedEndTimeIst = todayOfficeEndIst.Add(delay);
+            }
+            else
+            {
+                // Rule C & Rule D: Late Login (> 10:15 AM) or After OfficeEndTime -> OfficeEndTime (No extension!)
+                allowedEndTimeIst = todayOfficeEndIst;
+            }
+
+            allowedEndTimeUtc = TimeZoneInfo.ConvertTimeToUtc(allowedEndTimeIst, IstTimeZone);
+        }
 
         var attendance = new AttendanceLog
         {
             EmployeeId = employeeId,
             LoginTime = now,
+            LogoutTime = null,
             IsLate = isLate,
             IsPermission = false,
             PermissionHours = 0,
-            Status = status
+            Status = status,
+            AllowedEndTime = allowedEndTimeUtc
         };
 
         _context.AttendanceLogs.Add(attendance);
+
+        // Check for previous explicit logout on the same WorkDate to create IdleTimeLog gap record
+        var previousLogoutLog = todayLogs
+            .Where(a => a.LogoutTime.HasValue && TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone).Date == nowIst.Date)
+            .OrderByDescending(a => a.LogoutTime!.Value)
+            .FirstOrDefault();
+
+        if (previousLogoutLog != null && previousLogoutLog.LogoutTime.HasValue)
+        {
+            var gapStartUtc = previousLogoutLog.LogoutTime.Value;
+            var gapEndUtc = now;
+
+            if (allowedEndTimeUtc > DateTime.MinValue && gapEndUtc > allowedEndTimeUtc)
+            {
+                gapEndUtc = allowedEndTimeUtc;
+            }
+
+            if (gapEndUtc > gapStartUtc)
+            {
+                int durationMinutes = (int)Math.Max(1, Math.Round((gapEndUtc - gapStartUtc).TotalMinutes));
+
+                bool exists = await _context.IdleTimeLogs.AnyAsync(i =>
+                    i.EmployeeId == employeeId &&
+                    i.StartTime == gapStartUtc &&
+                    i.EndTime == gapEndUtc);
+
+                if (!exists)
+                {
+                    _context.IdleTimeLogs.Add(new IdleTimeLog
+                    {
+                        EmployeeId = employeeId,
+                        WorkDate = DateOnly.FromDateTime(nowIst),
+                        StartTime = gapStartUtc,
+                        EndTime = gapEndUtc,
+                        DurationMinutes = durationMinutes,
+                        Type = "LogoutLoginGap"
+                    });
+
+                    _context.ActivityTimelines.Add(new ActivityTimeline
+                    {
+                        EmployeeId = employeeId,
+                        ActivityType = "Idle",
+                        RefTable = "IdleTimeLogs",
+                        RefId = 0,
+                        StartTime = gapStartUtc,
+                        EndTime = gapEndUtc,
+                        Status = "Completed",
+                        Remarks = $"Logout-login gap idle time ({durationMinutes} mins)"
+                    });
+                }
+            }
+        }
 
         if (isLate)
         {
@@ -92,6 +202,16 @@ public class AttendanceService : IAttendanceService
         if (attendance != null)
         {
             attendance.LogoutTime = now;
+        }
+
+        var activeSessions = await _context.EmployeeSessions
+            .Where(s => s.EmployeeId == employeeId && s.IsActive)
+            .ToListAsync();
+
+        foreach (var s in activeSessions)
+        {
+            s.IsActive = false;
+            s.LogoutTime = now;
         }
 
         var runningTasks = await _context.WorkTasks
@@ -343,6 +463,10 @@ public class AttendanceService : IAttendanceService
         var officeStartDt = DateTime.Today.Add(settings.OfficeStartTime);
         var graceEndDt = officeStartDt.AddMinutes(settings.GraceMinutes);
 
+        var allowedEndTimeDisplay = a.AllowedEndTime.HasValue
+            ? TimeZoneInfo.ConvertTimeFromUtc(a.AllowedEndTime.Value, IstTimeZone).ToString("hh:mm tt")
+            : null;
+
         return new AttendanceDto
         {
             Id = a.Id,
@@ -356,6 +480,8 @@ public class AttendanceService : IAttendanceService
             Status = string.IsNullOrEmpty(a.Status) ? (a.IsLate ? "Late" : "Normal") : a.Status,
             OfficeStartTime = officeStartDt.ToString("hh:mm tt"),
             GraceEndTime = graceEndDt.ToString("hh:mm tt"),
+            AllowedEndTime = a.AllowedEndTime,
+            AllowedEndTimeDisplay = allowedEndTimeDisplay,
             MonthlyLateCount = monthlyLateCount,
             MonthlyLopDays = monthlyLop
         };

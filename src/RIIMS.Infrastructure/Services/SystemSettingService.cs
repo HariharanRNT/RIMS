@@ -75,6 +75,11 @@ public class SystemSettingService : ISystemSettingService
             result.LateLoginsForHalfDay = lateParsed;
         }
 
+        if (settings.TryGetValue("MonthlyAllowedLeave", out var leaveVal) && int.TryParse(leaveVal, out var leaveParsed) && leaveParsed >= 0)
+        {
+            result.MonthlyAllowedLeave = leaveParsed;
+        }
+
         return result;
     }
 

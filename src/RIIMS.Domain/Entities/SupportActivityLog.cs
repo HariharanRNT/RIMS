@@ -8,7 +8,9 @@ public class SupportActivityLog : BaseEntity
     public int ActivityTypeId { get; set; }
     public int? HeldTaskId { get; set; }
     public int? ProductId { get; set; }
+    public string? CustomProductName { get; set; }
     public int? ClientId { get; set; }
+    public string? CustomClientName { get; set; }
     public string? Remarks { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime? EndTime { get; set; }

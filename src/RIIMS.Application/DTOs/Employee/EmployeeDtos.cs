@@ -1,3 +1,6 @@
+using RIIMS.Domain.Enums;
+using RIIMS.Application.DTOs.Payroll;
+
 namespace RIIMS.Application.DTOs.Employee;
 
 public class EmployeeDto
@@ -61,6 +64,16 @@ public class CreateEmployeeRequest
     public string? EsiNumber { get; set; }
     public string? AadhaarNumber { get; set; }
     public string? Password { get; set; }
+
+    // Payroll Setup (Optional)
+    public decimal? AnnualCTC { get; set; }
+    public SalaryConfigurationMode SalaryConfigurationMode { get; set; } = SalaryConfigurationMode.ConfigureLater;
+    public DateTime? SalaryEffectiveFrom { get; set; }
+    public bool PFApplicable { get; set; } = true;
+    public bool ESIApplicable { get; set; } = false;
+    public bool ProfessionalTaxApplicable { get; set; } = false;
+    public bool TDSApplicable { get; set; } = false;
+    public List<SalaryComponentDto>? SalaryComponents { get; set; }
 }
 
 public class UpdateEmployeeRequest
@@ -82,6 +95,14 @@ public class UpdateEmployeeRequest
     public string? PanNumber { get; set; }
     public string? EsiNumber { get; set; }
     public string? AadhaarNumber { get; set; }
+    public decimal? AnnualCTC { get; set; }
+    public SalaryConfigurationMode SalaryConfigurationMode { get; set; } = SalaryConfigurationMode.ConfigureLater;
+    public DateTime? SalaryEffectiveFrom { get; set; }
+    public bool PFApplicable { get; set; } = true;
+    public bool ESIApplicable { get; set; } = true;
+    public bool ProfessionalTaxApplicable { get; set; } = true;
+    public bool TDSApplicable { get; set; } = false;
+    public List<SalaryComponentDto>? SalaryComponents { get; set; }
 }
 
 

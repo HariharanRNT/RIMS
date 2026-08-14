@@ -37,8 +37,10 @@ export const Navbar: React.FC = () => {
   return (
     <header style={{
       height: '60px',
-      background: '#FFFFFF',
-      borderBottom: '1px solid var(--border-color)',
+      background: 'rgba(255,255,255,0.04)',
+      backdropFilter: 'blur(20px) saturate(140%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+      borderBottom: '1px solid rgba(255,255,255,0.10)',
       padding: '0 1.5rem',
       display: 'flex',
       alignItems: 'center',
@@ -50,7 +52,7 @@ export const Navbar: React.FC = () => {
       {/* Left: Global Search */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, maxWidth: '360px' }}>
         <div style={{ position: 'relative', width: '100%' }}>
-          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)' }} />
           <input
             type="text"
             placeholder="Search..."
@@ -58,10 +60,10 @@ export const Navbar: React.FC = () => {
               width: '100%',
               padding: '0.4rem 0.75rem 0.4rem 2.1rem',
               fontSize: '0.8rem',
-              background: 'var(--bg-hover)',
-              border: '1px solid var(--border-color)',
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 'var(--radius-sm)',
-              color: 'var(--text-main)',
+              color: '#F5F5F5',
               outline: 'none',
               transition: 'all 0.15s ease',
               fontFamily: 'inherit'
@@ -77,16 +79,16 @@ export const Navbar: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '0.35rem',
-          background: 'var(--bg-hover)',
-          border: '1px solid var(--border-color)',
+          background: 'rgba(255,255,255,0.07)',
+          border: '1px solid rgba(255,255,255,0.12)',
           padding: '0.3rem 0.65rem',
           borderRadius: 'var(--radius-sm)',
-          color: 'var(--text-secondary)',
+          color: 'rgba(255,255,255,0.6)',
           fontSize: '0.75rem',
           fontWeight: 600,
           fontVariantNumeric: 'tabular-nums'
         }}>
-          <Clock size={13} style={{ color: 'var(--primary)' }} />
+          <Clock size={13} style={{ color: '#E8873C' }} />
           <span>{timeStr || '12:00:00 PM'} IST</span>
         </div>
 
@@ -95,15 +97,15 @@ export const Navbar: React.FC = () => {
           <button
             onClick={() => setShowNotifications(!showNotifications)}
             style={{
-              background: 'var(--bg-hover)',
-              border: '1px solid var(--border-color)',
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 'var(--radius-sm)',
               width: '34px',
               height: '34px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--text-secondary)',
+              color: 'rgba(255,255,255,0.6)',
               cursor: 'pointer',
               position: 'relative',
               transition: 'all 0.12s ease'
@@ -117,8 +119,8 @@ export const Navbar: React.FC = () => {
               width: '7px',
               height: '7px',
               borderRadius: '50%',
-              backgroundColor: 'var(--secondary)',
-              boxShadow: '0 0 0 2px #FFFFFF'
+              backgroundColor: '#E8873C',
+              boxShadow: '0 0 0 2px rgba(0,0,0,0.3)'
             }} />
           </button>
 
@@ -128,21 +130,23 @@ export const Navbar: React.FC = () => {
               right: 0,
               top: '42px',
               width: '280px',
-              background: '#FFFFFF',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-lg)',
+              background: 'rgba(255,255,255,0.10)',
+              backdropFilter: 'blur(24px) saturate(150%)',
+              WebkitBackdropFilter: 'blur(24px) saturate(150%)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
               padding: '0.85rem',
               zIndex: 200,
               animation: 'fadeIn 0.15s ease-out'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-                <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-main)' }}>Notifications</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}>Mark all read</span>
+                <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#F5F5F5' }}>Notifications</span>
+                <span style={{ fontSize: '0.7rem', color: '#E8873C', cursor: 'pointer', fontWeight: 600 }}>Mark all read</span>
               </div>
-              <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', padding: '0.4rem 0' }}>
+              <div style={{ fontSize: '0.775rem', color: 'rgba(255,255,255,0.6)', padding: '0.4rem 0' }}>
                 🟢 Attendance synced for today<br />
-                <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>Just now</span>
+                <span style={{ fontSize: '0.675rem', color: 'rgba(255,255,255,0.35)' }}>Just now</span>
               </div>
             </div>
           )}
@@ -157,18 +161,18 @@ export const Navbar: React.FC = () => {
             alignItems: 'center',
             gap: '0.6rem',
             padding: '0.25rem 0.6rem 0.25rem 0.6rem',
-            background: 'var(--bg-hover)',
-            border: '1px solid var(--border-color)',
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.12)',
             borderRadius: 'var(--radius-sm)',
             cursor: 'pointer',
             transition: 'all 0.15s ease'
           }}
         >
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.2 }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#F5F5F5', lineHeight: 1.2 }}>
               {user?.employeeName || 'System Admin'}
             </div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: 600 }}>
+            <div style={{ fontSize: '0.65rem', color: '#E8873C', fontWeight: 600 }}>
               {role || 'Administrator'}
             </div>
           </div>
@@ -176,7 +180,7 @@ export const Navbar: React.FC = () => {
             width: '32px',
             height: '32px',
             borderRadius: '8px',
-            background: 'linear-gradient(135deg, var(--primary) 0%, #4F46E5 100%)',
+            background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -194,8 +198,8 @@ export const Navbar: React.FC = () => {
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: 'var(--success)',
-              border: '2px solid #FFFFFF'
+              backgroundColor: '#5EE0A0',
+              border: '2px solid rgba(0,0,0,0.3)'
             }} />
           </div>
         </div>

@@ -19,6 +19,12 @@ interface PayslipItem {
   leavesTaken?: number;
   permissionsUsed?: number;
   graceViolations?: number;
+  monthlyAllowedLeave?: number;
+  actualLeaveDays?: number;
+  sandwichLeaveDays?: number;
+  leaveLOPDays?: number;
+  lateLoginLOPDays?: number;
+  dailySalary?: number;
 }
 
 interface Summary {

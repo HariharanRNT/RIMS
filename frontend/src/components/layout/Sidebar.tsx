@@ -17,6 +17,7 @@ import {
   FileText,
   CreditCard,
   CheckCircle,
+  FileSpreadsheet,
   ChevronLeft,
   ChevronRight,
   User
@@ -42,8 +43,10 @@ export const Sidebar: React.FC = () => {
       ]
     },
     {
-      title: 'WORKFORCE',
+      title: 'WORKFORCE & ATTENDANCE',
       items: [
+        { to: '/admin/attendance-calendar', label: 'Monthly Calendar', icon: CalendarDays },
+        { to: '/admin/tasks', label: 'Task Allocation', icon: Briefcase },
         { to: '/admin/employees', label: 'Employees', icon: Users },
         { to: '/admin/departments', label: 'Departments', icon: Building2 },
         { to: '/admin/designations', label: 'Designations', icon: Briefcase },
@@ -53,6 +56,7 @@ export const Sidebar: React.FC = () => {
       title: 'FINANCE & REPORTS',
       items: [
         { to: '/admin/payroll', label: 'Payroll & LOP', icon: CreditCard },
+        { to: '/admin/payroll/monthly-report', label: 'Monthly Employee Report', icon: FileSpreadsheet },
         { to: '/admin/reports', label: 'Production Reports', icon: FileText },
       ]
     },
@@ -74,6 +78,7 @@ export const Sidebar: React.FC = () => {
       items: [
         { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/profile', label: 'My Profile', icon: User },
+        { to: '/calendar', label: 'Attendance Calendar', icon: CalendarDays },
         { to: '/work-task', label: 'Work Task Engine', icon: Briefcase },
       ]
     },
@@ -111,8 +116,10 @@ export const Sidebar: React.FC = () => {
     <aside style={{
       width: collapsed ? '72px' : '256px',
       transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-      backgroundColor: '#FFFFFF',
-      borderRight: '1px solid var(--border-color)',
+      background: 'rgba(255,255,255,0.05)',
+      backdropFilter: 'blur(20px) saturate(140%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+      borderRight: '1px solid rgba(255,255,255,0.12)',
       display: 'flex',
       flexDirection: 'column',
       padding: collapsed ? '1rem 0.5rem' : '1rem 0.75rem',
@@ -128,22 +135,21 @@ export const Sidebar: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: collapsed ? 'center' : 'space-between',
-        borderBottom: '1px solid var(--border-color)',
+        borderBottom: '1px solid rgba(255,255,255,0.10)',
         marginBottom: '1rem'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <div style={{
             width: '36px',
             height: '36px',
-            borderRadius: '10px',
-            backgroundColor: '#FFFFFF',
+            borderRadius: '8px',
+            background: 'rgba(255,255,255,0.10)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
             padding: '2px',
-            border: '1px solid var(--border-color)',
-            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.1)',
+            border: '1px solid rgba(255,255,255,0.12)',
             flexShrink: 0
           }}>
             <img src={rntLogo} alt="RNT Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -152,36 +158,38 @@ export const Sidebar: React.FC = () => {
           {!collapsed && (
             <div>
               <h2 style={{
-                fontSize: '1.1rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                letterSpacing: '-0.02em',
-                lineHeight: 1.1
+                fontSize: '1rem',
+                fontWeight: 700,
+                color: '#F5F5F5',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.15
               }}>
                 RIMS V2
               </h2>
               <span style={{
                 fontSize: '0.625rem',
-                color: 'var(--primary)',
-                fontWeight: 700,
-                letterSpacing: '0.06em',
+                color: '#E8873C',
+                fontWeight: 600,
+                letterSpacing: '0.04em',
                 textTransform: 'uppercase'
               }}>
-                {role?.toUpperCase()} PORTAL
+                {role ? `${role.charAt(0).toUpperCase()}${role.slice(1).toLowerCase()} portal` : 'Portal'}
               </span>
             </div>
           )}
         </div>
 
-        {/* Collapse Toggle */}
+        {/* Collapse Toggle — glass circle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
           style={{
-            background: 'var(--bg-hover)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 'var(--radius-xs)',
-            color: 'var(--text-muted)',
-            padding: '0.2rem',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '50%',
+            color: 'rgba(255,255,255,0.5)',
+            width: '26px',
+            height: '26px',
+            padding: 0,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -189,21 +197,21 @@ export const Sidebar: React.FC = () => {
             transition: 'all 0.15s ease'
           }}
         >
-          {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
       </div>
 
       {/* Grouped Navigation */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1, overflowY: 'auto', paddingBottom: '0.5rem' }}>
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1, overflowY: 'auto', paddingBottom: '0.5rem' }}>
         {groups.map((group, groupIdx) => (
           <div key={groupIdx}>
             {!collapsed && (
               <div style={{
                 fontSize: '0.625rem',
-                fontWeight: 700,
-                color: 'var(--text-muted)',
-                letterSpacing: '0.08em',
-                padding: '0 0.5rem 0.4rem',
+                fontWeight: 600,
+                color: 'rgba(255,255,255,0.35)',
+                letterSpacing: '0.06em',
+                padding: '0 0.5rem 0.35rem',
                 textTransform: 'uppercase'
               }}>
                 {group.title}
@@ -225,18 +233,19 @@ export const Sidebar: React.FC = () => {
                       padding: collapsed ? '0.6rem 0' : '0.55rem 0.75rem',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                       borderRadius: 'var(--radius-sm)',
-                      fontSize: '0.825rem',
+                      fontSize: '0.8125rem',
                       fontWeight: isActive ? 600 : 500,
-                      color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
-                      background: isActive ? 'var(--primary-light)' : 'transparent',
-                      borderLeft: isActive && !collapsed ? '3px solid var(--primary)' : '3px solid transparent',
+                      color: isActive ? '#E8873C' : 'rgba(255,255,255,0.6)',
+                      background: isActive ? 'rgba(232,135,60,0.12)' : 'transparent',
+                      borderLeft: isActive && !collapsed ? '3px solid #E8873C' : '3px solid transparent',
+                      boxShadow: isActive ? '0 0 12px rgba(232,135,60,0.15)' : 'none',
                       transition: 'all 0.12s ease',
                       textDecoration: 'none',
                     })}
                   >
                     {({ isActive }) => (
                       <>
-                        <Icon size={17} style={{ color: isActive ? 'var(--primary)' : 'var(--text-muted)', flexShrink: 0 }} />
+                        <Icon size={17} style={{ color: isActive ? '#E8873C' : 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
                         {!collapsed && <span>{link.label}</span>}
                       </>
                     )}
@@ -252,15 +261,15 @@ export const Sidebar: React.FC = () => {
       <div style={{
         marginTop: 'auto',
         paddingTop: '0.75rem',
-        borderTop: '1px solid var(--border-color)'
+        borderTop: '1px solid rgba(255,255,255,0.10)'
       }}>
         {!collapsed ? (
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'var(--bg-hover)',
-            border: '1px solid var(--border-color)',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.10)',
             borderRadius: 'var(--radius-sm)',
             padding: '0.55rem 0.7rem'
           }}>
@@ -268,10 +277,10 @@ export const Sidebar: React.FC = () => {
               <div style={{
                 width: '30px',
                 height: '30px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, var(--primary) 0%, #4F46E5 100%)',
+                borderRadius: '6px',
+                background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
                 color: '#FFFFFF',
-                fontWeight: 700,
+                fontWeight: 600,
                 fontSize: '0.7rem',
                 display: 'flex',
                 alignItems: 'center',
@@ -281,10 +290,10 @@ export const Sidebar: React.FC = () => {
                 {getInitials(user?.employeeName)}
               </div>
               <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: '#F5F5F5', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                   {formatDisplayName(user?.employeeName, user?.role)}
                 </div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)' }}>
                   EMP #{user?.employeeId || '001'}
                 </div>
               </div>
@@ -295,7 +304,7 @@ export const Sidebar: React.FC = () => {
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: 'var(--danger)',
+                color: '#FF7B7B',
                 cursor: 'pointer',
                 padding: '0.25rem',
                 borderRadius: 'var(--radius-xs)',
@@ -313,9 +322,9 @@ export const Sidebar: React.FC = () => {
             onClick={handleLogout}
             style={{
               width: '100%',
-              background: 'rgba(239, 68, 68, 0.06)',
-              border: '1px solid rgba(239, 68, 68, 0.15)',
-              color: 'var(--danger)',
+              background: 'rgba(240, 96, 96, 0.10)',
+              border: '1px solid rgba(240, 96, 96, 0.20)',
+              color: '#FF7B7B',
               borderRadius: 'var(--radius-sm)',
               padding: '0.55rem 0',
               cursor: 'pointer',

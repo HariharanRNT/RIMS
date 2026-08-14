@@ -34,6 +34,14 @@ public class PayslipDetail : BaseEntity
     public int PermissionsUsed { get; set; }
     public int GraceViolations { get; set; }
 
+    // Snapshot Audit Fields
+    public int MonthlyAllowedLeave { get; set; }
+    public decimal ActualLeaveDays { get; set; }
+    public decimal SandwichLeaveDays { get; set; }
+    public decimal LeaveLOPDays { get; set; }
+    public decimal LateLoginLOPDays { get; set; }
+    public decimal DailySalary { get; set; }
+
     // Navigation
     public Employee Employee { get; set; } = null!;
 }

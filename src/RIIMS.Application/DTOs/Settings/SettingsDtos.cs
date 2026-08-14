@@ -20,6 +20,7 @@ public class TypedSystemSettingsDto
     public int GraceMinutes { get; set; } = 15;
     public decimal PermissionHours { get; set; } = 1.0m;
     public int LateLoginsForHalfDay { get; set; } = 2;
+    public int MonthlyAllowedLeave { get; set; } = 1;
 
     public string OfficeStartTimeDisplay { get; set; } = "10:00 AM";
     public string OfficeEndTimeDisplay { get; set; } = "07:00 PM";

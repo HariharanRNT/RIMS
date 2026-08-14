@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Employee;
+using RIIMS.Application.DTOs.Payroll;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
 using RIIMS.Domain.Enums;
@@ -15,15 +16,18 @@ public class EmployeeService : IEmployeeService
     private readonly RiimsDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IEmailService _emailService;
+    private readonly ISalaryStructureService _salaryStructureService;
 
     public EmployeeService(
         RiimsDbContext context,
         UserManager<ApplicationUser> userManager,
-        IEmailService emailService)
+        IEmailService emailService,
+        ISalaryStructureService salaryStructureService)
     {
         _context = context;
         _userManager = userManager;
         _emailService = emailService;
+        _salaryStructureService = salaryStructureService;
     }
 
     public async Task<PagedResult<EmployeeListDto>> GetAllAsync(int page, int pageSize, int? departmentId = null, string? search = null)
@@ -203,6 +207,22 @@ public class EmployeeService : IEmployeeService
 
         await _userManager.AddToRoleAsync(user, "Employee");
 
+        // Create Payroll Salary Structure if Annual CTC is provided
+        if (request.AnnualCTC.HasValue && request.AnnualCTC.Value > 0)
+        {
+            await _salaryStructureService.CreateOrUpdateSalaryStructureAsync(employee.Id, new CreateSalaryStructureDto
+            {
+                AnnualCTC = request.AnnualCTC.Value,
+                SalaryConfigurationMode = request.SalaryConfigurationMode,
+                EffectiveFrom = request.SalaryEffectiveFrom ?? request.DateOfJoining,
+                PFApplicable = request.PFApplicable,
+                ESIApplicable = request.ESIApplicable,
+                ProfessionalTaxApplicable = request.ProfessionalTaxApplicable,
+                TDSApplicable = request.TDSApplicable,
+                Components = request.SalaryComponents ?? new()
+            });
+        }
+
         try
         {
             var htmlBody = $@"
@@ -283,6 +303,21 @@ public class EmployeeService : IEmployeeService
         employee.AadhaarNumber = !string.IsNullOrWhiteSpace(request.AadhaarNumber) ? request.AadhaarNumber.Trim() : null;
 
         await _context.SaveChangesAsync();
+
+        if (request.AnnualCTC.HasValue && request.AnnualCTC.Value >= 0)
+        {
+            await _salaryStructureService.CreateOrUpdateSalaryStructureAsync(id, new CreateSalaryStructureDto
+            {
+                AnnualCTC = request.AnnualCTC.Value,
+                SalaryConfigurationMode = request.SalaryConfigurationMode,
+                EffectiveFrom = request.SalaryEffectiveFrom ?? employee.DateOfJoining,
+                PFApplicable = request.PFApplicable,
+                ESIApplicable = request.ESIApplicable,
+                ProfessionalTaxApplicable = request.ProfessionalTaxApplicable,
+                TDSApplicable = request.TDSApplicable,
+                Components = request.SalaryComponents ?? new()
+            });
+        }
 
         return (await GetByIdAsync(id))!;
     }

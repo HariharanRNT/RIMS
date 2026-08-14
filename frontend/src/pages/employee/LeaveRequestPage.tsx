@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import apiClient from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { Send, AlertCircle, CheckCircle, Clock, UserCheck } from 'lucide-react';
+import { GlassSelect } from '../../components/ui/GlassSelect';
+import { GlassDatePicker } from '../../components/ui/GlassDatePicker';
 
 interface LeaveType {
   id: number;
@@ -79,11 +81,18 @@ export const LeaveRequestPage: React.FC = () => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
   };
 
+  const todayStr = React.useMemo(() => new Date().toISOString().split('T')[0], []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveTypeId || !fromDate || !toDate || !reason) return;
 
-    if (new Date(fromDate) > new Date(toDate)) {
+    if (fromDate < todayStr) {
+      setError('Leave request cannot be backdated to past dates. Please select today or a future date.');
+      return;
+    }
+
+    if (fromDate > toDate) {
       setError('To Date must be on or after From Date.');
       return;
     }
@@ -128,7 +137,7 @@ export const LeaveRequestPage: React.FC = () => {
 
       {error && (
         <div style={{
-          backgroundColor: '#FEF2F2',
+          backgroundColor: 'rgba(240,96,96,0.12)',
           border: '1px solid #FECACA',
           color: 'var(--danger)',
           padding: '0.75rem 1rem',
@@ -177,43 +186,38 @@ export const LeaveRequestPage: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Leave Type *</label>
-              <select
-                className="form-select"
-                value={leaveTypeId}
-                onChange={(e) => setLeaveTypeId(e.target.value ? Number(e.target.value) : '')}
-                required
-              >
-                <option value="">Select Leave Type</option>
-                {leaveTypes.map((lt) => (
-                  <option key={lt.id} value={lt.id}>{lt.name}</option>
-                ))}
-              </select>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            <GlassSelect
+              label="Leave Type"
+              required
+              options={leaveTypes.map((lt) => ({ value: lt.id, label: lt.name }))}
+              value={leaveTypeId}
+              onChange={(val) => setLeaveTypeId(val ? Number(val) : '')}
+              placeholder="Select Leave Type"
+            />
 
-            <div className="form-group">
-              <label className="form-label">From Date *</label>
-              <input
-                type="date"
-                className="form-input"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                required
-              />
-            </div>
+            <GlassDatePicker
+              label="From Date"
+              required
+              value={fromDate}
+              onChange={(val) => {
+                setFromDate(val);
+                if (toDate && val > toDate) {
+                  setToDate('');
+                }
+              }}
+              minDate={todayStr}
+              placeholder="Select From Date"
+            />
 
-            <div className="form-group">
-              <label className="form-label">To Date *</label>
-              <input
-                type="date"
-                className="form-input"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                required
-              />
-            </div>
+            <GlassDatePicker
+              label="To Date"
+              required
+              value={toDate}
+              onChange={(val) => setToDate(val)}
+              minDate={fromDate || todayStr}
+              placeholder="Select To Date"
+            />
           </div>
 
           <div className="form-group" style={{ marginBottom: '1.25rem' }}>

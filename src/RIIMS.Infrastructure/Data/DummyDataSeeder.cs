@@ -11,6 +11,24 @@ public static class DummyDataSeeder
 {
     public static async Task SeedDummyDataAsync(RiimsDbContext context, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<int>> roleManager)
     {
+        // Auto-fix reporting relationships so EMP-002 (John Doe) has reportees for manager testing
+        var johnDoeEmp = await context.Employees.FirstOrDefaultAsync(e => e.EmployeeCode == "EMP-002");
+        if (johnDoeEmp != null)
+        {
+            var reporteesToUpdate = await context.Employees
+                .Where(e => (e.EmployeeCode == "EMP-003" || e.EmployeeCode == "EMP-004") && e.ReportingPersonId != johnDoeEmp.Id)
+                .ToListAsync();
+
+            if (reporteesToUpdate.Any())
+            {
+                foreach (var r in reporteesToUpdate)
+                {
+                    r.ReportingPersonId = johnDoeEmp.Id;
+                }
+                await context.SaveChangesAsync();
+            }
+        }
+
         // 1. Check if dummy employees already exist to ensure idempotency
         var existingDummyEmp = await context.Employees.FirstOrDefaultAsync(e => e.EmployeeCode == "EMP-002");
         if (existingDummyEmp != null)

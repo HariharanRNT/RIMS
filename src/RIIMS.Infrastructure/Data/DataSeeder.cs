@@ -20,6 +20,53 @@ public static class DataSeeder
             await context.Database.EnsureCreatedAsync();
         }
 
+        // Ensure EmployeeSessions table exists
+        try
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF OBJECT_ID(N'[dbo].[EmployeeSessions]') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[EmployeeSessions] (
+                        [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [EmployeeId] INT NOT NULL,
+                        [SessionId] UNIQUEIDENTIFIER NOT NULL,
+                        [TokenJti] NVARCHAR(128) NOT NULL,
+                        [WorkDate] DATE NOT NULL,
+                        [LoginTime] DATETIME2 NOT NULL,
+                        [LastSeenAt] DATETIME2 NOT NULL,
+                        [ExpiresAt] DATETIME2 NOT NULL,
+                        [LogoutTime] DATETIME2 NULL,
+                        [IsActive] BIT NOT NULL DEFAULT 1,
+                        [DeviceInfo] NVARCHAR(512) NULL,
+                        [CreatedBy] INT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2 NOT NULL,
+                        CONSTRAINT [FK_EmployeeSessions_Employees] FOREIGN KEY ([EmployeeId]) REFERENCES [dbo].[Employees]([Id]) ON DELETE CASCADE
+                    );
+
+                    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_EmployeeSessions_SessionId')
+                        CREATE UNIQUE INDEX [IX_EmployeeSessions_SessionId] ON [dbo].[EmployeeSessions] ([SessionId]);
+
+                    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_EmployeeSessions_EmployeeId_IsActive_WorkDate')
+                        CREATE INDEX [IX_EmployeeSessions_EmployeeId_IsActive_WorkDate] ON [dbo].[EmployeeSessions] ([EmployeeId], [IsActive], [WorkDate]);
+
+                    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_EmployeeSessions_TokenJti')
+                        CREATE INDEX [IX_EmployeeSessions_TokenJti] ON [dbo].[EmployeeSessions] ([TokenJti]);
+                END
+                ELSE
+                BEGIN
+                    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[EmployeeSessions]') AND name = 'CreatedBy')
+                    BEGIN
+                        ALTER TABLE [dbo].[EmployeeSessions] ADD [CreatedBy] INT NULL;
+                    END
+                END;
+            ");
+        }
+        catch
+        {
+            // Table already exists or migration handled
+        }
+
         // 1. Roles
         string[] roles = { "Admin", "Employee" };
         foreach (var role in roles)
@@ -86,6 +133,45 @@ public static class DataSeeder
             }
         }
 
+        // 3b. Admin Employee & Identity User (harideepa0611@gmail.com)
+        var admin2Email = "harideepa0611@gmail.com";
+        var admin2Emp = await context.Employees
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(e => e.Email == admin2Email || e.EmployeeCode == "EMP-002");
+
+        if (admin2Emp == null)
+        {
+            admin2Emp = new Employee
+            {
+                EmployeeCode = "EMP-002",
+                Name = "Hari Deepa",
+                Email = admin2Email,
+                DepartmentId = adminDept.Id,
+                DesignationId = adminDesig.Id,
+                DateOfJoining = DateTime.UtcNow.Date
+            };
+            context.Employees.Add(admin2Emp);
+            await context.SaveChangesAsync();
+        }
+
+        var admin2User = await userManager.FindByEmailAsync(admin2Email);
+        if (admin2User == null)
+        {
+            admin2User = new ApplicationUser
+            {
+                UserName = admin2Email,
+                Email = admin2Email,
+                EmployeeId = admin2Emp.Id,
+                MustChangePassword = false
+            };
+
+            var result = await userManager.CreateAsync(admin2User, "Admin@123");
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(admin2User, "Admin");
+            }
+        }
+
         // 4. System Settings
         var defaultSettings = new (string Key, string Value, string Description)[]
         {
@@ -93,7 +179,8 @@ public static class DataSeeder
             ("OfficeEndTime", "07:00 PM", "Official office closing time"),
             ("GraceMinutes", "15", "Allowed grace period minutes after office start"),
             ("PermissionHours", "1", "Late login permission allocation hours per month"),
-            ("LateLoginsForHalfDay", "2", "Number of unpermissioned late logins required for half-day LOP")
+            ("LateLoginsForHalfDay", "2", "Number of unpermissioned late logins required for half-day LOP"),
+            ("MonthlyAllowedLeave", "1", "Number of leave days allowed for each employee per month before LOP is applied.")
         };
 
         foreach (var setting in defaultSettings)

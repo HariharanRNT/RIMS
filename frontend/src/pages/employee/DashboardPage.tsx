@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { AlertTriangle, CalendarDays, CreditCard, Play, Clock, CheckCircle2, Coffee, Activity, PhoneCall, Briefcase, Calendar } from 'lucide-react';
-import { formatTimeIST } from '../../utils/dateUtils';
+import { formatTimeIST, formatDurationToHoursMinutes } from '../../utils/dateUtils';
 
 interface EmployeeMetrics {
   employeeId: number;
@@ -12,6 +12,8 @@ interface EmployeeMetrics {
   todayLogoutTime?: string;
   todayProductiveHours: number;
   todayBreakHours: number;
+  todayIdleHours?: number;
+  todayNonProductiveHours?: number;
   hasGraceViolationToday: boolean;
   minutesLateToday: number;
   activeTask?: {
@@ -77,6 +79,13 @@ interface TimelineItem {
   duration: string | null;
 }
 
+interface DailyIdleDetail {
+  startTime: string;
+  endTime: string;
+  duration: string;
+  type: string;
+}
+
 interface EmployeeDailyDetail {
   employeeId: number;
   employeeCode: string;
@@ -88,10 +97,13 @@ interface EmployeeDailyDetail {
   status: string;
   productiveHours: number;
   breakHours: number;
+  idleHours?: number;
+  nonProductiveHours?: number;
   minutesLate: number;
   tasks: TaskDetail[];
   breaks: BreakDetail[];
   supportActivities: SupportDetail[];
+  idles?: DailyIdleDetail[];
   timeline: TimelineItem[];
 }
 
@@ -114,7 +126,7 @@ export const EmployeeDashboardPage: React.FC = () => {
   const [selectedHistDate, setSelectedHistDate] = useState<string>(getYesterdayStr());
   const [histDetail, setHistDetail] = useState<EmployeeDailyDetail | null>(null);
   const [histLoading, setHistLoading] = useState(true);
-  const [histTab, setHistTab] = useState<'tasks' | 'breaks' | 'support' | 'timeline'>('tasks');
+  const [histTab, setHistTab] = useState<'tasks' | 'breaks' | 'support' | 'idles' | 'timeline'>('tasks');
 
   const fetchMetrics = async () => {
     try {
@@ -179,81 +191,93 @@ export const EmployeeDashboardPage: React.FC = () => {
       ) : (
         <>
           {/* Today Overview Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
             {/* Login Time Card */}
-            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: '#EEF2FF', color: 'var(--primary)' }}>
-                <Clock size={22} />
+            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div className="icon-badge icon-badge-primary">
+                <Clock size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '0.785rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Login Time Today</span>
-                <h3 style={{ fontSize: '1.15rem', marginTop: '0.1rem', color: 'var(--text-main)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Login time today</span>
+                <h3 style={{ fontSize: '1.05rem', marginTop: '0.1rem', color: 'var(--text-main)' }}>
                   {metrics.todayLoginTime ? formatTimeIST(metrics.todayLoginTime) : 'Not Logged In'}
                 </h3>
                 {metrics.hasGraceViolationToday ? (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', marginTop: '0.1rem' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--danger-text)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', marginTop: '0.1rem', fontWeight: 600 }}>
                     <AlertTriangle size={12} /> Late ({metrics.minutesLateToday}m)
                   </span>
                 ) : (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--success)', marginTop: '0.1rem' }}>On Time</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--success-text)', fontWeight: 600, marginTop: '0.1rem' }}>On time</span>
                 )}
               </div>
             </div>
 
             {/* Productive Time Card */}
-            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: '#ECFDF5', color: 'var(--success)' }}>
-                <CheckCircle2 size={22} />
+            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div className="icon-badge icon-badge-success">
+                <CheckCircle2 size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '0.785rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Today Productive Time</span>
-                <h3 style={{ fontSize: '1.25rem', marginTop: '0.1rem', color: 'var(--text-main)' }}>
-                  {metrics.todayProductiveHours} <span style={{ fontSize: '0.825rem', fontWeight: 500 }}>hrs</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Productive time</span>
+                <h3 style={{ fontSize: '1.15rem', marginTop: '0.1rem', color: 'var(--text-main)', fontWeight: 700 }}>
+                  {formatDurationToHoursMinutes(metrics.todayProductiveHours)}
                 </h3>
-                <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>Tasks & Support</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Tasks & support</span>
               </div>
             </div>
 
             {/* Break Time Card */}
-            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: '#FFFBEB', color: 'var(--warning)' }}>
-                <Coffee size={22} />
+            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div className="icon-badge icon-badge-warning">
+                <Coffee size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '0.785rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Today Break Time</span>
-                <h3 style={{ fontSize: '1.25rem', marginTop: '0.1rem', color: 'var(--text-main)' }}>
-                  {metrics.todayBreakHours} <span style={{ fontSize: '0.825rem', fontWeight: 500 }}>hrs</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Break time</span>
+                <h3 style={{ fontSize: '1.15rem', marginTop: '0.1rem', color: 'var(--text-main)', fontWeight: 700 }}>
+                  {formatDurationToHoursMinutes(metrics.todayBreakHours)}
                 </h3>
-                <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>Non-productive time</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Break logs</span>
               </div>
             </div>
 
-            {/* Current Status Card */}
-            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: '#EFF6FF', color: 'var(--info)' }}>
-                <Activity size={22} />
+            {/* Idle Time Card */}
+            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div className="icon-badge icon-badge-secondary">
+                <Clock size={20} />
               </div>
               <div>
-                <span style={{ fontSize: '0.785rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Current Status</span>
-                <h3 style={{ fontSize: '1.15rem', marginTop: '0.1rem', color: 'var(--text-main)' }}>
-                  {metrics.activeTask ? metrics.activeTask.status : 'Idle'}
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Idle time</span>
+                <h3 style={{ fontSize: '1.15rem', marginTop: '0.1rem', color: 'var(--text-main)', fontWeight: 700 }}>
+                  {formatDurationToHoursMinutes(metrics.todayIdleHours || 0)}
                 </h3>
-                <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
-                  {metrics.activeTask ? metrics.activeTask.moduleName : 'No Active Task'}
-                </span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Logout-login gaps</span>
+              </div>
+            </div>
+
+            {/* Non-Productive Time Card */}
+            <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div className="icon-badge icon-badge-warning">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Non-productive time</span>
+                <h3 style={{ fontSize: '1.15rem', marginTop: '0.1rem', color: 'var(--warning-text)', fontWeight: 700 }}>
+                  {formatDurationToHoursMinutes(metrics.todayNonProductiveHours || (metrics.todayBreakHours + (metrics.todayIdleHours || 0)))}
+                </h3>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Break + Idle</span>
               </div>
             </div>
           </div>
 
           {/* Quick Shortcuts */}
-          <h3 style={{ marginBottom: '0.85rem', fontSize: '1rem' }}>Quick Shortcuts</h3>
+          <h3 style={{ marginBottom: '0.85rem', fontSize: '1rem' }}>Quick shortcuts</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
             <div
               className="ui-card"
               onClick={() => navigate('/work-task')}
               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem' }}
             >
-              <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: '#EEF2FF', color: 'var(--primary)' }}>
+              <div className="icon-badge icon-badge-primary">
                 <Play size={20} />
               </div>
               <div>
@@ -267,7 +291,7 @@ export const EmployeeDashboardPage: React.FC = () => {
               onClick={() => navigate('/leave')}
               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem' }}
             >
-              <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: '#FFFBEB', color: 'var(--warning)' }}>
+              <div className="icon-badge icon-badge-warning">
                 <CalendarDays size={20} />
               </div>
               <div>
@@ -281,7 +305,7 @@ export const EmployeeDashboardPage: React.FC = () => {
               onClick={() => navigate('/payslip')}
               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem' }}
             >
-              <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: '#ECFDF5', color: 'var(--success)' }}>
+              <div className="icon-badge icon-badge-success">
                 <CreditCard size={20} />
               </div>
               <div>
@@ -292,26 +316,26 @@ export const EmployeeDashboardPage: React.FC = () => {
           </div>
 
           {/* ========================================================================= */}
-          {/* NEW SECTION: HISTORICAL DAILY PERFORMANCE & TIME BREAKDOWN */}
+          {/* HISTORICAL DAILY PERFORMANCE & TIME BREAKDOWN */}
           {/* ========================================================================= */}
-          <div className="glass-card" style={{ marginTop: '2rem', padding: '1.5rem', marginBottom: '2rem' }}>
+          <div className="ui-card" style={{ marginTop: '2rem', padding: '1.5rem', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Calendar size={20} style={{ color: 'var(--accent-primary)' }} />
-                  <span>Daily Performance & Activity History</span>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Calendar size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Daily performance & activity history</span>
                 </h3>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  Detailed breakdown of productive time, breaks, task sessions, and login timestamps. (Starts from previous day)
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
+                  Detailed breakdown of productive time, breaks, task sessions, and login timestamps.
                 </p>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Select Date:</label>
+                <label style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Select date:</label>
                 <input
                   type="date"
                   className="form-input"
-                  style={{ padding: '0.4rem 0.6rem', fontSize: '0.875rem' }}
+                  style={{ padding: '0.35rem 0.6rem', fontSize: '0.8125rem' }}
                   value={selectedHistDate}
                   onChange={(e) => setSelectedHistDate(e.target.value)}
                 />
@@ -323,49 +347,50 @@ export const EmployeeDashboardPage: React.FC = () => {
                 Loading activity breakdown for {selectedHistDate}...
               </div>
             ) : !histDetail ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--danger)' }}>
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--danger-text)' }}>
                 No performance data recorded for {selectedHistDate}.
               </div>
             ) : (
               <>
                 {/* Historical Summary Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-                  <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Login / Logout (IST)</span>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--success)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Login / logout (IST)</span>
+                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--success-text)' }}>
                       In: {formatTimeIST(histDetail.loginTime)}
                     </span>
                     <br />
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <span style={{ fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
                       Out: {formatTimeIST(histDetail.logoutTime)}
                     </span>
                   </div>
 
-                  <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Productive Time</span>
-                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--success)' }}>
-                      {histDetail.productiveHours} hrs
+                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Productive time</span>
+                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--success-text)' }}>
+                      {formatDurationToHoursMinutes(histDetail.productiveHours)}
                     </span>
                   </div>
 
-                  <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Break Time (Non-Productive)</span>
-                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--warning)' }}>
-                      {histDetail.breakHours} hrs
+                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Break time</span>
+                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--warning-text)' }}>
+                      {formatDurationToHoursMinutes(histDetail.breakHours)}
                     </span>
                   </div>
 
-                  <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Late Login Status</span>
-                    {histDetail.minutesLate > 0 ? (
-                      <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--danger)' }}>
-                        {histDetail.minutesLate} Mins Late
-                      </span>
-                    ) : (
-                      <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--success)' }}>
-                        On Time
-                      </span>
-                    )}
+                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Idle time</span>
+                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--text-main)' }}>
+                      {formatDurationToHoursMinutes(histDetail.idleHours || 0)}
+                    </span>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Non-productive time</span>
+                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--warning-text)' }}>
+                      {formatDurationToHoursMinutes(histDetail.nonProductiveHours || (histDetail.breakHours + (histDetail.idleHours || 0)))}
+                    </span>
                   </div>
                 </div>
 
@@ -377,7 +402,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                     onClick={() => setHistTab('tasks')}
                   >
                     <Briefcase size={15} />
-                    <span>Work Tasks & Sessions ({histDetail.tasks.length})</span>
+                    <span>Work Tasks ({histDetail.tasks.length})</span>
                   </button>
 
                   <button
@@ -386,7 +411,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                     onClick={() => setHistTab('breaks')}
                   >
                     <Coffee size={15} />
-                    <span>Break Logs ({histDetail.breaks.length})</span>
+                    <span>Breaks ({histDetail.breaks.length})</span>
                   </button>
 
                   <button
@@ -399,14 +424,51 @@ export const EmployeeDashboardPage: React.FC = () => {
                   </button>
 
                   <button
+                    className={`btn ${histTab === 'idles' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                    onClick={() => setHistTab('idles')}
+                  >
+                    <Clock size={15} />
+                    <span>Idle Gaps ({(histDetail.idles || []).length})</span>
+                  </button>
+
+                  <button
                     className={`btn ${histTab === 'timeline' ? 'btn-primary' : 'btn-secondary'}`}
                     style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
                     onClick={() => setHistTab('timeline')}
                   >
-                    <Clock size={15} />
+                    <Activity size={15} />
                     <span>Full Activity Stream ({histDetail.timeline.length})</span>
                   </button>
                 </div>
+
+                {/* Sub Tab 3.5: Idle Gaps */}
+                {histTab === 'idles' && (
+                  <div className="table-container" style={{ padding: 0 }}>
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Gap Type</th>
+                          <th>Time Slot (Logout ➔ Login IST)</th>
+                          <th>Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(!histDetail.idles || histDetail.idles.length === 0) ? (
+                          <tr><td colSpan={3} style={{ textAlign: 'center', padding: '2rem' }}>No logout-login idle gaps logged on {selectedHistDate}.</td></tr>
+                        ) : (
+                          histDetail.idles.map((idle, i) => (
+                            <tr key={i}>
+                              <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>⏸️ {idle.type || 'Logout-Login Gap'}</td>
+                              <td>{formatTimeIST(idle.startTime)} ➔ {formatTimeIST(idle.endTime)}</td>
+                              <td style={{ fontWeight: 700, color: 'var(--warning-text)' }}>{idle.duration}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* Sub Tab 1: Tasks & Work Sessions */}
                 {histTab === 'tasks' && (
@@ -417,7 +479,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                       </p>
                     ) : (
                       histDetail.tasks.map((task) => (
-                        <div key={task.taskId} style={{ background: 'var(--bg-primary)', borderRadius: '10px', padding: '1rem', border: '1px solid var(--border-color)' }}>
+                        <div key={task.taskId} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRadius: '10px', padding: '1rem', border: '1px solid var(--border-color)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                             <div>
                               <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--accent-primary)' }}>{task.moduleName}</h4>
@@ -433,11 +495,11 @@ export const EmployeeDashboardPage: React.FC = () => {
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
                             <span><strong>Product:</strong> {task.productName || 'N/A'}</span>
                             <span><strong>Client:</strong> {task.clientName || 'N/A'}</span>
-                            <span><strong>Total Worked:</strong> {task.totalTaskHours} hrs</span>
+                            <span><strong>Total Worked:</strong> {formatDurationToHoursMinutes(task.totalTaskHours)}</span>
                           </div>
 
                           {/* Sessions List */}
-                          <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '8px' }}>
+                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.75rem', borderRadius: '8px' }}>
                             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
                               Session Timestamps (Start ➔ End IST):
                             </span>
@@ -535,7 +597,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                           <div style={{ minWidth: '85px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-primary)', paddingTop: '0.2rem' }}>
                             {formatTimeIST(item.startTime)}
                           </div>
-                          <div style={{ flex: 1, background: 'var(--bg-primary)', padding: '0.6rem 0.9rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                          <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', padding: '0.6rem 0.9rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.activityType}</span>
                               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.duration || ''}</span>

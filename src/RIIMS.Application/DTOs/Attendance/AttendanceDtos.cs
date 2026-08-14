@@ -15,6 +15,8 @@ public class AttendanceDto
 
     public string OfficeStartTime { get; set; } = "10:00 AM";
     public string GraceEndTime { get; set; } = "10:15 AM";
+    public DateTime? AllowedEndTime { get; set; }
+    public string? AllowedEndTimeDisplay { get; set; }
     public int MonthlyLateCount { get; set; }
     public decimal MonthlyLopDays { get; set; }
 }

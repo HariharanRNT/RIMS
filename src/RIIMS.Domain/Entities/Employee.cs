@@ -37,6 +37,7 @@ public class Employee : BaseEntity
     public ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
     public ICollection<PermissionRequest> PermissionRequests { get; set; } = new List<PermissionRequest>();
     public ICollection<PayslipDetail> PayslipDetails { get; set; } = new List<PayslipDetail>();
+    public ICollection<EmployeeSalaryStructure> SalaryStructures { get; set; } = new List<EmployeeSalaryStructure>();
     public ICollection<ActivityTimeline> ActivityTimelines { get; set; } = new List<ActivityTimeline>();
     public ICollection<GraceTimeViolation> GraceTimeViolations { get; set; } = new List<GraceTimeViolation>();
     public ICollection<LOPCalculation> LOPCalculations { get; set; } = new List<LOPCalculation>();

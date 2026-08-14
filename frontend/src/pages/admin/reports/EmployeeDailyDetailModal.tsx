@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
 import { X, Clock, Coffee, Briefcase, PhoneCall } from 'lucide-react';
-import { formatTimeIST } from '../../../utils/dateUtils';
+import { formatTimeIST, formatDurationToHoursMinutes } from '../../../utils/dateUtils';
 
 
 
@@ -50,6 +50,13 @@ interface TimelineItem {
   duration: string | null;
 }
 
+interface DailyIdleDetail {
+  startTime: string;
+  endTime: string;
+  duration: string;
+  type: string;
+}
+
 interface EmployeeDailyDetail {
   employeeId: number;
   employeeCode: string;
@@ -61,10 +68,13 @@ interface EmployeeDailyDetail {
   status: string;
   productiveHours: number;
   breakHours: number;
+  idleHours?: number;
+  nonProductiveHours?: number;
   minutesLate: number;
   tasks: TaskDetail[];
   breaks: BreakDetail[];
   supportActivities: SupportDetail[];
+  idles?: DailyIdleDetail[];
   timeline: TimelineItem[];
 }
 
@@ -77,7 +87,7 @@ interface Props {
 export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, onClose }) => {
   const [detail, setDetail] = useState<EmployeeDailyDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'breaks' | 'support' | 'timeline'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'breaks' | 'support' | 'idles' | 'timeline'>('tasks');
 
   useEffect(() => {
     if (!employeeId) return;
@@ -171,7 +181,7 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
         ) : (
           <>
             {/* Top Metric Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Login / Logout</span>
                 <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--success)' }}>
@@ -184,35 +194,36 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
               </div>
 
               <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Productive Hours</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Productive Time</span>
                 <span style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--success)' }}>
-                  {detail.productiveHours} hrs
+                  {formatDurationToHoursMinutes(detail.productiveHours)}
                 </span>
               </div>
 
               <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Break Hours</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Break Time</span>
                 <span style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--warning)' }}>
-                  {detail.breakHours} hrs
+                  {formatDurationToHoursMinutes(detail.breakHours)}
                 </span>
               </div>
 
               <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Late Login</span>
-                {detail.minutesLate > 0 ? (
-                  <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--danger)' }}>
-                    {detail.minutesLate} Mins Late
-                  </span>
-                ) : (
-                  <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--success)' }}>
-                    On Time
-                  </span>
-                )}
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Idle Time</span>
+                <span style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--text-main)' }}>
+                  {formatDurationToHoursMinutes(detail.idleHours || 0)}
+                </span>
+              </div>
+
+              <div style={{ background: 'var(--bg-primary)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Non-Productive Time</span>
+                <span style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--warning)' }}>
+                  {formatDurationToHoursMinutes(detail.nonProductiveHours || (detail.breakHours + (detail.idleHours || 0)))}
+                </span>
               </div>
             </div>
 
             {/* Sub Tabs */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
               <button
                 className={`btn ${activeTab === 'tasks' ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
@@ -241,6 +252,15 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
               </button>
 
               <button
+                className={`btn ${activeTab === 'idles' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                onClick={() => setActiveTab('idles')}
+              >
+                <Clock size={15} />
+                <span>Idle Gaps ({(detail.idles || []).length})</span>
+              </button>
+
+              <button
                 className={`btn ${activeTab === 'timeline' ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
                 onClick={() => setActiveTab('timeline')}
@@ -249,6 +269,34 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
                 <span>Full Timeline ({detail.timeline.length})</span>
               </button>
             </div>
+
+            {/* Sub Tab: Idle Gaps */}
+            {activeTab === 'idles' && (
+              <div className="table-container" style={{ padding: 0 }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Gap Type</th>
+                      <th>Time Slot (Logout ➔ Login IST)</th>
+                      <th>Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(!detail.idles || detail.idles.length === 0) ? (
+                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: '2rem' }}>No logout-login idle gaps logged on {date}.</td></tr>
+                    ) : (
+                      detail.idles.map((idle, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>⏸️ {idle.type || 'Logout-Login Gap'}</td>
+                          <td>{formatTime(idle.startTime)} ➔ {formatTime(idle.endTime)}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--warning)' }}>{idle.duration}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Tab 1: Tasks & Work Sessions */}
             {activeTab === 'tasks' && (
@@ -275,7 +323,7 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', display: 'flex', gap: '1.5rem' }}>
                         <span><strong>Product:</strong> {task.productName || 'N/A'}</span>
                         <span><strong>Client:</strong> {task.clientName || 'N/A'}</span>
-                        <span><strong>Total Worked:</strong> {task.totalTaskHours} hrs</span>
+                        <span><strong>Total Worked:</strong> {formatDurationToHoursMinutes(task.totalTaskHours)}</span>
                       </div>
 
                       {/* Sessions List */}

@@ -19,6 +19,7 @@ public class LeaveRequestDto
     public string LeaveTypeName { get; set; } = string.Empty;
     public DateTime FromDate { get; set; }
     public DateTime ToDate { get; set; }
+    public decimal LeaveDays { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public int? ApprovedBy { get; set; }

@@ -58,7 +58,8 @@ export const SystemSettingsPage: React.FC = () => {
       'OfficeEndTime',
       'GraceMinutes',
       'PermissionHours',
-      'LateLoginsForHalfDay'
+      'LateLoginsForHalfDay',
+      'MonthlyAllowedLeave'
     ];
 
     try {
@@ -320,6 +321,34 @@ export const SystemSettingsPage: React.FC = () => {
                       value={settingsMap['LateLoginsForHalfDay']?.value ?? ''}
                       onChange={(e) => handleChange('LateLoginsForHalfDay', e.target.value)}
                       placeholder="2"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Monthly Allowed Leave */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
+                    Monthly Allowed Leave
+                  </label>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'block' }}>
+                    Number of leave days allowed for each employee per month before LOP is applied.
+                  </span>
+                  <div style={{ width: '100%', maxWidth: '200px' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      className="form-input"
+                      style={{
+                        height: '44px',
+                        borderRadius: 'var(--radius-sm)',
+                        borderColor: 'var(--border-color)',
+                        fontSize: '0.85rem'
+                      }}
+                      value={settingsMap['MonthlyAllowedLeave']?.value ?? '1'}
+                      onChange={(e) => handleChange('MonthlyAllowedLeave', e.target.value)}
+                      placeholder="1"
                       required
                     />
                   </div>

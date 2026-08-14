@@ -215,22 +215,86 @@ public class LeaveService : ILeaveService
         return l != null ? MapToDto(l) : null;
     }
 
-    private static LeaveRequestDto MapToDto(LeaveRequest l) => new()
+    public async Task<decimal> CalculateLeaveDaysAsync(DateTime fromDate, DateTime toDate, int employeeId)
     {
-        Id = l.Id,
-        EmployeeId = l.EmployeeId,
-        EmployeeName = l.Employee.Name,
-        EmployeeCode = l.Employee.EmployeeCode,
-        DepartmentName = l.Employee.Department?.Name ?? string.Empty,
-        LeaveTypeId = l.LeaveTypeId,
-        LeaveTypeName = l.LeaveType.Name,
-        FromDate = l.FromDate,
-        ToDate = l.ToDate,
-        Reason = l.Reason,
-        Status = l.Status.ToString(),
-        ApprovedBy = l.ApprovedBy,
-        ApproverName = l.Approver?.Name,
-        ApprovedAt = l.ApprovedAt,
-        CreatedAt = l.CreatedAt
-    };
+        var calendars = await _context.AttendanceCalendars
+            .Where(c => c.CalendarDate >= DateOnly.FromDateTime(fromDate) && c.CalendarDate <= DateOnly.FromDateTime(toDate))
+            .ToDictionaryAsync(c => c.CalendarDate);
+
+        decimal count = 0;
+        for (var d = fromDate.Date; d <= toDate.Date; d = d.AddDays(1))
+        {
+            var dateOnly = DateOnly.FromDateTime(d);
+            if (calendars.TryGetValue(dateOnly, out var cal))
+            {
+                if (cal.DayType == AttendanceDayType.WorkingDay || cal.DayType == AttendanceDayType.SpecialWorkingDay)
+                {
+                    count += 1;
+                }
+                else if (cal.DayType == AttendanceDayType.OptionalHoliday)
+                {
+                    var isApprovedOptional = await _context.LeaveRequests
+                        .Include(l => l.LeaveType)
+                        .AnyAsync(l => l.EmployeeId == employeeId &&
+                                      l.Status == RequestStatus.Approved &&
+                                      l.LeaveType.Name.Contains("Optional") &&
+                                      l.FromDate.Date <= d &&
+                                      l.ToDate.Date >= d);
+                    if (!isApprovedOptional) count += 1;
+                }
+            }
+            else
+            {
+                if (d.DayOfWeek != DayOfWeek.Saturday && d.DayOfWeek != DayOfWeek.Sunday)
+                {
+                    count += 1;
+                }
+            }
+        }
+        return count;
+    }
+
+    private LeaveRequestDto MapToDto(LeaveRequest l)
+    {
+        // Calculate leave duration excluding weekends and holidays
+        decimal days = 0;
+        for (var d = l.FromDate.Date; d <= l.ToDate.Date; d = d.AddDays(1))
+        {
+            var cal = _context.AttendanceCalendars.FirstOrDefault(c => c.CalendarDate == DateOnly.FromDateTime(d));
+            if (cal != null)
+            {
+                if (cal.DayType == AttendanceDayType.WorkingDay || cal.DayType == AttendanceDayType.SpecialWorkingDay)
+                {
+                    days += 1;
+                }
+            }
+            else
+            {
+                if (d.DayOfWeek != DayOfWeek.Saturday && d.DayOfWeek != DayOfWeek.Sunday)
+                {
+                    days += 1;
+                }
+            }
+        }
+
+        return new LeaveRequestDto
+        {
+            Id = l.Id,
+            EmployeeId = l.EmployeeId,
+            EmployeeName = l.Employee.Name,
+            EmployeeCode = l.Employee.EmployeeCode,
+            DepartmentName = l.Employee.Department?.Name ?? string.Empty,
+            LeaveTypeId = l.LeaveTypeId,
+            LeaveTypeName = l.LeaveType.Name,
+            FromDate = l.FromDate,
+            ToDate = l.ToDate,
+            LeaveDays = days,
+            Reason = l.Reason,
+            Status = l.Status.ToString(),
+            ApprovedBy = l.ApprovedBy,
+            ApproverName = l.Approver?.Name,
+            ApprovedAt = l.ApprovedAt,
+            CreatedAt = l.CreatedAt
+        };
+    }
 }

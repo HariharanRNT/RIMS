@@ -10,6 +10,7 @@ public interface IReportService
     Task<List<DailyProductionItemDto>> GetDailyProductionReportAsync(DateTime date, int? departmentId = null);
     Task<EmployeeDailyDetailDto> GetEmployeeDailyDetailAsync(int employeeId, DateTime date);
     Task<WorkDistributionReportDto> GetWorkDistributionReportAsync(int month, int year);
+    Task<AdminNotificationSummaryDto> GetAdminNotificationsAsync();
 }
 
 

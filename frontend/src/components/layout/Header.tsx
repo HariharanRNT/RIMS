@@ -61,14 +61,22 @@ export const Header: React.FC<HeaderProps> = () => {
 
   const pageMeta = getPageMeta(location.pathname);
 
-  // Fetch demo follow-up reminders count
+  // Fetch notifications based on role
   const fetchNotifications = async () => {
-    if (!user || user.role !== 'Employee') return;
+    if (!user) return;
     try {
-      const res = await apiClient.get('/support/demo-followups/my-pending');
-      if (res.data.success) {
-        setNotificationsList(res.data.data);
-        setPendingRemindersCount(res.data.data.length);
+      if (user.role === 'Admin') {
+        const res = await apiClient.get('/reports/admin-notifications');
+        if (res.data.success) {
+          setNotificationsList(res.data.data.notifications || []);
+          setPendingRemindersCount(res.data.data.totalCount || 0);
+        }
+      } else {
+        const res = await apiClient.get('/support/demo-followups/my-pending');
+        if (res.data.success) {
+          setNotificationsList(res.data.data || []);
+          setPendingRemindersCount(res.data.data.length || 0);
+        }
       }
     } catch {
       // Ignore
@@ -77,7 +85,7 @@ export const Header: React.FC<HeaderProps> = () => {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
+    const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -107,8 +115,10 @@ export const Header: React.FC<HeaderProps> = () => {
   return (
     <header style={{
       height: '60px',
-      backgroundColor: '#FFFFFF',
-      borderBottom: '1px solid var(--border-color)',
+      background: 'rgba(255,255,255,0.04)',
+      backdropFilter: 'blur(20px) saturate(140%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+      borderBottom: '1px solid rgba(255,255,255,0.10)',
       padding: '0 1.5rem',
       display: 'flex',
       alignItems: 'center',
@@ -119,10 +129,10 @@ export const Header: React.FC<HeaderProps> = () => {
     }}>
       {/* Breadcrumb / Page Title */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        <div style={{ fontSize: '0.675rem', color: 'rgba(255,255,255,0.35)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           {pageMeta.category}
         </div>
-        <h1 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#F5F5F5', letterSpacing: '-0.02em' }}>
           {pageMeta.title}
         </h1>
       </div>
@@ -137,20 +147,20 @@ export const Header: React.FC<HeaderProps> = () => {
               setShowProfileMenu(false);
             }}
             style={{
-              background: 'var(--bg-hover)',
-              border: '1px solid var(--border-color)',
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 'var(--radius-sm)',
               width: '34px',
               height: '34px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--text-secondary)',
+              color: 'rgba(255,255,255,0.6)',
               cursor: 'pointer',
               position: 'relative',
               transition: 'all 0.12s ease'
             }}
-            title="Notifications & Reminders"
+            title="Notifications & Alerts"
           >
             <Bell size={16} />
             {pendingRemindersCount > 0 && (
@@ -158,7 +168,7 @@ export const Header: React.FC<HeaderProps> = () => {
                 position: 'absolute',
                 top: '4px',
                 right: '4px',
-                backgroundColor: 'var(--danger)',
+                background: 'linear-gradient(135deg, #F06060, #FF7B7B)',
                 color: '#FFFFFF',
                 fontSize: '0.6rem',
                 fontWeight: 700,
@@ -168,7 +178,7 @@ export const Header: React.FC<HeaderProps> = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 0 0 2px #FFFFFF',
+                boxShadow: '0 0 0 2px rgba(0,0,0,0.3)',
               }}>
                 {pendingRemindersCount}
               </span>
@@ -181,11 +191,13 @@ export const Header: React.FC<HeaderProps> = () => {
               position: 'absolute',
               top: 'calc(100% + 6px)',
               right: 0,
-              width: '300px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-lg)',
+              width: '320px',
+              background: 'rgba(255,255,255,0.10)',
+              backdropFilter: 'blur(24px) saturate(150%)',
+              WebkitBackdropFilter: 'blur(24px) saturate(150%)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
               padding: '0.85rem',
               zIndex: 100,
               animation: 'fadeIn 0.15s ease-out'
@@ -195,53 +207,93 @@ export const Header: React.FC<HeaderProps> = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 marginBottom: '0.65rem',
-                borderBottom: '1px solid var(--border-color)',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
                 paddingBottom: '0.45rem',
               }}>
-                <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-main)' }}>Follow-Up Reminders</span>
-                <span className="badge badge-warning">{pendingRemindersCount} Pending</span>
+                <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#F5F5F5' }}>
+                  {user?.role === 'Admin' ? 'Admin Alerts & Requests' : 'Follow-Up Reminders'}
+                </span>
+                <span className={`badge ${pendingRemindersCount > 0 ? 'badge-danger' : 'badge-neutral'}`}>
+                  {pendingRemindersCount} Pending
+                </span>
               </div>
 
               {notificationsList.length === 0 ? (
-                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.75rem 0' }}>
-                  No pending follow-up reminders.
+                <p style={{ fontSize: '0.775rem', color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: '0.75rem 0' }}>
+                  {user?.role === 'Admin' ? 'No pending alerts or approval requests.' : 'No pending follow-up reminders.'}
                 </p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '220px', overflowY: 'auto' }}>
-                  {notificationsList.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => {
-                        setShowNotifications(false);
-                        navigate('/work-task');
-                      }}
-                      style={{
-                        padding: '0.5rem 0.65rem',
-                        borderRadius: 'var(--radius-sm)',
-                        backgroundColor: 'var(--bg-hover)',
-                        border: '1px solid var(--border-color)',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.12s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.775rem', fontWeight: 600 }}>
-                        <span>{item.productName}</span>
-                        <span style={{ color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.7rem' }}>
-                          <Calendar size={11} /> {new Date(item.followUpDate).toLocaleDateString()}
-                        </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '260px', overflowY: 'auto' }}>
+                  {user?.role === 'Admin' ? (
+                    notificationsList.map((item) => (
+                      <div
+                        key={`${item.category}-${item.id}`}
+                        onClick={() => {
+                          setShowNotifications(false);
+                          navigate(item.targetUrl || '/admin/dashboard');
+                        }}
+                        style={{
+                          padding: '0.55rem 0.65rem',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.12s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+                          <span className={`badge ${
+                            item.category === 'LateLogin' ? 'badge-danger' :
+                            item.category === 'LeaveRequest' ? 'badge-warning' : 'badge-primary'
+                          }`}>
+                            {item.category === 'LateLogin' ? 'Late Login' :
+                             item.category === 'LeaveRequest' ? 'Leave Request' : 'Permission'}
+                          </span>
+                          <span style={{ fontSize: '0.675rem', color: 'rgba(255,255,255,0.35)' }}>
+                            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#F5F5F5', margin: '0.15rem 0 0.1rem' }}>
+                          {item.message}
+                        </p>
                       </div>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                        Client: {item.clientCompanyName}
-                      </p>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    notificationsList.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          setShowNotifications(false);
+                          navigate('/work-task');
+                        }}
+                        style={{
+                          padding: '0.5rem 0.65rem',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.12s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.775rem', fontWeight: 600 }}>
+                          <span>{item.productName}</span>
+                          <span style={{ color: '#F5C060', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.7rem' }}>
+                            <Calendar size={11} /> {new Date(item.followUpDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.15rem' }}>
+                          Client: {item.clientCompanyName}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        <div style={{ height: '20px', width: '1px', backgroundColor: 'var(--border-color)' }} />
+        <div style={{ height: '20px', width: '1px', background: 'rgba(255,255,255,0.10)' }} />
 
         {/* User Profile Menu */}
         <div style={{ position: 'relative' }}>
@@ -254,8 +306,8 @@ export const Header: React.FC<HeaderProps> = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '0.55rem',
-              background: 'var(--bg-hover)',
-              border: '1px solid var(--border-color)',
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.12)',
               cursor: 'pointer',
               padding: '0.25rem 0.5rem 0.25rem 0.6rem',
               borderRadius: 'var(--radius-sm)',
@@ -267,10 +319,10 @@ export const Header: React.FC<HeaderProps> = () => {
             <div style={{
               width: '30px',
               height: '30px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, var(--primary) 0%, #4F46E5 100%)',
+              borderRadius: '6px',
+              background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
               color: '#FFFFFF',
-              fontWeight: 700,
+              fontWeight: 600,
               fontSize: '0.7rem',
               display: 'flex',
               alignItems: 'center',
@@ -281,15 +333,15 @@ export const Header: React.FC<HeaderProps> = () => {
             </div>
 
             <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.2 }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#F5F5F5', lineHeight: 1.2 }}>
                 {formatDisplayName(user?.employeeName, user?.role)}
               </span>
-              <span style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.65rem', color: '#E8873C', fontWeight: 600 }}>
                 {user?.role}
               </span>
             </div>
 
-            <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+            <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.35)' }} />
           </button>
 
           {/* Profile Dropdown */}
@@ -299,17 +351,19 @@ export const Header: React.FC<HeaderProps> = () => {
               top: 'calc(100% + 6px)',
               right: 0,
               width: '200px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-lg)',
+              background: 'rgba(255,255,255,0.10)',
+              backdropFilter: 'blur(24px) saturate(150%)',
+              WebkitBackdropFilter: 'blur(24px) saturate(150%)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
               padding: '0.35rem',
               zIndex: 100,
               animation: 'fadeIn 0.15s ease-out'
             }}>
-              <div style={{ padding: '0.45rem 0.65rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.3rem' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-main)' }}>{formatDisplayName(user?.employeeName, user?.role)}</div>
-                <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>{user?.role} Portal</div>
+              <div style={{ padding: '0.45rem 0.65rem', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '0.3rem' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#F5F5F5' }}>{formatDisplayName(user?.employeeName, user?.role)}</div>
+                <div style={{ fontSize: '0.675rem', color: 'rgba(255,255,255,0.35)' }}>{user?.role} Portal</div>
               </div>
 
               <button
@@ -327,7 +381,7 @@ export const Header: React.FC<HeaderProps> = () => {
               <button
                 onClick={handleLogout}
                 className="btn btn-ghost"
-                style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.775rem', padding: '0.4rem 0.65rem', color: 'var(--danger)' }}
+                style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.775rem', padding: '0.4rem 0.65rem', color: '#FF7B7B' }}
               >
                 <LogOut size={15} />
                 <span>Sign Out</span>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import apiClient from '../../../api/client';
-import { UserPlus, UserCheck, Clock, Key, CheckCircle, Copy, AlertCircle, X, Users, PhoneCall, Check, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, UserCheck, Clock, Key, CheckCircle, Copy, AlertCircle, X, Users, PhoneCall, Check, Eye, EyeOff, Calculator } from 'lucide-react';
 
 interface EmployeeFormModalProps {
   isOpen: boolean;
@@ -93,6 +93,291 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
   const [workLocation, setWorkLocation] = useState('Office');
   const [employmentType, setEmploymentType] = useState('FullTime');
 
+  // Step 3 / Payroll Details State
+  const [annualCTC, setAnnualCTC] = useState<string>('');
+  const [salaryConfigMode, setSalaryConfigMode] = useState<'ConfigureLater' | 'ConfigureNow'>('ConfigureLater');
+  const [salaryEffectiveFrom, setSalaryEffectiveFrom] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [pfApplicable, setPfApplicable] = useState<boolean>(true);
+  const [esiApplicable, setEsiApplicable] = useState<boolean>(false);
+  const [ptApplicable, setPtApplicable] = useState<boolean>(false);
+  const [tdsApplicable, setTdsApplicable] = useState<boolean>(false);
+
+  // Detailed Earnings state when ConfigureNow is selected
+  const [basicCalcType, setBasicCalcType] = useState<number>(0); // 0 = Percentage, 1 = FixedAmount
+  const [basicPct, setBasicPct] = useState<string>('50');
+  const [basicFixed, setBasicFixed] = useState<string>('');
+
+  const [hraCalcType, setHraCalcType] = useState<number>(0); // 0 = Percentage, 1 = FixedAmount
+  const [hraPct, setHraPct] = useState<string>('40');
+  const [hraBase, setHraBase] = useState<number>(1); // 1 = BasicSalary, 0 = MonthlyCTC
+  const [hraFixed, setHraFixed] = useState<string>('');
+
+  const [convCalcType, setConvCalcType] = useState<number>(1); // 1 = FixedAmount
+  const [convPct, setConvPct] = useState<string>('');
+  const [convFixed, setConvFixed] = useState<string>('1600');
+
+  const [medCalcType, setMedCalcType] = useState<number>(1); // 1 = FixedAmount
+  const [medPct, setMedPct] = useState<string>('');
+  const [medFixed, setMedFixed] = useState<string>('1250');
+
+  const [specialCalcType, setSpecialCalcType] = useState<number>(2); // 2 = AutomaticBalance
+  const [specialPct, setSpecialPct] = useState<string>('');
+  const [specialFixed, setSpecialFixed] = useState<string>('');
+
+  const [arrearsFixed, setArrearsFixed] = useState<string>('0');
+
+  // Deductions state
+  const [pfCalcType, setPfCalcType] = useState<number>(0); // 0 = Percentage
+  const [pfPct, setPfPct] = useState<string>('12');
+  const [pfBase, setPfBase] = useState<number>(1); // 1 = BasicSalary
+  const [pfFixed, setPfFixed] = useState<string>('');
+
+  const [esiCalcType, setEsiCalcType] = useState<number>(0); // 0 = Percentage
+  const [esiPct, setEsiPct] = useState<string>('0.75');
+  const [esiFixed, setEsiFixed] = useState<string>('');
+
+  const [ptFixed, setPtFixed] = useState<string>('200');
+  const [tdsFixed, setTdsFixed] = useState<string>('0');
+  const [otherDeductionName, setOtherDeductionName] = useState<string>('Other Deduction');
+  const [otherDeductionFixed, setOtherDeductionFixed] = useState<string>('0');
+
+  // Non-negative input helper functions
+  const handleNonNegativeChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (raw === '') {
+      setter('');
+      return;
+    }
+    const sanitized = raw.replace(/-/g, '');
+    const num = parseFloat(sanitized);
+    if (!isNaN(num) && num < 0) {
+      setter('0');
+    } else {
+      setter(sanitized);
+    }
+  };
+
+  const handleKeyDownNonNegative = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+      e.preventDefault();
+    }
+  };
+
+  // Derived Monthly CTC
+  const monthlyCTC = React.useMemo(() => {
+    const val = Math.max(0, parseFloat(annualCTC) || 0);
+    return val <= 0 ? 0 : Math.round((val / 12) * 100) / 100;
+  }, [annualCTC]);
+
+  // Live preview breakdown
+  const previewCalc = React.useMemo(() => {
+    if (!monthlyCTC || monthlyCTC <= 0) {
+      return { basic: 0, hra: 0, conv: 0, med: 0, special: 0, arrears: 0, gross: 0, pf: 0, esi: 0, pt: 0, tds: 0, other: 0, deductions: 0, netPay: 0, error: '' };
+    }
+
+    const safeBasicPct = Math.max(0, parseFloat(basicPct) || 0);
+    const safeBasicFixed = Math.max(0, parseFloat(basicFixed) || 0);
+    const safeHraPct = Math.max(0, parseFloat(hraPct) || 0);
+    const safeHraFixed = Math.max(0, parseFloat(hraFixed) || 0);
+    const safeConvPct = Math.max(0, parseFloat(convPct) || 0);
+    const safeConvFixed = Math.max(0, parseFloat(convFixed) || 0);
+    const safeMedPct = Math.max(0, parseFloat(medPct) || 0);
+    const safeMedFixed = Math.max(0, parseFloat(medFixed) || 0);
+    const safeSpecialPct = Math.max(0, parseFloat(specialPct) || 0);
+    const safeSpecialFixed = Math.max(0, parseFloat(specialFixed) || 0);
+    const safeArrearsFixed = Math.max(0, parseFloat(arrearsFixed) || 0);
+
+    const safePfPct = Math.max(0, parseFloat(pfPct) || 0);
+    const safePfFixed = Math.max(0, parseFloat(pfFixed) || 0);
+    const safeEsiPct = Math.max(0, parseFloat(esiPct) || 0);
+    const safeEsiFixed = Math.max(0, parseFloat(esiFixed) || 0);
+    const safePtFixed = Math.max(0, parseFloat(ptFixed) || 0);
+    const safeTdsFixed = Math.max(0, parseFloat(tdsFixed) || 0);
+    const safeOtherFixed = Math.max(0, parseFloat(otherDeductionFixed) || 0);
+
+    let b = basicCalcType === 0 ? Math.round(monthlyCTC * (safeBasicPct / 100) * 100) / 100 : safeBasicFixed;
+
+    const hraBaseAmt = hraBase === 1 ? b : monthlyCTC;
+    let h = hraCalcType === 0 ? Math.round(hraBaseAmt * (safeHraPct / 100) * 100) / 100 : safeHraFixed;
+
+    let c = convCalcType === 0 ? Math.round(monthlyCTC * (safeConvPct / 100) * 100) / 100 : safeConvFixed;
+    let m = medCalcType === 0 ? Math.round(monthlyCTC * (safeMedPct / 100) * 100) / 100 : safeMedFixed;
+    let arr = safeArrearsFixed;
+
+    let s = 0;
+    let autoErr = '';
+    if (specialCalcType === 2) {
+      const explicitSum = b + h + c + m + arr;
+      s = Math.round((monthlyCTC - explicitSum) * 100) / 100;
+      if (s < 0) autoErr = `Earnings exceed Monthly CTC by ₹${Math.abs(s).toFixed(2)}`;
+    } else if (specialCalcType === 0) {
+      s = Math.round(monthlyCTC * (safeSpecialPct / 100) * 100) / 100;
+    } else {
+      s = safeSpecialFixed;
+    }
+
+    const gross = Math.round((b + h + c + m + s + arr) * 100) / 100;
+
+    let pfAmt = 0;
+    if (pfApplicable) {
+      const pfBaseAmt = pfBase === 1 ? b : monthlyCTC;
+      pfAmt = pfCalcType === 0 ? Math.round(pfBaseAmt * (safePfPct / 100) * 100) / 100 : safePfFixed;
+    }
+
+    let esiAmt = 0;
+    if (esiApplicable) {
+      esiAmt = esiCalcType === 0 ? Math.round(monthlyCTC * (safeEsiPct / 100) * 100) / 100 : safeEsiFixed;
+    }
+
+    let ptAmt = ptApplicable ? safePtFixed : 0;
+    let tdsAmt = tdsApplicable ? safeTdsFixed : 0;
+    let otherAmt = safeOtherFixed;
+
+    const totalDeductions = Math.round((pfAmt + esiAmt + ptAmt + tdsAmt + otherAmt) * 100) / 100;
+    const net = Math.max(0, Math.round((gross - totalDeductions) * 100) / 100);
+
+    return { basic: b, hra: h, conv: c, med: m, special: s, arrears: arr, gross, pf: pfAmt, esi: esiAmt, pt: ptAmt, tds: tdsAmt, other: otherAmt, deductions: totalDeductions, netPay: net, error: autoErr };
+  }, [monthlyCTC, basicCalcType, basicPct, basicFixed, hraCalcType, hraPct, hraBase, hraFixed, convCalcType, convPct, convFixed, medCalcType, medPct, medFixed, arrearsFixed, specialCalcType, specialPct, specialFixed, pfApplicable, pfCalcType, pfPct, pfBase, pfFixed, esiApplicable, esiCalcType, esiPct, esiFixed, ptApplicable, ptFixed, tdsApplicable, tdsFixed, otherDeductionFixed]);
+
+  const buildSalaryComponentsPayload = () => {
+    if (salaryConfigMode === 'ConfigureLater') return [];
+
+    return [
+      {
+        componentName: 'Basic Salary',
+        componentType: 0,
+        calculationType: basicCalcType,
+        percentage: basicCalcType === 0 ? Math.max(0, parseFloat(basicPct) || 0) : null,
+        fixedAmount: basicCalcType === 1 ? Math.max(0, parseFloat(basicFixed) || 0) : null,
+        calculationBase: basicCalcType === 0 ? 0 : null,
+        monthlyAmount: previewCalc.basic,
+        isEarning: true,
+        isDeduction: false,
+        isEmployerContribution: false
+      },
+      {
+        componentName: 'House Rent Allowance (HRA)',
+        componentType: 1,
+        calculationType: hraCalcType,
+        percentage: hraCalcType === 0 ? Math.max(0, parseFloat(hraPct) || 0) : null,
+        fixedAmount: hraCalcType === 1 ? Math.max(0, parseFloat(hraFixed) || 0) : null,
+        calculationBase: hraCalcType === 0 ? hraBase : null,
+        monthlyAmount: previewCalc.hra,
+        isEarning: true,
+        isDeduction: false,
+        isEmployerContribution: false
+      },
+      {
+        componentName: 'Conveyance Allowance',
+        componentType: 2,
+        calculationType: convCalcType,
+        percentage: convCalcType === 0 ? Math.max(0, parseFloat(convPct) || 0) : null,
+        fixedAmount: convCalcType === 1 ? Math.max(0, parseFloat(convFixed) || 0) : null,
+        calculationBase: 0,
+        monthlyAmount: previewCalc.conv,
+        isEarning: true,
+        isDeduction: false,
+        isEmployerContribution: false
+      },
+      {
+        componentName: 'Medical Allowance',
+        componentType: 3,
+        calculationType: medCalcType,
+        percentage: medCalcType === 0 ? Math.max(0, parseFloat(medPct) || 0) : null,
+        fixedAmount: medCalcType === 1 ? Math.max(0, parseFloat(medFixed) || 0) : null,
+        calculationBase: 0,
+        monthlyAmount: previewCalc.med,
+        isEarning: true,
+        isDeduction: false,
+        isEmployerContribution: false
+      },
+      {
+        componentName: 'Special Allowance',
+        componentType: 4,
+        calculationType: specialCalcType,
+        percentage: specialCalcType === 0 ? Math.max(0, parseFloat(specialPct) || 0) : null,
+        fixedAmount: specialCalcType === 1 ? Math.max(0, parseFloat(specialFixed) || 0) : null,
+        calculationBase: 0,
+        monthlyAmount: previewCalc.special,
+        isEarning: true,
+        isDeduction: false,
+        isEmployerContribution: false
+      },
+      ...(parseFloat(arrearsFixed) > 0 ? [{
+        componentName: 'Arrears',
+        componentType: 5,
+        calculationType: 1,
+        percentage: null,
+        fixedAmount: Math.max(0, parseFloat(arrearsFixed) || 0),
+        calculationBase: null,
+        monthlyAmount: previewCalc.arrears,
+        isEarning: true,
+        isDeduction: false,
+        isEmployerContribution: false
+      }] : []),
+      ...(pfApplicable ? [{
+        componentName: 'Provident Fund (PF)',
+        componentType: 6,
+        calculationType: pfCalcType,
+        percentage: pfCalcType === 0 ? Math.max(0, parseFloat(pfPct) || 0) : null,
+        fixedAmount: pfCalcType === 1 ? Math.max(0, parseFloat(pfFixed) || 0) : null,
+        calculationBase: pfBase,
+        monthlyAmount: previewCalc.pf,
+        isEarning: false,
+        isDeduction: true,
+        isEmployerContribution: false
+      }] : []),
+      ...(esiApplicable ? [{
+        componentName: 'Employee State Insurance (ESI)',
+        componentType: 7,
+        calculationType: esiCalcType,
+        percentage: esiCalcType === 0 ? Math.max(0, parseFloat(esiPct) || 0) : null,
+        fixedAmount: esiCalcType === 1 ? Math.max(0, parseFloat(esiFixed) || 0) : null,
+        calculationBase: 0,
+        monthlyAmount: previewCalc.esi,
+        isEarning: false,
+        isDeduction: true,
+        isEmployerContribution: false
+      }] : []),
+      ...(ptApplicable ? [{
+        componentName: 'Professional Tax',
+        componentType: 8,
+        calculationType: 1,
+        percentage: null,
+        fixedAmount: Math.max(0, parseFloat(ptFixed) || 0),
+        calculationBase: null,
+        monthlyAmount: previewCalc.pt,
+        isEarning: false,
+        isDeduction: true,
+        isEmployerContribution: false
+      }] : []),
+      ...(tdsApplicable ? [{
+        componentName: 'TDS',
+        componentType: 9,
+        calculationType: 1,
+        percentage: null,
+        fixedAmount: Math.max(0, parseFloat(tdsFixed) || 0),
+        calculationBase: null,
+        monthlyAmount: previewCalc.tds,
+        isEarning: false,
+        isDeduction: true,
+        isEmployerContribution: false
+      }] : []),
+      ...(parseFloat(otherDeductionFixed) > 0 ? [{
+        componentName: otherDeductionName || 'Other Deduction',
+        componentType: 10,
+        calculationType: 1,
+        percentage: null,
+        fixedAmount: Math.max(0, parseFloat(otherDeductionFixed) || 0),
+        calculationBase: null,
+        monthlyAmount: previewCalc.other,
+        isEarning: false,
+        isDeduction: true,
+        isEmployerContribution: false
+      }] : [])
+    ];
+  };
+
   // Options & Lists
   const [departments, setDepartments] = useState<Option[]>([]);
   const [designations, setDesignations] = useState<Option[]>([]);
@@ -167,6 +452,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
   };
 
   const fetchEmployeeDetails = async (id: number) => {
+    resetForm();
     try {
       const res = await apiClient.get(`/employees/${id}`);
       if (res.data.success) {
@@ -210,6 +496,76 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
         setWorkLocation(work.workLocation);
         setEmploymentType(work.employmentType);
       }
+
+      // Fetch Employee-Specific Active Salary Structure
+      const salRes = await apiClient.get(`/employees/${id}/salary-structure`);
+      if (salRes.data.success && salRes.data.data) {
+        const sal = salRes.data.data;
+        setAnnualCTC(sal.annualCTC ? sal.annualCTC.toString() : '');
+        setSalaryConfigMode(sal.salaryConfigurationMode === 1 ? 'ConfigureNow' : 'ConfigureLater');
+        setSalaryEffectiveFrom(sal.effectiveFrom ? sal.effectiveFrom.split('T')[0] : '');
+        setPfApplicable(sal.pfApplicable);
+        setEsiApplicable(sal.esiApplicable);
+        setPtApplicable(sal.professionalTaxApplicable);
+        setTdsApplicable(sal.tdsApplicable);
+
+        if (sal.components && Array.isArray(sal.components)) {
+          sal.components.forEach((c: any) => {
+            switch (c.componentType) {
+              case 0: // Basic
+                setBasicCalcType(c.calculationType);
+                if (c.percentage !== null && c.percentage !== undefined) setBasicPct(c.percentage.toString());
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setBasicFixed(c.fixedAmount.toString());
+                break;
+              case 1: // HRA
+                setHraCalcType(c.calculationType);
+                if (c.percentage !== null && c.percentage !== undefined) setHraPct(c.percentage.toString());
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setHraFixed(c.fixedAmount.toString());
+                if (c.calculationBase !== null && c.calculationBase !== undefined) setHraBase(c.calculationBase);
+                break;
+              case 2: // Conveyance
+                setConvCalcType(c.calculationType);
+                if (c.percentage !== null && c.percentage !== undefined) setConvPct(c.percentage.toString());
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setConvFixed(c.fixedAmount.toString());
+                break;
+              case 3: // Medical
+                setMedCalcType(c.calculationType);
+                if (c.percentage !== null && c.percentage !== undefined) setMedPct(c.percentage.toString());
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setMedFixed(c.fixedAmount.toString());
+                break;
+              case 4: // Special
+                setSpecialCalcType(c.calculationType);
+                if (c.percentage !== null && c.percentage !== undefined) setSpecialPct(c.percentage.toString());
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setSpecialFixed(c.fixedAmount.toString());
+                break;
+              case 5: // Arrears
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setArrearsFixed(c.fixedAmount.toString());
+                break;
+              case 6: // PF
+                setPfCalcType(c.calculationType);
+                if (c.percentage !== null && c.percentage !== undefined) setPfPct(c.percentage.toString());
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setPfFixed(c.fixedAmount.toString());
+                if (c.calculationBase !== null && c.calculationBase !== undefined) setPfBase(c.calculationBase);
+                break;
+              case 7: // ESI
+                setEsiCalcType(c.calculationType);
+                if (c.percentage !== null && c.percentage !== undefined) setEsiPct(c.percentage.toString());
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setEsiFixed(c.fixedAmount.toString());
+                break;
+              case 8: // PT
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setPtFixed(c.fixedAmount.toString());
+                break;
+              case 9: // TDS
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setTdsFixed(c.fixedAmount.toString());
+                break;
+              case 10: // Other
+                if (c.componentName) setOtherDeductionName(c.componentName);
+                if (c.fixedAmount !== null && c.fixedAmount !== undefined) setOtherDeductionFixed(c.fixedAmount.toString());
+                break;
+            }
+          });
+        }
+      }
     } catch {
       // Ignore
     }
@@ -243,6 +599,44 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     setShiftEnd('18:00');
     setWorkLocation('Office');
     setEmploymentType('FullTime');
+
+    // Reset Step 3 Payroll & Salary State
+    setAnnualCTC('');
+    setSalaryConfigMode('ConfigureLater');
+    setSalaryEffectiveFrom('');
+    setPfApplicable(true);
+    setEsiApplicable(true);
+    setPtApplicable(true);
+    setTdsApplicable(false);
+    setBasicCalcType(0);
+    setBasicPct('50');
+    setBasicFixed('0');
+    setHraCalcType(0);
+    setHraPct('40');
+    setHraBase(1);
+    setHraFixed('0');
+    setConvCalcType(1);
+    setConvFixed('1600');
+    setConvPct('0');
+    setMedCalcType(1);
+    setMedFixed('1250');
+    setMedPct('0');
+    setSpecialCalcType(2);
+    setSpecialPct('0');
+    setSpecialFixed('0');
+    setArrearsFixed('0');
+    setPfCalcType(0);
+    setPfPct('12');
+    setPfBase(1);
+    setPfFixed('0');
+    setEsiCalcType(0);
+    setEsiPct('0.75');
+    setEsiFixed('0');
+    setPtFixed('200');
+    setTdsFixed('0');
+    setOtherDeductionName('Other Deduction');
+    setOtherDeductionFixed('0');
+
     setError('');
     setFieldErrors({});
     setTouched({});
@@ -408,7 +802,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
   // 13. Reporting Manager Validation
   const validateReporting = (val: number | ''): string => {
-    if (!val) return 'Please select a reporting manager.';
+    if (!val) return '';
     if (employeeId && Number(val) === employeeId) return 'An employee cannot report to themselves.';
     return '';
   };
@@ -599,7 +993,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     setTimeout(() => setShakeFields({}), 450);
   };
 
-  const handleNext = (current: 'reg' | 'rep') => {
+  const handleNext = (e: React.MouseEvent, current: 'reg' | 'rep') => {
+    e.preventDefault();
+    e.stopPropagation();
     if (current === 'reg') {
       if (validateStep1()) setActiveTab('rep');
     } else if (current === 'rep') {
@@ -609,7 +1005,18 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setError('');
+
+    // Ensure form submission ONLY occurs on the final step (Step 3: Work Details)
+    if (activeTab !== 'work') {
+      if (activeTab === 'reg') {
+        if (validateStep1()) setActiveTab('rep');
+      } else if (activeTab === 'rep') {
+        if (validateStep2()) setActiveTab('work');
+      }
+      return;
+    }
 
     // Re-validate all 3 steps simultaneously before submission
     const step1Valid = validateStep1();
@@ -660,6 +1067,14 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
         panNumber: panNumber.trim() || null,
         esiNumber: esiNumber.trim() || null,
         aadhaarNumber: aadhaarNumber.trim() || null,
+        annualCTC: annualCTC ? parseFloat(annualCTC) : null,
+        salaryConfigurationMode: salaryConfigMode === 'ConfigureNow' ? 1 : 0,
+        salaryEffectiveFrom: salaryEffectiveFrom || dateOfJoining,
+        pfApplicable,
+        esiApplicable,
+        professionalTaxApplicable: ptApplicable,
+        tdsApplicable,
+        salaryComponents: buildSalaryComponentsPayload()
       };
 
       if (employeeId) {
@@ -678,6 +1093,20 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
           workLocation,
           employmentType,
         });
+
+        // Persist Employee-Specific Salary Details to database
+        if (annualCTC && parseFloat(annualCTC) >= 0) {
+          await apiClient.post(`/employees/${createdOrUpdatedId}/salary-structure`, {
+            annualCTC: parseFloat(annualCTC),
+            salaryConfigurationMode: salaryConfigMode === 'ConfigureNow' ? 1 : 0,
+            effectiveFrom: salaryEffectiveFrom || dateOfJoining,
+            pfApplicable,
+            esiApplicable,
+            professionalTaxApplicable: ptApplicable,
+            tdsApplicable,
+            components: buildSalaryComponentsPayload()
+          });
+        }
       }
 
       onSaved();
@@ -688,16 +1117,56 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      const serverMsg = err.response?.data?.message || err.response?.data?.errors?.[0] || 'Failed to save employee details. Please check form values.';
-      setError(serverMsg);
+      let serverMsg = 'Failed to save employee details. Please check form values.';
+      const data = err.response?.data;
 
-      // Map backend errors if returned
-      const serverErrs: string[] = err.response?.data?.errors || [];
+      if (data) {
+        if (typeof data.message === 'string' && data.message.trim()) {
+          serverMsg = data.message;
+        } else if (typeof data.title === 'string' && data.title.trim()) {
+          serverMsg = data.title;
+        } else if (typeof data === 'string') {
+          serverMsg = data;
+        }
+      }
+
       const newFieldErrs: FieldErrors = { ...fieldErrors };
-      serverErrs.forEach((errMsg) => {
-        if (errMsg.toLowerCase().includes('email')) newFieldErrs.email = errMsg;
-        if (errMsg.toLowerCase().includes('employee code')) newFieldErrs.employeeCode = errMsg;
-      });
+      const rawErrors = data?.errors;
+
+      if (Array.isArray(rawErrors)) {
+        if (rawErrors.length > 0 && typeof rawErrors[0] === 'string') {
+          serverMsg = rawErrors.join(' | ');
+        }
+        rawErrors.forEach((errMsg: any) => {
+          if (typeof errMsg === 'string') {
+            const lower = errMsg.toLowerCase();
+            if (lower.includes('email')) newFieldErrs.email = errMsg;
+            else if (lower.includes('code')) newFieldErrs.employeeCode = errMsg;
+            else if (lower.includes('name')) newFieldErrs.name = errMsg;
+            else if (lower.includes('phone')) newFieldErrs.phone = errMsg;
+          }
+        });
+      } else if (rawErrors && typeof rawErrors === 'object') {
+        const errList: string[] = [];
+        Object.entries(rawErrors).forEach(([key, val]) => {
+          const keyLower = key.toLowerCase();
+          const msgs = Array.isArray(val) ? val : [val];
+          msgs.forEach((errMsg: any) => {
+            if (typeof errMsg === 'string') {
+              errList.push(errMsg);
+              if (keyLower.includes('email')) newFieldErrs.email = errMsg;
+              else if (keyLower.includes('code')) newFieldErrs.employeeCode = errMsg;
+              else if (keyLower.includes('name')) newFieldErrs.name = errMsg;
+              else if (keyLower.includes('phone')) newFieldErrs.phone = errMsg;
+            }
+          });
+        });
+        if (errList.length > 0) {
+          serverMsg = errList.join(' | ');
+        }
+      }
+
+      setError(serverMsg);
       setFieldErrors(newFieldErrs);
     } finally {
       setLoading(false);
@@ -732,14 +1201,14 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
               }}>
                 <CheckCircle size={38} />
               </div>
-              <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', marginBottom: '0.5rem' }}>Employee Created Successfully!</h3>
+              <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#F5F5F5', marginBottom: '0.5rem' }}>Employee Created Successfully!</h3>
               <p style={{ color: '#64748B', fontSize: '0.9rem' }}>
                 Account credentials generated. Hand these credentials to the employee to sign in.
               </p>
             </div>
 
             <div style={{
-              background: '#F8FAFC',
+              background: 'rgba(255,255,255,0.05)',
               border: '1px solid #E2E8F0',
               borderRadius: '14px',
               padding: '1.25rem',
@@ -747,11 +1216,11 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
             }}>
               <div style={{ marginBottom: '0.75rem' }}>
                 <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>EMPLOYEE NAME</span>
-                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#0F172A' }}>{name} ({employeeCode})</div>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#F5F5F5' }}>{name} ({employeeCode})</div>
               </div>
               <div style={{ marginBottom: '0.75rem' }}>
                 <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>USERNAME / EMAIL</span>
-                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#7B61FF' }}>{email.toLowerCase()}</div>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#E8873C' }}>{email.toLowerCase()}</div>
               </div>
               <div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>INITIAL TEMPORARY PASSWORD</span>
@@ -770,7 +1239,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                 <Copy size={16} />
                 <span>{copied ? 'Copied to Clipboard!' : 'Copy Credentials'}</span>
               </button>
-              <button type="button" className="btn btn-primary" onClick={onClose} style={{ background: '#7B61FF', borderColor: '#7B61FF' }}>
+              <button type="button" className="btn btn-primary" onClick={onClose} style={{ background: '#E8873C', borderColor: '#E8873C' }}>
                 Done & Close
               </button>
             </div>
@@ -778,7 +1247,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#F5F5F5', margin: 0 }}>
                 {employeeId ? 'Edit Employee Profile' : 'New Employee Registration'}
               </h3>
               <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
@@ -821,7 +1290,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   flex: 1,
                   fontSize: '0.825rem',
                   padding: '0.5rem 0.75rem',
-                  background: activeTab === 'reg' ? 'linear-gradient(135deg, #7B61FF 0%, #6C5CE7 100%)' : '#F8FAFC',
+                  background: activeTab === 'reg' ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)' : '#F8FAFC',
                   color: activeTab === 'reg' ? '#FFFFFF' : '#475569',
                   borderColor: activeTab === 'reg' ? '#7B61FF' : '#E2E8F0'
                 }}
@@ -839,7 +1308,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   flex: 1,
                   fontSize: '0.825rem',
                   padding: '0.5rem 0.75rem',
-                  background: activeTab === 'rep' ? 'linear-gradient(135deg, #7B61FF 0%, #6C5CE7 100%)' : '#F8FAFC',
+                  background: activeTab === 'rep' ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)' : '#F8FAFC',
                   color: activeTab === 'rep' ? '#FFFFFF' : '#475569',
                   borderColor: activeTab === 'rep' ? '#7B61FF' : '#E2E8F0'
                 }}
@@ -857,7 +1326,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   flex: 1,
                   fontSize: '0.825rem',
                   padding: '0.5rem 0.75rem',
-                  background: activeTab === 'work' ? 'linear-gradient(135deg, #7B61FF 0%, #6C5CE7 100%)' : '#F8FAFC',
+                  background: activeTab === 'work' ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)' : '#F8FAFC',
                   color: activeTab === 'work' ? '#FFFFFF' : '#475569',
                   borderColor: activeTab === 'work' ? '#7B61FF' : '#E2E8F0'
                 }}
@@ -878,7 +1347,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     {/* 1. Employee Code */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                           Employee Code *
                         </label>
                         <span style={{ fontSize: '0.7rem', color: employeeCode.length > 20 ? '#EF4444' : '#94A3B8' }}>
@@ -894,7 +1363,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           style={{
                             borderRadius: '10px',
                             borderColor: fieldErrors.employeeCode ? '#EF4444' : touched.code && !fieldErrors.employeeCode && employeeCode ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.employeeCode ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF',
+                            backgroundColor: fieldErrors.employeeCode ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)',
                             paddingRight: touched.code && !fieldErrors.employeeCode && employeeCode ? '2rem' : '0.8rem'
                           }}
                           value={employeeCode}
@@ -917,7 +1386,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     {/* 2. Full Name */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                           Full Name *
                         </label>
                         <span style={{ fontSize: '0.7rem', color: name.length > 100 ? '#EF4444' : '#94A3B8' }}>
@@ -933,7 +1402,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           style={{
                             borderRadius: '10px',
                             borderColor: fieldErrors.name ? '#EF4444' : touched.name && !fieldErrors.name && name ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.name ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF',
+                            backgroundColor: fieldErrors.name ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)',
                             paddingRight: touched.name && !fieldErrors.name && name ? '2rem' : '0.8rem'
                           }}
                           value={name}
@@ -958,7 +1427,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     {/* 3. Email Address */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                           Email Address (Username) *
                         </label>
                         <span style={{ fontSize: '0.7rem', color: email.length > 254 ? '#EF4444' : '#94A3B8' }}>
@@ -974,7 +1443,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           style={{
                             borderRadius: '10px',
                             borderColor: fieldErrors.email ? '#EF4444' : touched.email && !fieldErrors.email && email ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.email ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF',
+                            backgroundColor: fieldErrors.email ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)',
                             paddingRight: touched.email && !fieldErrors.email && email ? '2rem' : '0.8rem'
                           }}
                           value={email}
@@ -998,7 +1467,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* 4. Primary Phone Number */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Primary Phone Number *
                       </label>
                       <div className={shakeFields.phone ? 'shake-field' : ''} style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1028,7 +1497,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             style={{
                               borderRadius: '10px',
                               borderColor: fieldErrors.phone ? '#EF4444' : touched.phone && !fieldErrors.phone && phoneBody ? '#10B981' : '#CBD5E1',
-                              backgroundColor: fieldErrors.phone ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF',
+                              backgroundColor: fieldErrors.phone ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)',
                               paddingRight: touched.phone && !fieldErrors.phone && phoneBody ? '2rem' : '0.8rem'
                             }}
                             value={phoneBody}
@@ -1055,15 +1524,15 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* Family Information Row: Father & Mother Name */}
                   <div style={{
                     padding: '0.85rem 1rem',
-                    background: '#F8FAFC',
+                    background: 'rgba(255,255,255,0.05)',
                     borderRadius: '12px',
                     border: '1px solid #E2E8F0',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.75rem'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: '#0F172A' }}>
-                      <Users size={14} style={{ color: '#7B61FF' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: '#F5F5F5' }}>
+                      <Users size={14} style={{ color: '#E8873C' }} />
                       <span>Family Information (Optional)</span>
                     </div>
 
@@ -1071,7 +1540,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       {/* 5. Father Name */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label className="form-label" style={{ fontWeight: 600, color: '#475569', fontSize: '0.8rem' }}>
+                          <label className="form-label" style={{ fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
                             Father's Name
                           </label>
                           <span style={{ fontSize: '0.7rem', color: fatherName.length > 100 ? '#EF4444' : '#94A3B8' }}>
@@ -1087,7 +1556,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             style={{
                               borderRadius: '10px',
                               borderColor: fieldErrors.fatherName ? '#EF4444' : '#CBD5E1',
-                              backgroundColor: fieldErrors.fatherName ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                              backgroundColor: fieldErrors.fatherName ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                             }}
                             value={fatherName}
                             onChange={(e) => handleChange('fatherName', e.target.value)}
@@ -1105,7 +1574,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       {/* 6. Mother Name */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label className="form-label" style={{ fontWeight: 600, color: '#475569', fontSize: '0.8rem' }}>
+                          <label className="form-label" style={{ fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
                             Mother's Name
                           </label>
                           <span style={{ fontSize: '0.7rem', color: motherName.length > 100 ? '#EF4444' : '#94A3B8' }}>
@@ -1121,7 +1590,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             style={{
                               borderRadius: '10px',
                               borderColor: fieldErrors.motherName ? '#EF4444' : '#CBD5E1',
-                              backgroundColor: fieldErrors.motherName ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                              backgroundColor: fieldErrors.motherName ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                             }}
                             value={motherName}
                             onChange={(e) => handleChange('motherName', e.target.value)}
@@ -1156,7 +1625,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       {/* 7. Emergency Contact 1 */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
                           Emergency Contact 1 *
                         </label>
                         <div className={shakeFields.emg1 ? 'shake-field' : ''} style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1184,7 +1653,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             style={{
                               borderRadius: '10px',
                               borderColor: fieldErrors.emergencyContact1 ? '#EF4444' : touched.emg1 && !fieldErrors.emergencyContact1 && emg1Body ? '#10B981' : '#CBD5E1',
-                              backgroundColor: fieldErrors.emergencyContact1 ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                              backgroundColor: fieldErrors.emergencyContact1 ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                             }}
                             value={emg1Body}
                             onChange={(e) => handleChange('emg1Body', e.target.value)}
@@ -1201,7 +1670,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                       {/* 8. Emergency Contact 2 */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#475569', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
                           Emergency Contact 2 (Optional)
                         </label>
                         <div className={shakeFields.emg2 ? 'shake-field' : ''} style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1229,7 +1698,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             style={{
                               borderRadius: '10px',
                               borderColor: fieldErrors.emergencyContact2 ? '#EF4444' : '#CBD5E1',
-                              backgroundColor: fieldErrors.emergencyContact2 ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                              backgroundColor: fieldErrors.emergencyContact2 ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                             }}
                             value={emg2Body}
                             onChange={(e) => handleChange('emg2Body', e.target.value)}
@@ -1250,8 +1719,8 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {!employeeId && (
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
-                          <Key size={14} style={{ marginRight: '0.3rem', display: 'inline-block', color: '#7B61FF' }} />
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
+                          <Key size={14} style={{ marginRight: '0.3rem', display: 'inline-block', color: '#E8873C' }} />
                           Initial Password (Optional)
                         </label>
                         {password && (
@@ -1269,7 +1738,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           style={{
                             borderRadius: '10px',
                             borderColor: fieldErrors.password ? '#EF4444' : touched.password && !fieldErrors.password && password ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.password ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF',
+                            backgroundColor: fieldErrors.password ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)',
                             paddingRight: '2.5rem'
                           }}
                           value={password}
@@ -1302,7 +1771,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             <span style={{ color: '#64748B' }}>Password Strength:</span>
                             <span style={{ fontWeight: 700, color: passStrength.color }}>{passStrength.label}</span>
                           </div>
-                          <div style={{ height: '4px', width: '100%', backgroundColor: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden' }}>
+                          <div style={{ height: '4px', width: '100%', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '9999px', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${passStrength.percent}%`, backgroundColor: passStrength.color, transition: 'all 0.3s ease' }} />
                           </div>
                         </div>
@@ -1324,7 +1793,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     
                     {/* 10. Department */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Department *
                       </label>
                       <div className={shakeFields.department ? 'shake-field' : ''}>
@@ -1334,7 +1803,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           style={{
                             borderRadius: '10px',
                             borderColor: fieldErrors.departmentId ? '#EF4444' : touched.department && !fieldErrors.departmentId && departmentId ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.departmentId ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                            backgroundColor: fieldErrors.departmentId ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                           }}
                           value={departmentId}
                           onChange={(e) => handleChange('department', e.target.value ? Number(e.target.value) : '')}
@@ -1355,7 +1824,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* 11. Designation */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Designation *
                       </label>
                       <div className={shakeFields.designation ? 'shake-field' : ''}>
@@ -1365,7 +1834,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           style={{
                             borderRadius: '10px',
                             borderColor: fieldErrors.designationId ? '#EF4444' : touched.designation && !fieldErrors.designationId && designationId ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.designationId ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                            backgroundColor: fieldErrors.designationId ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                           }}
                           value={designationId}
                           onChange={(e) => handleChange('designation', e.target.value ? Number(e.target.value) : '')}
@@ -1388,7 +1857,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* 12. Date of Joining & Designation From */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Date of Joining *
                       </label>
                       <div className={shakeFields.doj ? 'shake-field' : ''}>
@@ -1400,7 +1869,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           style={{
                             borderRadius: '10px',
                             borderColor: fieldErrors.dateOfJoining ? '#EF4444' : touched.doj && !fieldErrors.dateOfJoining && dateOfJoining ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.dateOfJoining ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                            backgroundColor: fieldErrors.dateOfJoining ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                           }}
                           value={dateOfJoining}
                           onChange={(e) => handleChange('doj', e.target.value)}
@@ -1415,7 +1884,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     </div>
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Designation From Date
                       </label>
                       <input
@@ -1431,7 +1900,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* Company & Statutory Info Header */}
                   <div style={{
                     padding: '0.75rem 1rem',
-                    background: '#F1F5F9',
+                    background: 'rgba(255,255,255,0.04)',
                     borderRadius: '12px',
                     fontSize: '0.8rem',
                     fontWeight: 700,
@@ -1442,7 +1911,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                    <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                       Company Name
                     </label>
                     <input
@@ -1458,7 +1927,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
                           PF Number (Max 25)
                         </label>
                         <span style={{ fontSize: '0.7rem', color: pfNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
@@ -1478,7 +1947,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
                           PAN Number (Max 25)
                         </label>
                         <span style={{ fontSize: '0.7rem', color: panNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
@@ -1498,7 +1967,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
                           ESI Number (Max 25)
                         </label>
                         <span style={{ fontSize: '0.7rem', color: esiNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
@@ -1518,7 +1987,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
                           Aadhaar Number (Max 25)
                         </label>
                         <span style={{ fontSize: '0.7rem', color: aadhaarNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
@@ -1545,7 +2014,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
               {activeTab === 'rep' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                    <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                       Reporting Manager / Person *
                     </label>
                     <div className={shakeFields.reporting ? 'shake-field' : ''}>
@@ -1555,7 +2024,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                         style={{
                           borderRadius: '10px',
                           borderColor: fieldErrors.reportingPersonId ? '#EF4444' : touched.reporting && !fieldErrors.reportingPersonId && reportingPersonId ? '#10B981' : '#CBD5E1',
-                          backgroundColor: fieldErrors.reportingPersonId ? 'rgba(239, 68, 68, 0.04)' : '#FFFFFF'
+                          backgroundColor: fieldErrors.reportingPersonId ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)'
                         }}
                         value={reportingPersonId}
                         onChange={(e) => handleChange('reporting', e.target.value ? Number(e.target.value) : '')}
@@ -1591,7 +2060,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     
                     {/* Shift Start */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Shift Start Time *
                       </label>
                       <div className={shakeFields.shiftStart ? 'shake-field' : ''}>
@@ -1616,7 +2085,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* Shift End */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Shift End Time *
                       </label>
                       <div className={shakeFields.shiftEnd ? 'shake-field' : ''}>
@@ -1644,7 +2113,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     
                     {/* Work Location */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Work Location *
                       </label>
                       <select
@@ -1661,7 +2130,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* Employment Type */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
                         Employment Type *
                       </label>
                       <select
@@ -1676,6 +2145,337 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       </select>
                     </div>
                   </div>
+
+                  {/* Payroll & Salary Details Section */}
+                  <div style={{
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(255,255,255,0.04)',
+                    borderRadius: '12px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    color: '#334155',
+                    marginTop: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    <Calculator size={18} style={{ color: '#E8873C' }} />
+                    <span>Payroll & Salary Details</span>
+                  </div>
+
+                  {/* Basic Payroll Information */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
+                        Annual CTC (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1000}
+                        className="form-input"
+                        style={{ borderRadius: '10px', fontSize: '0.825rem', fontWeight: 700 }}
+                        value={annualCTC}
+                        onKeyDown={handleKeyDownNonNegative}
+                        onChange={handleNonNegativeChange(setAnnualCTC)}
+                        placeholder="e.g. 400000"
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
+                        Monthly CTC (Derived)
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        className="form-input"
+                        style={{ borderRadius: '10px', fontSize: '0.825rem', fontWeight: 700, backgroundColor: 'rgba(255,255,255,0.08)', color: '#F5F5F5' }}
+                        value={monthlyCTC ? `₹ ${monthlyCTC.toLocaleString('en-IN')}` : '₹ 0.00'}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.8rem' }}>
+                        Salary Effective From
+                      </label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        style={{ borderRadius: '10px', fontSize: '0.825rem' }}
+                        value={salaryEffectiveFrom}
+                        onChange={(e) => setSalaryEffectiveFrom(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Salary Configuration Mode Selection */}
+                  <div style={{ padding: '0.85rem 1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid #E2E8F0', marginTop: '0.5rem' }}>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#F5F5F5', fontSize: '0.825rem', display: 'block', marginBottom: '0.5rem' }}>
+                      Salary Structure Mode
+                    </label>
+                    <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.825rem', cursor: 'pointer', fontWeight: 600 }}>
+                        <input
+                          type="radio"
+                          name="salaryConfigMode"
+                          value="ConfigureLater"
+                          checked={salaryConfigMode === 'ConfigureLater'}
+                          onChange={() => setSalaryConfigMode('ConfigureLater')}
+                        />
+                        <span>Configure Later (Basic CTC setup only)</span>
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.825rem', cursor: 'pointer', fontWeight: 600 }}>
+                        <input
+                          type="radio"
+                          name="salaryConfigMode"
+                          value="ConfigureNow"
+                          checked={salaryConfigMode === 'ConfigureNow'}
+                          onChange={() => setSalaryConfigMode('ConfigureNow')}
+                        />
+                        <span>Configure Now (Detailed component breakdown)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {salaryConfigMode === 'ConfigureNow' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+                      {/* Applicability Flags */}
+                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', padding: '0.75rem 1rem', background: '#EEF2FF', borderRadius: '10px', border: '1px solid #C7D2FE' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} />
+                          <span>PF Applicable</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={esiApplicable} onChange={(e) => setEsiApplicable(e.target.checked)} />
+                          <span>ESI Applicable</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={ptApplicable} onChange={(e) => setPtApplicable(e.target.checked)} />
+                          <span>Professional Tax</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={tdsApplicable} onChange={(e) => setTdsApplicable(e.target.checked)} />
+                          <span>TDS Applicable</span>
+                        </label>
+                      </div>
+
+                      {/* Detailed Earnings Configuration */}
+                      <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8rem', color: '#1E293B', borderBottom: '1px solid #E2E8F0' }}>
+                          💵 Earnings Configuration
+                        </div>
+                        <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {/* Basic Salary */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600 }}>Basic Salary</span>
+                            <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={basicCalcType} onChange={(e) => setBasicCalcType(Number(e.target.value))}>
+                              <option value={0}>Percentage (%)</option>
+                              <option value={1}>Fixed Amount</option>
+                            </select>
+                            {basicCalcType === 0 ? (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={basicPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setBasicPct)} placeholder="%" />
+                            ) : (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={basicFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setBasicFixed)} placeholder="₹" />
+                            )}
+                            <span style={{ fontSize: '0.725rem', color: '#64748B' }}>Base: Monthly CTC</span>
+                            <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.basic.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          {/* HRA */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600 }}>HRA</span>
+                            <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={hraCalcType} onChange={(e) => setHraCalcType(Number(e.target.value))}>
+                              <option value={0}>Percentage (%)</option>
+                              <option value={1}>Fixed Amount</option>
+                            </select>
+                            {hraCalcType === 0 ? (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={hraPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setHraPct)} placeholder="%" />
+                            ) : (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={hraFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setHraFixed)} placeholder="₹" />
+                            )}
+                            {hraCalcType === 0 ? (
+                              <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.75rem' }} value={hraBase} onChange={(e) => setHraBase(Number(e.target.value))}>
+                                <option value={1}>Basic Salary</option>
+                                <option value={0}>Monthly CTC</option>
+                              </select>
+                            ) : <span></span>}
+                            <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.hra.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          {/* Conveyance */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600 }}>Conveyance</span>
+                            <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={convCalcType} onChange={(e) => setConvCalcType(Number(e.target.value))}>
+                              <option value={1}>Fixed Amount</option>
+                              <option value={0}>Percentage (%)</option>
+                            </select>
+                            {convCalcType === 1 ? (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={convFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setConvFixed)} placeholder="₹" />
+                            ) : (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={convPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setConvPct)} placeholder="%" />
+                            )}
+                            <span></span>
+                            <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.conv.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          {/* Medical */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600 }}>Medical Allowance</span>
+                            <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={medCalcType} onChange={(e) => setMedCalcType(Number(e.target.value))}>
+                              <option value={1}>Fixed Amount</option>
+                              <option value={0}>Percentage (%)</option>
+                            </select>
+                            {medCalcType === 1 ? (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={medFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setMedFixed)} placeholder="₹" />
+                            ) : (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={medPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setMedPct)} placeholder="%" />
+                            )}
+                            <span></span>
+                            <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.med.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          {/* Arrears */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600 }}>Arrears</span>
+                            <span style={{ fontSize: '0.785rem', color: '#64748B' }}>Fixed Amount</span>
+                            <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={arrearsFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setArrearsFixed)} placeholder="₹" />
+                            <span></span>
+                            <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.arrears.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          {/* Special Allowance */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600 }}>Special Allowance</span>
+                            <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={specialCalcType} onChange={(e) => setSpecialCalcType(Number(e.target.value))}>
+                              <option value={2}>Auto Balance</option>
+                              <option value={0}>Percentage (%)</option>
+                              <option value={1}>Fixed Amount</option>
+                            </select>
+                            {specialCalcType === 2 ? (
+                              <span style={{ fontSize: '0.725rem', color: '#64748B', fontStyle: 'italic' }}>Auto calculated</span>
+                            ) : specialCalcType === 0 ? (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={specialPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setSpecialPct)} placeholder="%" />
+                            ) : (
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={specialFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setSpecialFixed)} placeholder="₹" />
+                            )}
+                            <span></span>
+                            <span style={{ fontWeight: 700, color: previewCalc.special < 0 ? '#EF4444' : '#059669', textAlign: 'right' }}>
+                              ₹ {previewCalc.special.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Deductions Configuration */}
+                      <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8rem', color: '#1E293B', borderBottom: '1px solid #E2E8F0' }}>
+                          🔻 Employee Deductions Configuration
+                        </div>
+                        <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {pfApplicable && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600 }}>Employee PF</span>
+                              <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={pfCalcType} onChange={(e) => setPfCalcType(Number(e.target.value))}>
+                                <option value={0}>Percentage (%)</option>
+                                <option value={1}>Fixed Amount</option>
+                              </select>
+                              {pfCalcType === 0 ? (
+                                <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={pfPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setPfPct)} placeholder="%" />
+                              ) : (
+                                <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={pfFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setPfFixed)} placeholder="₹" />
+                              )}
+                              {pfCalcType === 0 ? (
+                                <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.75rem' }} value={pfBase} onChange={(e) => setPfBase(Number(e.target.value))}>
+                                  <option value={1}>Basic Salary</option>
+                                  <option value={0}>Monthly CTC</option>
+                                </select>
+                              ) : <span></span>}
+                              <span style={{ fontWeight: 700, color: '#DC2626', textAlign: 'right' }}>₹ {previewCalc.pf.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
+
+                          {esiApplicable && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600 }}>Employee ESI</span>
+                              <select className="form-select" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={esiCalcType} onChange={(e) => setEsiCalcType(Number(e.target.value))}>
+                                <option value={0}>Percentage (%)</option>
+                                <option value={1}>Fixed Amount</option>
+                              </select>
+                              {esiCalcType === 0 ? (
+                                <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={esiPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setEsiPct)} placeholder="%" />
+                              ) : (
+                                <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={esiFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setEsiFixed)} placeholder="₹" />
+                              )}
+                              <span></span>
+                              <span style={{ fontWeight: 700, color: '#DC2626', textAlign: 'right' }}>₹ {previewCalc.esi.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
+
+                          {ptApplicable && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600 }}>Professional Tax</span>
+                              <span style={{ fontSize: '0.785rem', color: '#64748B' }}>Fixed Amount</span>
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={ptFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setPtFixed)} placeholder="₹" />
+                              <span></span>
+                              <span style={{ fontWeight: 700, color: '#DC2626', textAlign: 'right' }}>₹ {previewCalc.pt.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
+
+                          {tdsApplicable && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600 }}>TDS</span>
+                              <span style={{ fontSize: '0.785rem', color: '#64748B' }}>Fixed Amount</span>
+                              <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={tdsFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setTdsFixed)} placeholder="₹" />
+                              <span></span>
+                              <span style={{ fontWeight: 700, color: '#DC2626', textAlign: 'right' }}>₹ {previewCalc.tds.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
+
+                          {/* Other Deduction */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '150px 140px 100px 100px 1fr', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem' }}>
+                            <input type="text" className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={otherDeductionName} onChange={(e) => setOtherDeductionName(e.target.value)} placeholder="Deduction Name" />
+                            <span style={{ fontSize: '0.785rem', color: '#64748B' }}>Fixed Amount</span>
+                            <input type="number" min={0} className="form-input" style={{ padding: '0.3rem', fontSize: '0.785rem' }} value={otherDeductionFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setOtherDeductionFixed)} placeholder="₹" />
+                            <span></span>
+                            <span style={{ fontWeight: 700, color: '#DC2626', textAlign: 'right' }}>₹ {previewCalc.other.toLocaleString('en-IN')}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Live Calculation Preview Summary Box */}
+                      <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid #CBD5E1' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.85rem', color: '#F5F5F5', marginBottom: '0.75rem' }}>
+                          <Calculator size={16} style={{ color: '#E8873C' }} />
+                          <span>Live Salary Structure Preview</span>
+                        </div>
+
+                        {previewCalc.error && (
+                          <div style={{ color: '#EF4444', fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                            ⚠️ {previewCalc.error}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', textAlign: 'center' }}>
+                          <div style={{ background: '#ECFDF5', padding: '0.6rem', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#047857', display: 'block', fontWeight: 600 }}>Total Gross Earnings</span>
+                            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#065F46' }}>₹ {previewCalc.gross.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          <div style={{ background: '#FEF2F2', padding: '0.6rem', borderRadius: '8px', border: '1px solid #FCA5A5' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#B91C1C', display: 'block', fontWeight: 600 }}>Total Deductions</span>
+                            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#991B1B' }}>₹ {previewCalc.deductions.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          <div style={{ background: '#EEF2FF', padding: '0.6rem', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#4338CA', display: 'block', fontWeight: 600 }}>Estimated Net Pay</span>
+                            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#3730A3' }}>₹ {previewCalc.netPay.toLocaleString('en-IN')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1702,8 +2502,8 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => handleNext(activeTab as 'reg' | 'rep')}
-                      style={{ background: 'linear-gradient(135deg, #7B61FF 0%, #6C5CE7 100%)', borderColor: '#7B61FF', borderRadius: '10px' }}
+                      onClick={(e) => handleNext(e, activeTab as 'reg' | 'rep')}
+                      style={{ background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)', borderColor: '#E8873C', borderRadius: '10px' }}
                     >
                       Next Step →
                     </button>
@@ -1712,7 +2512,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       type="submit"
                       className="btn btn-primary"
                       disabled={loading}
-                      style={{ background: 'linear-gradient(135deg, #7B61FF 0%, #6C5CE7 100%)', borderColor: '#7B61FF', borderRadius: '10px' }}
+                      style={{ background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)', borderColor: '#E8873C', borderRadius: '10px' }}
                     >
                       {loading ? 'Saving Employee...' : 'Save Employee'}
                     </button>

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RIIMS.Application.Common;
@@ -26,6 +29,23 @@ public class TasksController : ControllerBase
         var employeeId = GetEmployeeId();
         var result = await _service.StartTaskAsync(employeeId, request);
         return Ok(ApiResponse<TaskDto>.SuccessResponse(result));
+    }
+
+    [HttpPost("assign")]
+    public async Task<IActionResult> Assign([FromBody] AssignTaskRequest request)
+    {
+        var currentUserId = GetEmployeeId();
+        var role = _currentUser.Role ?? "Employee";
+        var result = await _service.AssignTaskAsync(currentUserId, role, request);
+        return Ok(ApiResponse<TaskDto>.SuccessResponse(result, "Task assigned successfully."));
+    }
+
+    [HttpPost("{id}/start-assigned")]
+    public async Task<IActionResult> StartAssigned(int id)
+    {
+        var employeeId = GetEmployeeId();
+        var result = await _service.StartAssignedTaskAsync(id, employeeId);
+        return Ok(ApiResponse<TaskDto>.SuccessResponse(result, "Assigned task started."));
     }
 
     [HttpPost("{id}/hold")]
@@ -64,6 +84,71 @@ public class TasksController : ControllerBase
     {
         var result = await _service.GetTaskHistoryAsync(employeeId, from, to);
         return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
+    }
+
+    [HttpGet("assigned/{employeeId}")]
+    public async Task<IActionResult> GetAssignedTasks(int employeeId)
+    {
+        var result = await _service.GetAssignedTasksForEmployeeAsync(employeeId);
+        return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
+    }
+
+    [HttpGet("team-employees")]
+    public async Task<IActionResult> GetMyTeamEmployees()
+    {
+        var currentUserId = GetEmployeeId();
+        var result = await _service.GetMyTeamEmployeesAsync(currentUserId);
+        return Ok(ApiResponse<List<TeamEmployeeDto>>.SuccessResponse(result));
+    }
+
+    [HttpGet("team-tasks")]
+    public async Task<IActionResult> GetMyTeamTasks()
+    {
+        var currentUserId = GetEmployeeId();
+        var result = await _service.GetMyTeamTasksAsync(currentUserId);
+        return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
+    }
+
+    [HttpGet("admin-all")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAdminTasks(
+        [FromQuery] int? employeeId,
+        [FromQuery] int? departmentId,
+        [FromQuery] int? managerId,
+        [FromQuery] string? status,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] bool? isOverdue)
+    {
+        var result = await _service.GetAdminTasksAsync(employeeId, departmentId, managerId, status, from, to, isOverdue);
+        return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
+    }
+
+    [HttpPost("{id}/reassign")]
+    public async Task<IActionResult> Reassign(int id, [FromBody] ReassignTaskRequest request)
+    {
+        var currentUserId = GetEmployeeId();
+        var role = _currentUser.Role ?? "Employee";
+        var result = await _service.ReassignTaskAsync(id, currentUserId, role, request);
+        return Ok(ApiResponse<TaskDto>.SuccessResponse(result, "Task reassigned successfully."));
+    }
+
+    [HttpPost("{id}/cancel")]
+    public async Task<IActionResult> Cancel(int id, [FromBody] CancelTaskRequest request)
+    {
+        var currentUserId = GetEmployeeId();
+        var role = _currentUser.Role ?? "Employee";
+        await _service.CancelTaskAsync(id, currentUserId, role, request);
+        return Ok(ApiResponse.SuccessResponse("Task cancelled successfully."));
+    }
+
+    [HttpGet("{id}/timeline")]
+    public async Task<IActionResult> GetTimeline(int id)
+    {
+        var currentUserId = GetEmployeeId();
+        var role = _currentUser.Role ?? "Employee";
+        var result = await _service.GetTaskTimelineAsync(id, currentUserId, role);
+        return Ok(ApiResponse<List<TaskTimelineEventDto>>.SuccessResponse(result));
     }
 
     private int GetEmployeeId()

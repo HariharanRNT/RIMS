@@ -214,6 +214,144 @@ namespace RIIMS.Infrastructure.Migrations
                     b.ToTable("ActivityTimelines", (string)null);
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.AttendanceCalendar", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly>("CalendarDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DayType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("HolidayName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsHoliday")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsWorkingDay")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("LastModifiedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("PublishedBy")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CalendarDate")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AttendanceCalendar_CalendarDate");
+
+                    b.HasIndex("DayType")
+                        .HasDatabaseName("IX_AttendanceCalendar_DayType");
+
+                    b.HasIndex("Year", "Month")
+                        .HasDatabaseName("IX_AttendanceCalendar_Year_Month");
+
+                    b.ToTable("AttendanceCalendars", (string)null);
+                });
+
+            modelBuilder.Entity("RIIMS.Domain.Entities.AttendanceCalendarAudit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendanceCalendarId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("CalendarDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ChangedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("NewDayType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NewHolidayName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("OldDayType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OldHolidayName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ReasonForChange")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceCalendarId");
+
+                    b.HasIndex("CalendarDate")
+                        .HasDatabaseName("IX_AttendanceCalendarAudit_CalendarDate");
+
+                    b.HasIndex("ChangedAt")
+                        .HasDatabaseName("IX_AttendanceCalendarAudit_ChangedAt");
+
+                    b.ToTable("AttendanceCalendarAudits", (string)null);
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.AttendanceLog", b =>
                 {
                     b.Property<int>("Id")
@@ -221,6 +359,9 @@ namespace RIIMS.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AllowedEndTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -440,7 +581,7 @@ namespace RIIMS.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ClientId")
+                    b.Property<int?>("ClientId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("CompletedAt")
@@ -452,6 +593,12 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Property<int?>("CreatedBy")
                         .HasColumnType("int");
 
+                    b.Property<string>("CustomClientName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomProductName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("EmployeeId")
                         .HasColumnType("int");
 
@@ -461,7 +608,7 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<int>("ProductId")
+                    b.Property<int?>("ProductId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ReminderSentAt")
@@ -671,6 +818,126 @@ namespace RIIMS.Infrastructure.Migrations
                     b.ToTable("Employees", (string)null);
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.EmployeeSalaryStructure", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AnnualCTC")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ESIApplicable")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EffectiveTo")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MonthlyCTC")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.Property<bool>("PFApplicable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ProfessionalTaxApplicable")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("SalaryConfigurationMode")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("TDSApplicable")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId", "IsActive");
+
+                    b.ToTable("EmployeeSalaryStructures");
+                });
+
+            modelBuilder.Entity("RIIMS.Domain.Entities.EmployeeSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AllowedEndTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DeviceInfo")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LoginTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LogoutTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TokenJti")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId")
+                        .IsUnique();
+
+                    b.HasIndex("TokenJti");
+
+                    b.HasIndex("EmployeeId", "IsActive", "WorkDate");
+
+                    b.ToTable("EmployeeSessions");
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.EmployeeWorkDetail", b =>
                 {
                     b.Property<int>("Id")
@@ -757,6 +1024,53 @@ namespace RIIMS.Infrastructure.Migrations
                         .HasDatabaseName("IX_GraceTimeViolation_EmployeeId_Date");
 
                     b.ToTable("GraceTimeViolations", (string)null);
+                });
+
+            modelBuilder.Entity("RIIMS.Domain.Entities.IdleTimeLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.ToTable("IdleTimeLogs", (string)null);
                 });
 
             modelBuilder.Entity("RIIMS.Domain.Entities.LOPCalculation", b =>
@@ -950,6 +1264,9 @@ namespace RIIMS.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("ActualLeaveDays")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("Allowances")
                         .HasColumnType("decimal(12,2)");
 
@@ -967,6 +1284,9 @@ namespace RIIMS.Infrastructure.Migrations
 
                     b.Property<int?>("CreatedBy")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("DailySalary")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("EmployeeId")
                         .HasColumnType("int");
@@ -986,6 +1306,12 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Property<decimal>("LOPDays")
                         .HasColumnType("decimal(4,2)");
 
+                    b.Property<decimal>("LateLoginLOPDays")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("LeaveLOPDays")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("LeavesTaken")
                         .HasColumnType("int");
 
@@ -996,6 +1322,9 @@ namespace RIIMS.Infrastructure.Migrations
                         .HasColumnType("decimal(12,2)");
 
                     b.Property<int>("Month")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MonthlyAllowedLeave")
                         .HasColumnType("int");
 
                     b.Property<decimal>("NetPay")
@@ -1009,6 +1338,9 @@ namespace RIIMS.Infrastructure.Migrations
 
                     b.Property<decimal>("Pf")
                         .HasColumnType("decimal(12,2)");
+
+                    b.Property<decimal>("SandwichLeaveDays")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("Tds")
                         .HasColumnType("decimal(12,2)");
@@ -1168,6 +1500,68 @@ namespace RIIMS.Infrastructure.Migrations
                     b.ToTable("ProductClientMappings", (string)null);
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.SalaryComponent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CalculationBase")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CalculationType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ComponentName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("ComponentType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("FixedAmount")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeduction")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsEarning")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsEmployerContribution")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MonthlyAmount")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.Property<decimal?>("Percentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("SalaryStructureId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalaryStructureId");
+
+                    b.ToTable("SalaryComponents");
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.SupportActivityLog", b =>
                 {
                     b.Property<int>("Id")
@@ -1187,6 +1581,12 @@ namespace RIIMS.Infrastructure.Migrations
 
                     b.Property<int?>("CreatedBy")
                         .HasColumnType("int");
+
+                    b.Property<string>("CustomClientName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomProductName")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("EmployeeId")
                         .HasColumnType("int");
@@ -1341,6 +1741,59 @@ namespace RIIMS.Infrastructure.Migrations
                     b.ToTable("TaskTimeLogs", (string)null);
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.TaskTimelineEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("PerformedByEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PerformedByName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PerformedByRole")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("WorkTaskId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PerformedByEmployeeId");
+
+                    b.HasIndex("WorkTaskId");
+
+                    b.ToTable("TaskTimelineEvents");
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.WorkTask", b =>
                 {
                     b.Property<int>("Id")
@@ -1349,7 +1802,13 @@ namespace RIIMS.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ClientId")
+                    b.Property<int?>("AssignedByEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AssignerType")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ClientId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1358,13 +1817,25 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Property<int?>("CreatedBy")
                         .HasColumnType("int");
 
+                    b.Property<string>("CustomClientName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomProductName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("EmployeeId")
                         .HasColumnType("int");
+
+                    b.Property<string>("Instructions")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -1374,7 +1845,16 @@ namespace RIIMS.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
-                    b.Property<int>("ProductId")
+                    b.Property<int?>("PlannedDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PlannedStart")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProductId")
                         .HasColumnType("int");
 
                     b.Property<string>("Status")
@@ -1386,6 +1866,8 @@ namespace RIIMS.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AssignedByEmployeeId");
 
                     b.HasIndex("ClientId");
 
@@ -1535,6 +2017,17 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Navigation("Employee");
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.AttendanceCalendarAudit", b =>
+                {
+                    b.HasOne("RIIMS.Domain.Entities.AttendanceCalendar", "AttendanceCalendar")
+                        .WithMany("AuditLogs")
+                        .HasForeignKey("AttendanceCalendarId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AttendanceCalendar");
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.AttendanceLog", b =>
                 {
                     b.HasOne("RIIMS.Domain.Entities.Employee", "Employee")
@@ -1577,8 +2070,7 @@ namespace RIIMS.Infrastructure.Migrations
                     b.HasOne("RIIMS.Domain.Entities.Client", "Client")
                         .WithMany()
                         .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("RIIMS.Domain.Entities.Employee", "Employee")
                         .WithMany()
@@ -1589,8 +2081,7 @@ namespace RIIMS.Infrastructure.Migrations
                     b.HasOne("RIIMS.Domain.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("RIIMS.Domain.Entities.SupportActivityLog", "SupportActivityLog")
                         .WithMany()
@@ -1633,6 +2124,28 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Navigation("ReportingPerson");
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.EmployeeSalaryStructure", b =>
+                {
+                    b.HasOne("RIIMS.Domain.Entities.Employee", "Employee")
+                        .WithMany("SalaryStructures")
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("RIIMS.Domain.Entities.EmployeeSession", b =>
+                {
+                    b.HasOne("RIIMS.Domain.Entities.Employee", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.EmployeeWorkDetail", b =>
                 {
                     b.HasOne("RIIMS.Domain.Entities.Employee", "Employee")
@@ -1650,6 +2163,17 @@ namespace RIIMS.Infrastructure.Migrations
                         .WithMany("GraceTimeViolations")
                         .HasForeignKey("EmployeeId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("RIIMS.Domain.Entities.IdleTimeLog", b =>
+                {
+                    b.HasOne("RIIMS.Domain.Entities.Employee", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Employee");
@@ -1740,6 +2264,17 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.SalaryComponent", b =>
+                {
+                    b.HasOne("RIIMS.Domain.Entities.EmployeeSalaryStructure", "SalaryStructure")
+                        .WithMany("Components")
+                        .HasForeignKey("SalaryStructureId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SalaryStructure");
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.SupportActivityLog", b =>
                 {
                     b.HasOne("RIIMS.Domain.Entities.SupportActivityType", "ActivityType")
@@ -1791,13 +2326,36 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Navigation("Task");
                 });
 
+            modelBuilder.Entity("RIIMS.Domain.Entities.TaskTimelineEvent", b =>
+                {
+                    b.HasOne("RIIMS.Domain.Entities.Employee", "PerformedByEmployee")
+                        .WithMany()
+                        .HasForeignKey("PerformedByEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RIIMS.Domain.Entities.WorkTask", "WorkTask")
+                        .WithMany("TimelineEvents")
+                        .HasForeignKey("WorkTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PerformedByEmployee");
+
+                    b.Navigation("WorkTask");
+                });
+
             modelBuilder.Entity("RIIMS.Domain.Entities.WorkTask", b =>
                 {
+                    b.HasOne("RIIMS.Domain.Entities.Employee", "AssignedByEmployee")
+                        .WithMany()
+                        .HasForeignKey("AssignedByEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("RIIMS.Domain.Entities.Client", "Client")
                         .WithMany("Tasks")
                         .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("RIIMS.Domain.Entities.Employee", "Employee")
                         .WithMany("Tasks")
@@ -1808,8 +2366,9 @@ namespace RIIMS.Infrastructure.Migrations
                     b.HasOne("RIIMS.Domain.Entities.Product", "Product")
                         .WithMany("Tasks")
                         .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AssignedByEmployee");
 
                     b.Navigation("Client");
 
@@ -1825,6 +2384,11 @@ namespace RIIMS.Infrastructure.Migrations
                         .HasForeignKey("EmployeeId");
 
                     b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("RIIMS.Domain.Entities.AttendanceCalendar", b =>
+                {
+                    b.Navigation("AuditLogs");
                 });
 
             modelBuilder.Entity("RIIMS.Domain.Entities.BreakType", b =>
@@ -1871,11 +2435,18 @@ namespace RIIMS.Infrastructure.Migrations
 
                     b.Navigation("Reportees");
 
+                    b.Navigation("SalaryStructures");
+
                     b.Navigation("SupportActivityLogs");
 
                     b.Navigation("Tasks");
 
                     b.Navigation("WorkDetail");
+                });
+
+            modelBuilder.Entity("RIIMS.Domain.Entities.EmployeeSalaryStructure", b =>
+                {
+                    b.Navigation("Components");
                 });
 
             modelBuilder.Entity("RIIMS.Domain.Entities.LeaveType", b =>
@@ -1904,6 +2475,8 @@ namespace RIIMS.Infrastructure.Migrations
                     b.Navigation("SupportActivityLogs");
 
                     b.Navigation("TimeLogs");
+
+                    b.Navigation("TimelineEvents");
                 });
 #pragma warning restore 612, 618
         }

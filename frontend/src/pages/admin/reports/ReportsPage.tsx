@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
 import { BarChart3, Calendar, Package, UserCheck, Eye } from 'lucide-react';
 import { EmployeeDailyDetailModal } from './EmployeeDailyDetailModal';
-import { formatTimeIST } from '../../../utils/dateUtils';
+import { formatTimeIST, formatDurationToHoursMinutes } from '../../../utils/dateUtils';
 
 
 interface DailyItem {
@@ -24,6 +24,7 @@ interface DailyItem {
   officeStartTime?: string;
   graceEndTime?: string;
   lateCount?: number;
+  permissionCount?: number;
   lopDays?: number;
 }
 
@@ -286,12 +287,10 @@ export const ReportsPage: React.FC = () => {
                         {item.status}
                       </span>
                     </td>
-                    <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                      {item.isPermission ? (
-                        <span style={{ color: 'var(--accent-primary)' }}>{item.permissionHours || 1} hr</span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
+                    <td style={{ fontSize: '0.875rem', fontWeight: 700, textAlign: 'center' }}>
+                      <span style={{ color: (item.permissionCount ?? 0) > 0 ? 'var(--accent-primary)' : 'var(--text-muted)' }}>
+                        {item.permissionCount ?? 0}
+                      </span>
                     </td>
                     <td style={{ fontSize: '0.875rem', fontWeight: 700, textAlign: 'center' }}>
                       {item.lateCount ?? 0}
@@ -375,8 +374,8 @@ export const ReportsPage: React.FC = () => {
                     <td style={{ fontWeight: 600 }}>{item.employeeName}</td>
                     <td>{item.departmentName}</td>
                     <td>{item.daysPresent} Days</td>
-                    <td style={{ color: 'var(--success)', fontWeight: 700 }}>{item.productiveHours} hrs</td>
-                    <td style={{ color: 'var(--warning)', fontWeight: 600 }}>{item.breakHours} hrs</td>
+                    <td style={{ color: 'var(--success)', fontWeight: 700 }}>{formatDurationToHoursMinutes(item.productiveHours)}</td>
+                    <td style={{ color: 'var(--warning)', fontWeight: 600 }}>{formatDurationToHoursMinutes(item.breakHours)}</td>
                     <td style={{ fontWeight: 600 }}>{item.tasksCompleted}</td>
                     <td>
                       <span className={`badge ${item.graceViolations > 0 ? 'badge-danger' : 'badge-success'}`}>
@@ -411,7 +410,7 @@ export const ReportsPage: React.FC = () => {
                   <div key={p.productId}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', fontSize: '0.9rem' }}>
                       <span style={{ fontWeight: 600 }}>{p.productCode} - {p.productName}</span>
-                      <span style={{ color: 'var(--success)', fontWeight: 700 }}>{p.totalHours} hrs</span>
+                      <span style={{ color: 'var(--success)', fontWeight: 700 }}>{formatDurationToHoursMinutes(p.totalHours)}</span>
                     </div>
                     <div style={{ height: '8px', background: 'var(--bg-primary)', borderRadius: '4px', overflow: 'hidden' }}>
                       <div
@@ -446,7 +445,7 @@ export const ReportsPage: React.FC = () => {
                   <div key={c.clientId}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', fontSize: '0.9rem' }}>
                       <span style={{ fontWeight: 600 }}>{c.clientCompanyName}</span>
-                      <span style={{ color: 'var(--info)', fontWeight: 700 }}>{c.totalHours} hrs</span>
+                      <span style={{ color: 'var(--info)', fontWeight: 700 }}>{formatDurationToHoursMinutes(c.totalHours)}</span>
                     </div>
                     <div style={{ height: '8px', background: 'var(--bg-primary)', borderRadius: '4px', overflow: 'hidden' }}>
                       <div

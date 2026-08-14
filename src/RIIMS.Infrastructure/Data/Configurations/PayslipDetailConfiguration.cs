@@ -30,6 +30,11 @@ public class PayslipDetailConfiguration : IEntityTypeConfiguration<PayslipDetail
         // Net Pay & LOP Days
         builder.Property(p => p.NetPay).HasColumnType("decimal(12,2)");
         builder.Property(p => p.LOPDays).HasColumnType("decimal(4,2)");
+        builder.Property(p => p.ActualLeaveDays).HasColumnType("decimal(4,2)");
+        builder.Property(p => p.SandwichLeaveDays).HasColumnType("decimal(4,2)");
+        builder.Property(p => p.LeaveLOPDays).HasColumnType("decimal(4,2)");
+        builder.Property(p => p.LateLoginLOPDays).HasColumnType("decimal(4,2)");
+        builder.Property(p => p.DailySalary).HasColumnType("decimal(12,4)");
 
         builder.HasIndex(p => new { p.EmployeeId, p.Month, p.Year })
             .IsUnique()

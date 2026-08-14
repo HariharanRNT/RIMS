@@ -7,8 +7,10 @@ public class DemoFollowUp : BaseEntity
 {
     public int EmployeeId { get; set; }
     public int SupportActivityLogId { get; set; }
-    public int ProductId { get; set; }
-    public int ClientId { get; set; }
+    public int? ProductId { get; set; }
+    public string? CustomProductName { get; set; }
+    public int? ClientId { get; set; }
+    public string? CustomClientName { get; set; }
 
     public string ReviewRemarks { get; set; } = string.Empty;
     public DateTime FollowUpDate { get; set; }
@@ -20,6 +22,6 @@ public class DemoFollowUp : BaseEntity
     // Navigation
     public Employee Employee { get; set; } = null!;
     public SupportActivityLog SupportActivityLog { get; set; } = null!;
-    public Product Product { get; set; } = null!;
-    public Client Client { get; set; } = null!;
+    public Product? Product { get; set; }
+    public Client? Client { get; set; }
 }

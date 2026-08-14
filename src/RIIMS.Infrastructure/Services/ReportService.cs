@@ -172,6 +172,12 @@ public class ReportService : IReportService
         var empBreakSeconds = todayBreakLogs
             .Sum(b => ((b.EndTime ?? DateTime.UtcNow) - b.StartTime).TotalSeconds);
 
+        var todayIdleLogs = await _context.IdleTimeLogs
+            .Where(i => i.EmployeeId == employeeId && i.StartTime >= today && i.StartTime < nextDay)
+            .ToListAsync();
+        var empIdleSeconds = todayIdleLogs
+            .Sum(i => (i.EndTime - i.StartTime).TotalSeconds);
+
         var todayGrace = await _context.GraceTimeViolations
             .FirstOrDefaultAsync(g => g.EmployeeId == employeeId && g.Date >= today && g.Date < nextDay);
 
@@ -196,6 +202,10 @@ public class ReportService : IReportService
             Duration = a.EndTime.HasValue ? (a.EndTime.Value - a.StartTime).ToString(@"hh\:mm\:ss") : null
         }).ToList();
 
+        var todayBreakHours = Math.Round(empBreakSeconds / 3600.0, 2);
+        var todayIdleHours = Math.Round(empIdleSeconds / 3600.0, 2);
+        var todayNonProductiveHours = Math.Round((empBreakSeconds + empSupportSeconds + empIdleSeconds) / 3600.0, 2);
+
         return new EmployeeDashboardMetricsDto
         {
             EmployeeId = employeeId,
@@ -203,8 +213,10 @@ public class ReportService : IReportService
             TodayLoginTime = todayAttendance?.LoginTime,
             TodayLogoutTime = todayAttendance?.LogoutTime,
             TodayProductiveHours = Math.Round((empTaskSeconds + empSupportSeconds) / 3600.0, 2),
-            TodayBreakHours = Math.Round(empBreakSeconds / 3600.0, 2),
-            TodayActivitiesCount = todayTaskLogs.Count + todaySupportLogs.Count + todayBreakLogs.Count,
+            TodayBreakHours = todayBreakHours,
+            TodayIdleHours = todayIdleHours,
+            TodayNonProductiveHours = todayNonProductiveHours,
+            TodayActivitiesCount = todayTaskLogs.Count + todaySupportLogs.Count + todayBreakLogs.Count + todayIdleLogs.Count,
             HasGraceViolationToday = todayGrace != null,
             MinutesLateToday = todayGrace?.MinutesLate ?? 0,
             ActiveTask = activeTask,
@@ -225,37 +237,59 @@ public class ReportService : IReportService
         var employees = await query.ToListAsync();
         var result = new List<MonthlyProductionItemDto>();
 
+        int daysInMonth = DateTime.DaysInMonth(year, month);
+        DateTime monthStartIst = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        DateTime monthEndIst = new DateTime(year, month, daysInMonth, 23, 59, 59, DateTimeKind.Unspecified);
+
+        DateTime monthStartUtc = TimeZoneInfo.ConvertTimeToUtc(monthStartIst, IstTimeZone);
+        DateTime monthEndUtc = TimeZoneInfo.ConvertTimeToUtc(monthEndIst, IstTimeZone);
+
         foreach (var emp in employees)
         {
             var daysPresent = await _context.AttendanceLogs
-                .Where(a => a.EmployeeId == emp.Id && a.LoginTime.Month == month && a.LoginTime.Year == year)
+                .Where(a => a.EmployeeId == emp.Id && a.LoginTime >= monthStartUtc && a.LoginTime <= monthEndUtc)
                 .Select(a => a.LoginTime.Date)
                 .Distinct()
                 .CountAsync();
 
             var taskLogs = await _context.TaskTimeLogs
-                .Where(t => t.Task.EmployeeId == emp.Id && t.StartTime.Month == month && t.StartTime.Year == year)
+                .Where(t => t.Task.EmployeeId == emp.Id && t.StartTime >= monthStartUtc && t.StartTime <= monthEndUtc)
                 .Select(t => new { t.StartTime, t.EndTime })
                 .ToListAsync();
             var taskSeconds = taskLogs.Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
 
             var supportLogs = await _context.SupportActivityLogs
-                .Where(s => s.EmployeeId == emp.Id && s.StartTime.Month == month && s.StartTime.Year == year)
+                .Where(s => s.EmployeeId == emp.Id && s.StartTime >= monthStartUtc && s.StartTime <= monthEndUtc)
                 .Select(s => new { s.StartTime, s.EndTime })
                 .ToListAsync();
             var supportSeconds = supportLogs.Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
 
             var breakLogs = await _context.BreakLogs
-                .Where(b => b.EmployeeId == emp.Id && b.StartTime.Month == month && b.StartTime.Year == year)
+                .Where(b => b.EmployeeId == emp.Id && b.StartTime >= monthStartUtc && b.StartTime <= monthEndUtc)
                 .Select(b => new { b.StartTime, b.EndTime })
                 .ToListAsync();
             var breakSeconds = breakLogs.Sum(b => ((b.EndTime ?? DateTime.UtcNow) - b.StartTime).TotalSeconds);
 
-            var tasksCompleted = await _context.WorkTasks
-                .CountAsync(t => t.EmployeeId == emp.Id && t.Status == TaskStatusEnum.Completed && t.CreatedAt.Month == month && t.CreatedAt.Year == year);
+            var idleLogs = await _context.IdleTimeLogs
+                .Where(i => i.EmployeeId == emp.Id && i.StartTime >= monthStartUtc && i.StartTime <= monthEndUtc)
+                .Select(i => new { i.StartTime, i.EndTime })
+                .ToListAsync();
+            var idleSeconds = idleLogs.Sum(i => (i.EndTime - i.StartTime).TotalSeconds);
 
-            var graceViolations = await _context.GraceTimeViolations
-                .CountAsync(g => g.EmployeeId == emp.Id && g.Date.Month == month && g.Date.Year == year);
+            var tasksCompleted = await _context.WorkTasks
+                .CountAsync(t => t.EmployeeId == emp.Id && t.Status == TaskStatusEnum.Completed && t.CreatedAt >= monthStartUtc && t.CreatedAt <= monthEndUtc);
+
+            var monthLogs = await _context.AttendanceLogs
+                .Where(a => a.EmployeeId == emp.Id && a.LoginTime >= monthStartUtc && a.LoginTime <= monthEndUtc)
+                .ToListAsync();
+
+            // Daily First Login Rule: Only the earliest valid login event per calendar working day is evaluated
+            var firstLogsByDate = monthLogs
+                .GroupBy(a => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone)))
+                .Select(g => g.OrderBy(a => a.LoginTime).First())
+                .ToList();
+
+            var graceViolations = firstLogsByDate.Count(a => a.IsLate);
 
             result.Add(new MonthlyProductionItemDto
             {
@@ -266,6 +300,8 @@ public class ReportService : IReportService
                 DaysPresent = daysPresent,
                 ProductiveHours = Math.Round((taskSeconds + supportSeconds) / 3600.0, 2),
                 BreakHours = Math.Round(breakSeconds / 3600.0, 2),
+                IdleHours = Math.Round(idleSeconds / 3600.0, 2),
+                NonProductiveHours = Math.Round((breakSeconds + supportSeconds + idleSeconds) / 3600.0, 2),
                 TasksCompleted = tasksCompleted,
                 GraceViolations = graceViolations
             });
@@ -276,6 +312,13 @@ public class ReportService : IReportService
 
     public async Task<WorkDistributionReportDto> GetWorkDistributionReportAsync(int month, int year)
     {
+        int daysInMonth = DateTime.DaysInMonth(year, month);
+        DateTime monthStartIst = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        DateTime monthEndIst = new DateTime(year, month, daysInMonth, 23, 59, 59, DateTimeKind.Unspecified);
+
+        DateTime monthStartUtc = TimeZoneInfo.ConvertTimeToUtc(monthStartIst, IstTimeZone);
+        DateTime monthEndUtc = TimeZoneInfo.ConvertTimeToUtc(monthEndIst, IstTimeZone);
+
         // Products distribution
         var products = await _context.Products.Where(p => p.IsActive).ToListAsync();
         var prodList = new List<ProductWorkDistributionDto>();
@@ -283,13 +326,13 @@ public class ReportService : IReportService
         foreach (var p in products)
         {
             var taskLogs = await _context.TaskTimeLogs
-                .Where(t => t.Task.ProductId == p.Id && t.StartTime.Month == month && t.StartTime.Year == year)
+                .Where(t => t.Task.ProductId == p.Id && t.StartTime >= monthStartUtc && t.StartTime <= monthEndUtc)
                 .Select(t => new { t.StartTime, t.EndTime })
                 .ToListAsync();
             var taskSec = taskLogs.Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
 
             var supportLogs = await _context.SupportActivityLogs
-                .Where(s => s.ProductId == p.Id && s.StartTime.Month == month && s.StartTime.Year == year)
+                .Where(s => s.ProductId == p.Id && s.StartTime >= monthStartUtc && s.StartTime <= monthEndUtc)
                 .Select(s => new { s.StartTime, s.EndTime })
                 .ToListAsync();
             var supportSec = supportLogs.Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
@@ -310,13 +353,13 @@ public class ReportService : IReportService
         foreach (var c in clients)
         {
             var taskLogs = await _context.TaskTimeLogs
-                .Where(t => t.Task.ClientId == c.Id && t.StartTime.Month == month && t.StartTime.Year == year)
+                .Where(t => t.Task.ClientId == c.Id && t.StartTime >= monthStartUtc && t.StartTime <= monthEndUtc)
                 .Select(t => new { t.StartTime, t.EndTime })
                 .ToListAsync();
             var taskSec = taskLogs.Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
 
             var supportLogs = await _context.SupportActivityLogs
-                .Where(s => s.ClientId == c.Id && s.StartTime.Month == month && s.StartTime.Year == year)
+                .Where(s => s.ClientId == c.Id && s.StartTime >= monthStartUtc && s.StartTime <= monthEndUtc)
                 .Select(s => new { s.StartTime, s.EndTime })
                 .ToListAsync();
             var supportSec = supportLogs.Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
@@ -345,6 +388,9 @@ public class ReportService : IReportService
         var startUtc = TimeZoneInfo.ConvertTimeToUtc(targetDateIst, IstTimeZone);
         var endUtc = TimeZoneInfo.ConvertTimeToUtc(nextDateIst, IstTimeZone);
 
+        DateTime monthStartIst = new DateTime(targetDateIst.Year, targetDateIst.Month, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        DateTime monthStartUtc = TimeZoneInfo.ConvertTimeToUtc(monthStartIst, IstTimeZone);
+
         var query = _context.Employees
             .Include(e => e.Department)
             .Where(e => e.IsActive)
@@ -358,6 +404,7 @@ public class ReportService : IReportService
 
         var officeStartDt = DateTime.Today.Add(settings.OfficeStartTime);
         var graceEndDt = officeStartDt.AddMinutes(settings.GraceMinutes);
+
         string officeStartStr = officeStartDt.ToString("hh:mm tt");
         string graceEndStr = graceEndDt.ToString("hh:mm tt");
 
@@ -386,20 +433,38 @@ public class ReportService : IReportService
                 .ToListAsync();
             var breakSeconds = breakLogs.Sum(b => ((b.EndTime ?? DateTime.UtcNow) - b.StartTime).TotalSeconds);
 
+            var idleLogs = await _context.IdleTimeLogs
+                .Where(i => i.EmployeeId == emp.Id && i.StartTime >= startUtc && i.StartTime < endUtc)
+                .Select(i => new { i.StartTime, i.EndTime })
+                .ToListAsync();
+            var idleSeconds = idleLogs.Sum(i => (i.EndTime - i.StartTime).TotalSeconds);
+
             var tasksCompleted = await _context.WorkTasks
                 .CountAsync(t => t.EmployeeId == emp.Id && t.Status == TaskStatusEnum.Completed && t.CreatedAt >= startUtc && t.CreatedAt < endUtc);
 
             var graceViolation = await _context.GraceTimeViolations
                 .FirstOrDefaultAsync(g => g.EmployeeId == emp.Id && g.Date >= targetDateIst && g.Date < nextDateIst);
 
-            // Monthly late login count for this employee
+            // Month-to-date attendance logs in IST range (1st of month up to selected date)
             var monthLogs = await _context.AttendanceLogs
-                .Where(a => a.EmployeeId == emp.Id && a.LoginTime.Year == targetDateIst.Year && a.LoginTime.Month == targetDateIst.Month)
+                .Where(a => a.EmployeeId == emp.Id && a.LoginTime >= monthStartUtc && a.LoginTime < endUtc)
                 .ToListAsync();
 
-            int monthlyLateCount = monthLogs.Count(a => a.IsLate && !a.IsPermission);
+            // Daily First Login Rule: Filter to only the earliest login event per calendar working day
+            var firstLogsByDate = monthLogs
+                .GroupBy(a => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone)))
+                .Select(g => g.OrderBy(a => a.LoginTime).First())
+                .ToList();
+
+            int totalLateCount = firstLogsByDate.Count(a => a.IsLate);
+            int unpermissionedLateCount = firstLogsByDate.Count(a => a.IsLate && !a.IsPermission);
             int threshold = Math.Max(1, settings.LateLoginsForHalfDay);
-            decimal lopDays = Math.Floor((decimal)monthlyLateCount / threshold) * 0.5m;
+            decimal lopDays = Math.Floor((decimal)unpermissionedLateCount / threshold) * 0.5m;
+
+            int monthPermissionCount = await _context.PermissionRequests
+                .AsNoTracking()
+                .Where(p => p.EmployeeId == emp.Id && p.Status == RIIMS.Domain.Enums.RequestStatus.Approved && p.RequestDate.Year == targetDateIst.Year && p.RequestDate.Month == targetDateIst.Month && p.RequestDate <= targetDateIst)
+                .CountAsync();
 
             string status = "Absent";
             if (attendance != null)
@@ -432,6 +497,8 @@ public class ReportService : IReportService
                 Status = status,
                 ProductiveHours = Math.Round((taskSeconds + supportSeconds) / 3600.0, 2),
                 BreakHours = Math.Round(breakSeconds / 3600.0, 2),
+                IdleHours = Math.Round(idleSeconds / 3600.0, 2),
+                NonProductiveHours = Math.Round((breakSeconds + supportSeconds + idleSeconds) / 3600.0, 2),
                 TasksCompleted = tasksCompleted,
                 MinutesLate = graceViolation?.MinutesLate ?? 0,
                 IsLate = attendance?.IsLate ?? false,
@@ -439,7 +506,8 @@ public class ReportService : IReportService
                 PermissionHours = attendance?.PermissionHours ?? 0,
                 OfficeStartTime = officeStartStr,
                 GraceEndTime = graceEndStr,
-                LateCount = monthlyLateCount,
+                LateCount = totalLateCount,
+                PermissionCount = monthPermissionCount,
                 LopDays = lopDays
             });
         }
@@ -460,7 +528,7 @@ public class ReportService : IReportService
             .FirstOrDefaultAsync(e => e.Id == employeeId);
 
         if (emp == null)
-            throw new KeyNotFoundException($"Employee with ID {employeeId} not found.");
+            throw new KeyNotFoundException("Employee not found.");
 
         var attendance = await _context.AttendanceLogs
             .Where(a => a.EmployeeId == employeeId && a.LoginTime >= startUtc && a.LoginTime < endUtc)
@@ -470,107 +538,102 @@ public class ReportService : IReportService
         var graceViolation = await _context.GraceTimeViolations
             .FirstOrDefaultAsync(g => g.EmployeeId == employeeId && g.Date >= targetDateIst && g.Date < nextDateIst);
 
-        // Tasks & Time Logs
-        var tasksOnDate = await _context.WorkTasks
-            .Include(t => t.Product)
-            .Include(t => t.Client)
-            .Include(t => t.TimeLogs)
-            .Where(t => t.EmployeeId == employeeId && t.TimeLogs.Any(tl => tl.StartTime >= startUtc && tl.StartTime < endUtc))
+        // Fetch task IDs that have time logs recorded on this date
+        var taskIdsWorkedToday = await _context.TaskTimeLogs
+            .Where(tl => tl.Task.EmployeeId == employeeId && tl.StartTime >= startUtc && tl.StartTime < endUtc)
+            .Select(tl => tl.TaskId)
+            .Distinct()
             .ToListAsync();
 
-        var taskDetailDtos = new List<DailyTaskDetailDto>();
-        double totalTaskSecs = 0;
+        // Fetch Work Tasks relevant to this date
+        var tasks = await _context.WorkTasks
+            .Include(t => t.Product)
+            .Include(t => t.Client)
+            .Where(t => t.EmployeeId == employeeId && (
+                taskIdsWorkedToday.Contains(t.Id) ||
+                (t.CreatedAt >= startUtc && t.CreatedAt < endUtc) ||
+                (t.UpdatedAt >= startUtc && t.UpdatedAt < endUtc)
+            ))
+            .ToListAsync();
 
-        foreach (var task in tasksOnDate)
+        var taskDtos = new List<DailyTaskDetailDto>();
+
+        foreach (var task in tasks)
         {
-            var dayLogs = task.TimeLogs
-                .Where(tl => tl.StartTime >= startUtc && tl.StartTime < endUtc)
-                .OrderBy(tl => tl.StartTime)
-                .ToList();
+            // Sum time logs specifically recorded on this date
+            var taskLogsOnDate = await _context.TaskTimeLogs
+                .Where(t => t.TaskId == task.Id && t.StartTime >= startUtc && t.StartTime < endUtc)
+                .ToListAsync();
 
-            var sessionDtos = dayLogs.Select(tl =>
+            double taskSeconds = 0;
+            if (taskLogsOnDate.Count > 0)
             {
-                var dur = (tl.EndTime ?? DateTime.UtcNow) - tl.StartTime;
-                totalTaskSecs += dur.TotalSeconds;
-                return new DailyTaskSessionDto
-                {
-                    StartTime = tl.StartTime,
-                    EndTime = tl.EndTime,
-                    Duration = $"{dur.Hours:D2}:{dur.Minutes:D2}:{dur.Seconds:D2}"
-                };
-            }).ToList();
+                taskSeconds = taskLogsOnDate.Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
+            }
+            else
+            {
+                var allTaskLogs = await _context.TaskTimeLogs
+                    .Where(t => t.TaskId == task.Id)
+                    .ToListAsync();
+                taskSeconds = allTaskLogs.Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
+            }
 
-            double taskHours = Math.Round(dayLogs.Sum(tl => ((tl.EndTime ?? DateTime.UtcNow) - tl.StartTime).TotalSeconds) / 3600.0, 2);
-
-            taskDetailDtos.Add(new DailyTaskDetailDto
+            taskDtos.Add(new DailyTaskDetailDto
             {
                 TaskId = task.Id,
+                ProductName = task.Product?.Name ?? task.CustomProductName ?? string.Empty,
+                ClientName = task.Client?.CompanyName ?? task.CustomClientName ?? string.Empty,
                 ModuleName = task.ModuleName,
                 Description = task.Description,
-                ProductName = task.Product?.Name ?? string.Empty,
-                ClientName = task.Client?.CompanyName ?? string.Empty,
                 Status = task.Status.ToString(),
-                Sessions = sessionDtos,
-                TotalTaskHours = taskHours
+                TotalTaskHours = Math.Round(taskSeconds / 3600.0, 2)
             });
         }
 
-        // Breaks
-        var breakLogs = await _context.BreakLogs
+        // Fetch Breaks for the day
+        var breaks = await _context.BreakLogs
             .Include(b => b.BreakType)
-            .Include(b => b.HeldTask)
             .Where(b => b.EmployeeId == employeeId && b.StartTime >= startUtc && b.StartTime < endUtc)
-            .OrderBy(b => b.StartTime)
             .ToListAsync();
 
-        double totalBreakSecs = 0;
-        var breakDtos = breakLogs.Select(b =>
+        var breakDtos = breaks.Select(b => new DailyBreakDetailDto
         {
-            var dur = (b.EndTime ?? DateTime.UtcNow) - b.StartTime;
-            totalBreakSecs += dur.TotalSeconds;
-            return new DailyBreakDetailDto
-            {
-                BreakTypeName = b.BreakType?.Name ?? "Break",
-                HeldTaskModule = b.HeldTask?.ModuleName,
-                StartTime = b.StartTime,
-                EndTime = b.EndTime,
-                Duration = $"{dur.Hours:D2}:{dur.Minutes:D2}:{dur.Seconds:D2}"
-            };
+            BreakTypeName = b.BreakType?.Name ?? "Break",
+            StartTime = b.StartTime,
+            EndTime = b.EndTime,
+            Duration = b.EndTime.HasValue
+                ? ((b.EndTime.Value - b.StartTime).TotalSeconds / 3600.0).ToString("0.00") + " hrs"
+                : "In Progress"
         }).ToList();
 
-        // Support Activities
-        var supportLogs = await _context.SupportActivityLogs
+        // Fetch Support Activities for the day
+        var supports = await _context.SupportActivityLogs
             .Include(s => s.ActivityType)
             .Include(s => s.Product)
             .Include(s => s.Client)
             .Where(s => s.EmployeeId == employeeId && s.StartTime >= startUtc && s.StartTime < endUtc)
-            .OrderBy(s => s.StartTime)
             .ToListAsync();
 
-        double totalSupportSecs = 0;
-        var supportDtos = supportLogs.Select(s =>
+        var supportDtos = supports.Select(s => new DailySupportDetailDto
         {
-            var dur = (s.EndTime ?? DateTime.UtcNow) - s.StartTime;
-            totalSupportSecs += dur.TotalSeconds;
-            return new DailySupportDetailDto
-            {
-                ActivityTypeName = s.ActivityType?.Name ?? "Support",
-                ProductName = s.Product?.Name,
-                ClientName = s.Client?.CompanyName,
-                Remarks = s.Remarks,
-                StartTime = s.StartTime,
-                EndTime = s.EndTime,
-                Duration = $"{dur.Hours:D2}:{dur.Minutes:D2}:{dur.Seconds:D2}"
-            };
+            ActivityTypeName = s.ActivityType?.Name ?? "Support",
+            ProductName = s.Product?.Name ?? s.CustomProductName ?? string.Empty,
+            ClientName = s.Client?.CompanyName ?? s.CustomClientName ?? string.Empty,
+            Remarks = s.Remarks ?? string.Empty,
+            StartTime = s.StartTime,
+            EndTime = s.EndTime,
+            Duration = s.EndTime.HasValue
+                ? ((s.EndTime.Value - s.StartTime).TotalSeconds / 3600.0).ToString("0.00") + " hrs"
+                : "In Progress"
         }).ToList();
 
-        // Activity Timeline
-        var timelineLogs = await _context.ActivityTimelines
+        // Fetch Timeline Activities for the day
+        var timelines = await _context.ActivityTimelines
             .Where(a => a.EmployeeId == employeeId && a.StartTime >= startUtc && a.StartTime < endUtc)
             .OrderBy(a => a.StartTime)
             .ToListAsync();
 
-        var timelineDtos = timelineLogs.Select(a => new ActivityTimelineDto
+        var timelineDtos = timelines.Select(a => new ActivityTimelineDto
         {
             Id = a.Id,
             EmployeeId = a.EmployeeId,
@@ -584,11 +647,13 @@ public class ReportService : IReportService
             Duration = a.EndTime.HasValue ? (a.EndTime.Value - a.StartTime).ToString(@"hh\:mm\:ss") : null
         }).ToList();
 
-        string status = "Absent";
-        if (attendance != null)
-        {
-            status = attendance.LogoutTime.HasValue ? "Present (Logged Out)" : "Present (Active)";
-        }
+        var todayTaskLogs = await _context.TaskTimeLogs
+            .Where(tl => tl.Task.EmployeeId == employeeId && tl.StartTime >= startUtc && tl.StartTime < endUtc)
+            .ToListAsync();
+
+        var totalTaskSec = todayTaskLogs.Sum(tl => ((tl.EndTime ?? DateTime.UtcNow) - tl.StartTime).TotalSeconds);
+        var totalSuppSec = supports.Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
+        var totalBreakSec = breaks.Sum(b => ((b.EndTime ?? DateTime.UtcNow) - b.StartTime).TotalSeconds);
 
         return new EmployeeDailyDetailDto
         {
@@ -599,14 +664,90 @@ public class ReportService : IReportService
             Date = targetDateIst,
             LoginTime = attendance?.LoginTime,
             LogoutTime = attendance?.LogoutTime,
-            Status = status,
-            ProductiveHours = Math.Round((totalTaskSecs + totalSupportSecs) / 3600.0, 2),
-            BreakHours = Math.Round(totalBreakSecs / 3600.0, 2),
+            Status = attendance != null ? (attendance.IsPermission ? "Permission" : (attendance.IsLate ? "Late" : "Present")) : "Absent",
             MinutesLate = graceViolation?.MinutesLate ?? 0,
-            Tasks = taskDetailDtos,
+            ProductiveHours = Math.Round((totalTaskSec + totalSuppSec) / 3600.0, 2),
+            BreakHours = Math.Round(totalBreakSec / 3600.0, 2),
+            Tasks = taskDtos,
             Breaks = breakDtos,
             SupportActivities = supportDtos,
             Timeline = timelineDtos
+        };
+    }
+
+    public async Task<AdminNotificationSummaryDto> GetAdminNotificationsAsync()
+    {
+        var (today, nextDay) = GetTodayIstUtcRange();
+
+        var lateLogins = await _context.AttendanceLogs
+            .Include(a => a.Employee)
+            .Where(a => a.LoginTime >= today && a.LoginTime < nextDay && a.IsLate && !a.IsPermission)
+            .OrderByDescending(a => a.LoginTime)
+            .ToListAsync();
+
+        var pendingLeaves = await _context.LeaveRequests
+            .Include(l => l.Employee)
+            .Where(l => l.Status == RIIMS.Domain.Enums.RequestStatus.Pending)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+
+        var pendingPermissions = await _context.PermissionRequests
+            .Include(p => p.Employee)
+            .Where(p => p.Status == RIIMS.Domain.Enums.RequestStatus.Pending)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+
+        var list = new List<AdminNotificationItemDto>();
+
+        foreach (var l in lateLogins)
+        {
+            list.Add(new AdminNotificationItemDto
+            {
+                Id = l.Id,
+                Category = "LateLogin",
+                EmployeeName = l.Employee?.Name ?? "Employee",
+                Title = "Late Login Alert",
+                Message = $"{l.Employee?.Name ?? "Employee"} logged in late at {TimeZoneInfo.ConvertTimeFromUtc(l.LoginTime, IstTimeZone):hh:mm tt}.",
+                Timestamp = l.LoginTime,
+                TargetUrl = "/admin/reports"
+            });
+        }
+
+        foreach (var req in pendingLeaves)
+        {
+            list.Add(new AdminNotificationItemDto
+            {
+                Id = req.Id,
+                Category = "LeaveRequest",
+                EmployeeName = req.Employee?.Name ?? "Employee",
+                Title = "Pending Leave Request",
+                Message = $"{req.Employee?.Name ?? "Employee"} requested leave from {req.FromDate:dd MMM} to {req.ToDate:dd MMM}.",
+                Timestamp = req.CreatedAt,
+                TargetUrl = "/admin/approvals"
+            });
+        }
+
+        foreach (var req in pendingPermissions)
+        {
+            list.Add(new AdminNotificationItemDto
+            {
+                Id = req.Id,
+                Category = "PermissionRequest",
+                EmployeeName = req.Employee?.Name ?? "Employee",
+                Title = "Pending Permission Request",
+                Message = $"{req.Employee?.Name ?? "Employee"} requested permission for {req.RequestDate:dd MMM}.",
+                Timestamp = req.CreatedAt,
+                TargetUrl = "/admin/approvals"
+            });
+        }
+
+        return new AdminNotificationSummaryDto
+        {
+            TotalCount = list.Count,
+            LateLoginCount = lateLogins.Count,
+            LeaveRequestCount = pendingLeaves.Count,
+            PermissionRequestCount = pendingPermissions.Count,
+            Notifications = list.OrderByDescending(n => n.Timestamp).ToList()
         };
     }
 }

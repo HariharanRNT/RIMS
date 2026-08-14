@@ -24,6 +24,8 @@ public class EmployeeDashboardMetricsDto
     public DateTime? TodayLogoutTime { get; set; }
     public double TodayProductiveHours { get; set; }
     public double TodayBreakHours { get; set; }
+    public double TodayIdleHours { get; set; }
+    public double TodayNonProductiveHours { get; set; }
     public int TodayActivitiesCount { get; set; }
     public bool HasGraceViolationToday { get; set; }
     public int MinutesLateToday { get; set; }
@@ -40,6 +42,8 @@ public class MonthlyProductionItemDto
     public int DaysPresent { get; set; }
     public double ProductiveHours { get; set; }
     public double BreakHours { get; set; }
+    public double IdleHours { get; set; }
+    public double NonProductiveHours { get; set; }
     public int TasksCompleted { get; set; }
     public int GraceViolations { get; set; }
 }
@@ -77,6 +81,8 @@ public class DailyProductionItemDto
     public string Status { get; set; } = "Offline";
     public double ProductiveHours { get; set; }
     public double BreakHours { get; set; }
+    public double IdleHours { get; set; }
+    public double NonProductiveHours { get; set; }
     public int TasksCompleted { get; set; }
     public int MinutesLate { get; set; }
 
@@ -86,6 +92,7 @@ public class DailyProductionItemDto
     public string OfficeStartTime { get; set; } = "10:00 AM";
     public string GraceEndTime { get; set; } = "10:15 AM";
     public int LateCount { get; set; }
+    public int PermissionCount { get; set; }
     public decimal LopDays { get; set; }
 }
 
@@ -128,6 +135,14 @@ public class DailySupportDetailDto
     public string Duration { get; set; } = string.Empty;
 }
 
+public class DailyIdleDetailDto
+{
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public string Duration { get; set; } = string.Empty;
+    public string Type { get; set; } = "LogoutLoginGap";
+}
+
 public class EmployeeDailyDetailDto
 {
     public int EmployeeId { get; set; }
@@ -140,11 +155,33 @@ public class EmployeeDailyDetailDto
     public string Status { get; set; } = string.Empty;
     public double ProductiveHours { get; set; }
     public double BreakHours { get; set; }
+    public double IdleHours { get; set; }
+    public double NonProductiveHours { get; set; }
     public int MinutesLate { get; set; }
     public List<DailyTaskDetailDto> Tasks { get; set; } = new();
     public List<DailyBreakDetailDto> Breaks { get; set; } = new();
     public List<DailySupportDetailDto> SupportActivities { get; set; } = new();
+    public List<DailyIdleDetailDto> Idles { get; set; } = new();
     public List<ActivityTimelineDto> Timeline { get; set; } = new();
 }
 
+public class AdminNotificationItemDto
+{
+    public int Id { get; set; }
+    public string Category { get; set; } = string.Empty; // "LateLogin", "LeaveRequest", "PermissionRequest"
+    public string EmployeeName { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+    public string TargetUrl { get; set; } = string.Empty;
+}
+
+public class AdminNotificationSummaryDto
+{
+    public int TotalCount { get; set; }
+    public int LateLoginCount { get; set; }
+    public int LeaveRequestCount { get; set; }
+    public int PermissionRequestCount { get; set; }
+    public List<AdminNotificationItemDto> Notifications { get; set; } = new();
+}
 

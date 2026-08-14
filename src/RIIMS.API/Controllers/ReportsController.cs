@@ -68,5 +68,13 @@ public class ReportsController : ControllerBase
         var result = await _service.GetWorkDistributionReportAsync(month, year);
         return Ok(ApiResponse<WorkDistributionReportDto>.SuccessResponse(result));
     }
+
+    [HttpGet("admin-notifications")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAdminNotifications()
+    {
+        var result = await _service.GetAdminNotificationsAsync();
+        return Ok(ApiResponse<AdminNotificationSummaryDto>.SuccessResponse(result));
+    }
 }
 

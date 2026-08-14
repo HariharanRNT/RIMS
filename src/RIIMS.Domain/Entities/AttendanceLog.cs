@@ -12,6 +12,7 @@ public class AttendanceLog : BaseEntity
     public bool IsPermission { get; set; }
     public decimal PermissionHours { get; set; }
     public string Status { get; set; } = "Normal";
+    public DateTime? AllowedEndTime { get; set; }
 
     // Navigation
     public Employee Employee { get; set; } = null!;

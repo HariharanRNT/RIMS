@@ -95,19 +95,43 @@ public class SupportActivityService : ISupportActivityService
         if (log == null)
             throw new KeyNotFoundException("Active support activity session not found.");
 
-        // Rule 6: All support activities require Remarks, ProductId, and ClientId before stopping
+        // Rule 6: All support activities require Remarks, Product, and Client before stopping
         if (string.IsNullOrWhiteSpace(request.Remarks))
             throw new InvalidOperationException("Remarks are required to stop support activity.");
-        if (request.ProductId <= 0)
-            throw new InvalidOperationException("Product selection is required.");
-        if (request.ClientId <= 0)
-            throw new InvalidOperationException("Client selection is required.");
+
+        bool hasProduct = (request.ProductId.HasValue && request.ProductId > 0) || !string.IsNullOrWhiteSpace(request.CustomProductName);
+        if (!hasProduct)
+            throw new InvalidOperationException("Product selection or custom product name is required.");
+
+        bool hasClient = (request.ClientId.HasValue && request.ClientId > 0) || !string.IsNullOrWhiteSpace(request.CustomClientName);
+        if (!hasClient)
+            throw new InvalidOperationException("Client selection or custom client name is required.");
 
         var now = DateTime.UtcNow;
         log.EndTime = now;
-        log.Remarks = request.Remarks;
-        log.ProductId = request.ProductId;
-        log.ClientId = request.ClientId;
+        log.Remarks = request.Remarks.Trim();
+
+        if (request.ProductId.HasValue && request.ProductId > 0)
+        {
+            log.ProductId = request.ProductId.Value;
+            log.CustomProductName = null;
+        }
+        else
+        {
+            log.ProductId = null;
+            log.CustomProductName = request.CustomProductName?.Trim();
+        }
+
+        if (request.ClientId.HasValue && request.ClientId > 0)
+        {
+            log.ClientId = request.ClientId.Value;
+            log.CustomClientName = null;
+        }
+        else
+        {
+            log.ClientId = null;
+            log.CustomClientName = request.CustomClientName?.Trim();
+        }
 
         _context.ActivityTimelines.Add(new ActivityTimeline
         {
@@ -118,7 +142,7 @@ public class SupportActivityService : ISupportActivityService
             StartTime = log.StartTime,
             EndTime = now,
             Status = "Stopped",
-            Remarks = request.Remarks
+            Remarks = request.Remarks.Trim()
         });
 
         // Auto-resume held task (Business Rule #3)
@@ -162,27 +186,62 @@ public class SupportActivityService : ISupportActivityService
 
         if (string.IsNullOrWhiteSpace(request.ReviewRemarks))
             throw new InvalidOperationException("Review / Remarks are required to complete Demo.");
-        if (request.ProductId <= 0)
-            throw new InvalidOperationException("Product selection is required.");
-        if (request.ClientId <= 0)
-            throw new InvalidOperationException("Client selection is required.");
+
+        bool hasProduct = (request.ProductId.HasValue && request.ProductId > 0) || !string.IsNullOrWhiteSpace(request.CustomProductName);
+        if (!hasProduct)
+            throw new InvalidOperationException("Product selection or custom product name is required.");
+
+        bool hasClient = (request.ClientId.HasValue && request.ClientId > 0) || !string.IsNullOrWhiteSpace(request.CustomClientName);
+        if (!hasClient)
+            throw new InvalidOperationException("Client selection or custom client name is required.");
+
         if (request.FollowUpDate == default)
             throw new InvalidOperationException("Follow-Up Date is required.");
 
         var now = DateTime.UtcNow;
         log.EndTime = now;
-        log.Remarks = request.ReviewRemarks;
-        log.ProductId = request.ProductId;
-        log.ClientId = request.ClientId;
+        log.Remarks = request.ReviewRemarks.Trim();
+
+        int? targetProductId = null;
+        string? targetCustomProdName = null;
+        if (request.ProductId.HasValue && request.ProductId > 0)
+        {
+            targetProductId = request.ProductId.Value;
+            log.ProductId = targetProductId;
+            log.CustomProductName = null;
+        }
+        else
+        {
+            targetCustomProdName = request.CustomProductName?.Trim();
+            log.ProductId = null;
+            log.CustomProductName = targetCustomProdName;
+        }
+
+        int? targetClientId = null;
+        string? targetCustomClientName = null;
+        if (request.ClientId.HasValue && request.ClientId > 0)
+        {
+            targetClientId = request.ClientId.Value;
+            log.ClientId = targetClientId;
+            log.CustomClientName = null;
+        }
+        else
+        {
+            targetCustomClientName = request.CustomClientName?.Trim();
+            log.ClientId = null;
+            log.CustomClientName = targetCustomClientName;
+        }
 
         // Create DemoFollowUp entity
         var followUp = new DemoFollowUp
         {
             EmployeeId = employeeId,
             SupportActivityLogId = log.Id,
-            ProductId = request.ProductId,
-            ClientId = request.ClientId,
-            ReviewRemarks = request.ReviewRemarks,
+            ProductId = targetProductId,
+            CustomProductName = targetCustomProdName,
+            ClientId = targetClientId,
+            CustomClientName = targetCustomClientName,
+            ReviewRemarks = request.ReviewRemarks.Trim(),
             FollowUpDate = request.FollowUpDate.Date,
             Status = DemoFollowUpStatus.Pending
         };
@@ -223,27 +282,39 @@ public class SupportActivityService : ISupportActivityService
                     RefId = heldTask.Id,
                     StartTime = now,
                     Status = "Resumed",
-                    Remarks = "Auto-resumed task after Demo support activity"
+                    Remarks = "Auto-resumed task after demo activity"
                 });
             }
         }
 
         await _context.SaveChangesAsync();
+        return MapDemoFollowUpToDto(followUp);
+    }
 
-        return (await GetDemoFollowUpByIdAsync(followUp.Id))!;
+    public async Task<List<SupportLogDto>> GetEmployeeSupportHistoryAsync(int employeeId)
+    {
+        var logs = await _context.SupportActivityLogs
+            .Include(s => s.ActivityType)
+            .Include(s => s.Product)
+            .Include(s => s.Client)
+            .Where(s => s.EmployeeId == employeeId && s.EndTime != null)
+            .OrderByDescending(s => s.StartTime)
+            .ToListAsync();
+
+        return logs.Select(MapToDto).ToList();
     }
 
     public async Task<List<DemoFollowUpDto>> GetMyPendingDemoFollowUpsAsync(int employeeId)
     {
-        var list = await _context.DemoFollowUps
+        var items = await _context.DemoFollowUps
             .Include(d => d.Employee)
             .Include(d => d.Product)
             .Include(d => d.Client)
-            .Where(d => d.EmployeeId == employeeId && (d.Status == DemoFollowUpStatus.Pending || d.Status == DemoFollowUpStatus.ReminderSent))
+            .Where(d => d.EmployeeId == employeeId && d.Status == DemoFollowUpStatus.Pending)
             .OrderBy(d => d.FollowUpDate)
             .ToListAsync();
 
-        return list.Select(MapDemoFollowUpToDto).ToList();
+        return items.Select(MapDemoFollowUpToDto).ToList();
     }
 
     public async Task CompleteDemoFollowUpAsync(int followUpId, int employeeId)
@@ -282,7 +353,7 @@ public class SupportActivityService : ISupportActivityService
         return log != null ? MapToDto(log) : null;
     }
 
-    private async Task<DemoFollowUpDto?> GetDemoFollowUpByIdAsync(int id)
+    public async Task<DemoFollowUpDto?> GetDemoFollowUpByIdAsync(int id)
     {
         var item = await _context.DemoFollowUps
             .Include(d => d.Employee)
@@ -304,12 +375,12 @@ public class SupportActivityService : ISupportActivityService
             Id = s.Id,
             EmployeeId = s.EmployeeId,
             ActivityTypeId = s.ActivityTypeId,
-            ActivityTypeName = s.ActivityType.Name,
+            ActivityTypeName = s.ActivityType?.Name ?? string.Empty,
             HeldTaskId = s.HeldTaskId,
             ProductId = s.ProductId,
-            ProductName = s.Product?.Name,
+            ProductName = s.Product != null ? s.Product.Name : s.CustomProductName,
             ClientId = s.ClientId,
-            ClientCompanyName = s.Client?.CompanyName,
+            ClientCompanyName = s.Client != null ? s.Client.CompanyName : s.CustomClientName,
             Remarks = s.Remarks,
             StartTime = DateTime.SpecifyKind(s.StartTime, DateTimeKind.Utc),
             EndTime = s.EndTime.HasValue ? DateTime.SpecifyKind(s.EndTime.Value, DateTimeKind.Utc) : null,
@@ -324,9 +395,9 @@ public class SupportActivityService : ISupportActivityService
         EmployeeName = d.Employee?.Name ?? string.Empty,
         SupportActivityLogId = d.SupportActivityLogId,
         ProductId = d.ProductId,
-        ProductName = d.Product?.Name ?? string.Empty,
+        ProductName = d.Product != null ? d.Product.Name : (d.CustomProductName ?? string.Empty),
         ClientId = d.ClientId,
-        ClientCompanyName = d.Client?.CompanyName ?? string.Empty,
+        ClientCompanyName = d.Client != null ? d.Client.CompanyName : (d.CustomClientName ?? string.Empty),
         ReviewRemarks = d.ReviewRemarks,
         FollowUpDate = d.FollowUpDate,
         Status = d.Status.ToString(),

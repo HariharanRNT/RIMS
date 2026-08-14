@@ -154,13 +154,16 @@ export const ProfilePage: React.FC = () => {
       
       {/* Header Banner */}
       <div style={{
-        background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #4338CA 100%)',
+        background: 'rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(20px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(140%)',
         borderRadius: 'var(--radius-lg)',
         padding: '2.25rem 2rem',
-        color: '#FFFFFF',
+        color: '#F5F5F5',
         position: 'relative',
         overflow: 'hidden',
-        boxShadow: '0 20px 35px -10px rgba(49, 46, 129, 0.35)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+        border: '1px solid rgba(255,255,255,0.12)',
         marginBottom: '2rem'
       }}>
         {/* Subtle Background Glow */}
@@ -170,7 +173,7 @@ export const ProfilePage: React.FC = () => {
           right: '-40px',
           width: '240px',
           height: '240px',
-          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.35) 0%, rgba(255,255,255,0) 70%)',
+          background: 'radial-gradient(circle, rgba(232, 135, 60, 0.20) 0%, rgba(255,255,255,0) 70%)',
           borderRadius: '50%',
           pointerEvents: 'none'
         }} />
@@ -190,7 +193,7 @@ export const ProfilePage: React.FC = () => {
               width: '84px',
               height: '84px',
               borderRadius: '24px',
-              background: 'linear-gradient(135deg, #6366F1 0%, #818CF8 100%)',
+              background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
               color: '#FFFFFF',
               fontSize: '2rem',
               fontWeight: 800,

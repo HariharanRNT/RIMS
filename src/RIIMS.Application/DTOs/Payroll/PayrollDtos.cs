@@ -15,6 +15,12 @@ public class PayslipDto
     public string DepartmentName { get; set; } = string.Empty;
     public string DesignationName { get; set; } = string.Empty;
     public DateTime DateOfJoining { get; set; }
+    public string PanNumber { get; set; } = string.Empty;
+    public string PfNumber { get; set; } = string.Empty;
+    public string EsiNumber { get; set; } = string.Empty;
+    public string AadhaarNumber { get; set; } = string.Empty;
+    public string BankName { get; set; } = string.Empty;
+    public string BankAccountNumber { get; set; } = string.Empty;
     public int Month { get; set; }
     public int Year { get; set; }
 
@@ -43,6 +49,14 @@ public class PayslipDto
     public int LeavesTaken { get; set; }
     public int PermissionsUsed { get; set; }
     public int GraceViolations { get; set; }
+
+    // Detailed LOP Breakdown
+    public int MonthlyAllowedLeave { get; set; }
+    public decimal ActualLeaveDays { get; set; }
+    public decimal SandwichLeaveDays { get; set; }
+    public decimal LeaveLOPDays { get; set; }
+    public decimal LateLoginLOPDays { get; set; }
+    public decimal DailySalary { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

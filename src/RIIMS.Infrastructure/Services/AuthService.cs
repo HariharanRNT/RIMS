@@ -14,12 +14,21 @@ namespace RIIMS.Infrastructure.Services;
 public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
+    private readonly ISessionService _sessionService;
     private readonly IConfiguration _configuration;
     private readonly RiimsDbContext _context;
 
-    public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration, RiimsDbContext context)
+    public AuthService(
+        UserManager<ApplicationUser> userManager,
+        IPasswordHasher<ApplicationUser> passwordHasher,
+        ISessionService sessionService,
+        IConfiguration configuration,
+        RiimsDbContext context)
     {
         _userManager = userManager;
+        _passwordHasher = passwordHasher;
+        _sessionService = sessionService;
         _configuration = configuration;
         _context = context;
     }
@@ -30,14 +39,52 @@ public class AuthService : IAuthService
         if (user == null)
             throw new UnauthorizedAccessException("Invalid email or password.");
 
-        var isValid = await _userManager.CheckPasswordAsync(user, request.Password);
-        if (!isValid)
+        // 1. Password Verification & Legacy Plaintext Migration Strategy
+        bool isPasswordValid = false;
+
+        if (!string.IsNullOrEmpty(user.PasswordHash))
+        {
+            try
+            {
+                var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
+                if (verificationResult == PasswordVerificationResult.Success)
+                {
+                    isPasswordValid = true;
+                }
+                else if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+                {
+                    isPasswordValid = true;
+                    user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
+                    await _userManager.UpdateAsync(user);
+                }
+            }
+            catch (FormatException)
+            {
+                // Legacy plaintext password is not a valid Base64 string for standard Identity hasher
+            }
+        }
+
+        // Fallback for legacy unhashed plaintext stored passwords (migrates on first successful login)
+        if (!isPasswordValid && user.PasswordHash == request.Password)
+        {
+            isPasswordValid = true;
+            user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
+            await _userManager.UpdateAsync(user);
+        }
+
+        if (!isPasswordValid)
             throw new UnauthorizedAccessException("Invalid email or password.");
 
         var roles = await _userManager.GetRolesAsync(user);
         var role = roles.FirstOrDefault() ?? "Employee";
 
-        var token = GenerateJwtToken(user, role);
+        int employeeId = user.EmployeeId ?? 0;
+
+        // 2. Create EmployeeSession (Enforces Single Active Session Policy)
+        var (sessionId, tokenJti) = await _sessionService.CreateSessionAsync(employeeId);
+
+        // 3. Generate JWT Token containing SessionId & TokenJti claims
+        var token = GenerateJwtToken(user, role, sessionId, tokenJti);
 
         string employeeName = role == "Admin" ? "System Administrator" : "Employee";
         if (user.EmployeeId.HasValue && user.EmployeeId.Value > 0)
@@ -58,7 +105,7 @@ public class AuthService : IAuthService
             Token = token,
             Role = role,
             MustChangePassword = user.MustChangePassword,
-            EmployeeId = user.EmployeeId ?? 0,
+            EmployeeId = employeeId,
             EmployeeName = employeeName
         };
     }
@@ -80,7 +127,7 @@ public class AuthService : IAuthService
         await _userManager.UpdateAsync(user);
     }
 
-    private string GenerateJwtToken(ApplicationUser user, string role)
+    private string GenerateJwtToken(ApplicationUser user, string role, Guid sessionId, string tokenJti)
     {
         var jwtSettings = _configuration.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!));
@@ -92,7 +139,8 @@ public class AuthService : IAuthService
             new Claim(JwtRegisteredClaimNames.Email, user.Email!),
             new Claim(ClaimTypes.Role, role),
             new Claim("employeeId", user.EmployeeId?.ToString() ?? "0"),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new Claim("sessionId", sessionId.ToString()),
+            new Claim(JwtRegisteredClaimNames.Jti, tokenJti)
         };
 
         var token = new JwtSecurityToken(

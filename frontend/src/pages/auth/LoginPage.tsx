@@ -126,19 +126,20 @@ export const LoginPage: React.FC = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#DFDFDF',
       padding: '1.5rem',
       fontFamily: "'Inter', system-ui, -apple-system, sans-serif"
     }}>
-      {/* Single Centered Compact Card */}
+      {/* Single Centered Glass Card */}
       <div style={{
         width: '100%',
         maxWidth: '440px',
-        backgroundColor: '#FFFFFF',
+        background: 'rgba(255,255,255,0.08)',
+        backdropFilter: 'blur(24px) saturate(150%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(150%)',
         borderRadius: '20px',
         padding: '2.5rem 2.25rem',
-        boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05)',
-        border: '1px solid #CBD5E1',
+        boxShadow: '0 20px 45px -10px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.10)',
+        border: '1px solid rgba(255,255,255,0.12)',
         animation: 'fadeIn 0.25s ease-in-out'
       }}>
         
@@ -151,10 +152,10 @@ export const LoginPage: React.FC = () => {
             width: '52px',
             height: '52px',
             borderRadius: '14px',
-            backgroundColor: '#FFFFFF',
+            background: 'rgba(255,255,255,0.10)',
             padding: '5px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 6px 16px rgba(123, 97, 255, 0.15)'
+            border: '1px solid rgba(255,255,255,0.15)',
+            boxShadow: '0 6px 16px rgba(232, 135, 60, 0.15)'
           }}>
             <img src={rntLogo} alt="RNT Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
@@ -162,20 +163,20 @@ export const LoginPage: React.FC = () => {
 
         {/* 2. RIMS V2 Heading + Small Subtitle */}
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.03em', margin: 0, lineHeight: 1.1 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#F5F5F5', letterSpacing: '-0.03em', margin: 0, lineHeight: 1.1 }}>
             RIMS V2
           </h1>
-          <p style={{ color: '#7B61FF', fontSize: '0.725rem', fontWeight: 700, letterSpacing: '0.05em', marginTop: '0.2rem' }}>
+          <p style={{ color: '#E8873C', fontSize: '0.725rem', fontWeight: 700, letterSpacing: '0.05em', marginTop: '0.2rem' }}>
             INTEGRATED INFORMATION SYSTEM
           </p>
         </div>
 
         {/* 3. Welcome Back Heading + Subtitle */}
         <div style={{ marginBottom: '1.5rem' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#F5F5F5', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
             Welcome Back
           </h2>
-          <p style={{ color: '#64748B', fontSize: '0.825rem', lineHeight: 1.4 }}>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.825rem', lineHeight: 1.4 }}>
             Sign in with your email credentials to access your portal.
           </p>
         </div>
@@ -183,9 +184,9 @@ export const LoginPage: React.FC = () => {
         {/* Server Auth Error Banner */}
         {serverError && (
           <div style={{
-            background: 'rgba(255, 82, 82, 0.08)',
-            border: '1px solid rgba(255, 82, 82, 0.3)',
-            color: '#FF5252',
+            background: 'rgba(240, 96, 96, 0.12)',
+            border: '1px solid rgba(240, 96, 96, 0.30)',
+            color: '#FF7B7B',
             padding: '0.7rem 0.9rem',
             borderRadius: '12px',
             marginBottom: '1.25rem',
@@ -204,7 +205,7 @@ export const LoginPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setServerError('')}
-              style={{ background: 'none', border: 'none', color: '#FF5252', cursor: 'pointer', padding: 0 }}
+              style={{ background: 'none', border: 'none', color: '#FF7B7B', cursor: 'pointer', padding: 0 }}
             >
               <X size={15} />
             </button>
@@ -215,7 +216,7 @@ export const LoginPage: React.FC = () => {
           
           {/* 4. Email Address Field */}
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+            <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
               Email Address
             </label>
             <div className={shakeState.email ? 'shake-field' : ''} style={{ position: 'relative' }}>
@@ -224,7 +225,7 @@ export const LoginPage: React.FC = () => {
                 left: '14px',
                 top: '50%',
                 transform: 'translateY(-50%)',
-                color: fieldErrors.email ? '#FF5252' : '#94A3B8',
+                color: fieldErrors.email ? '#FF7B7B' : 'rgba(255,255,255,0.35)',
                 transition: 'color 0.2s ease'
               }} />
               <input
@@ -234,8 +235,8 @@ export const LoginPage: React.FC = () => {
                 style={{
                   paddingLeft: '2.6rem',
                   borderRadius: '12px',
-                  borderColor: fieldErrors.email ? '#FF5252' : '#CBD5E1',
-                  backgroundColor: fieldErrors.email ? 'rgba(255, 82, 82, 0.04)' : '#FFFFFF',
+                  borderColor: fieldErrors.email ? 'rgba(240,96,96,0.5)' : 'rgba(255,255,255,0.15)',
+                  backgroundColor: fieldErrors.email ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)',
                   fontSize: '0.875rem',
                   height: '42px',
                   transition: 'all 0.2s ease'
@@ -247,7 +248,7 @@ export const LoginPage: React.FC = () => {
               />
             </div>
             {fieldErrors.email && (
-              <span style={{ fontSize: '0.75rem', color: '#FF5252', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
+              <span style={{ fontSize: '0.75rem', color: '#FF7B7B', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
                 ⚠️ {fieldErrors.email}
               </span>
             )}
@@ -255,7 +256,7 @@ export const LoginPage: React.FC = () => {
 
           {/* 5. Password Field */}
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ fontWeight: 600, color: '#0F172A', fontSize: '0.825rem' }}>
+            <label className="form-label" style={{ fontWeight: 600, color: '#F5F5F5', fontSize: '0.825rem' }}>
               Password
             </label>
             <div className={shakeState.password ? 'shake-field' : ''} style={{ position: 'relative' }}>
@@ -264,7 +265,7 @@ export const LoginPage: React.FC = () => {
                 left: '14px',
                 top: '50%',
                 transform: 'translateY(-50%)',
-                color: fieldErrors.password ? '#FF5252' : '#94A3B8',
+                color: fieldErrors.password ? '#FF7B7B' : 'rgba(255,255,255,0.35)',
                 transition: 'color 0.2s ease'
               }} />
               <input
@@ -275,8 +276,8 @@ export const LoginPage: React.FC = () => {
                   paddingLeft: '2.6rem',
                   paddingRight: '2.6rem',
                   borderRadius: '12px',
-                  borderColor: fieldErrors.password ? '#FF5252' : '#CBD5E1',
-                  backgroundColor: fieldErrors.password ? 'rgba(255, 82, 82, 0.04)' : '#FFFFFF',
+                  borderColor: fieldErrors.password ? 'rgba(240,96,96,0.5)' : 'rgba(255,255,255,0.15)',
+                  backgroundColor: fieldErrors.password ? 'rgba(240,96,96,0.06)' : 'rgba(255,255,255,0.07)',
                   fontSize: '0.875rem',
                   height: '42px',
                   transition: 'all 0.2s ease'
@@ -296,7 +297,7 @@ export const LoginPage: React.FC = () => {
                   transform: 'translateY(-50%)',
                   background: 'none',
                   border: 'none',
-                  color: '#94A3B8',
+                  color: 'rgba(255,255,255,0.35)',
                   cursor: 'pointer',
                   padding: 0
                 }}
@@ -305,7 +306,7 @@ export const LoginPage: React.FC = () => {
               </button>
             </div>
             {fieldErrors.password && (
-              <span style={{ fontSize: '0.75rem', color: '#FF5252', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
+              <span style={{ fontSize: '0.75rem', color: '#FF7B7B', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
                 ⚠️ {fieldErrors.password}
               </span>
             )}
@@ -313,17 +314,17 @@ export const LoginPage: React.FC = () => {
 
           {/* 6. Remember Me & Forgot Password Row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.825rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#475569', cursor: 'pointer', fontWeight: 500 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontWeight: 500 }}>
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                style={{ accentColor: '#6C5CE7', width: '15px', height: '15px', cursor: 'pointer' }}
+                style={{ accentColor: '#E8873C', width: '15px', height: '15px', cursor: 'pointer' }}
               />
               <span>Remember me</span>
             </label>
 
-            <a href="#forgot" onClick={(e) => { e.preventDefault(); alert('Please contact system administrator to reset your password.'); }} style={{ color: '#6C5CE7', fontWeight: 600, textDecoration: 'none' }}>
+            <a href="#forgot" onClick={(e) => { e.preventDefault(); alert('Please contact system administrator to reset your password.'); }} style={{ color: '#E8873C', fontWeight: 600, textDecoration: 'none' }}>
               Forgot password?
             </a>
           </div>
@@ -336,11 +337,11 @@ export const LoginPage: React.FC = () => {
               width: '100%',
               height: '44px',
               borderRadius: '12px',
-              background: loading ? '#94A3B8' : 'linear-gradient(135deg, #6C5CE7 0%, #4834D4 100%)',
-              borderColor: '#6C5CE7',
+              background: loading ? 'rgba(255,255,255,0.15)' : 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
+              borderColor: 'rgba(232,135,60,0.4)',
               fontSize: '0.9rem',
               fontWeight: 700,
-              boxShadow: loading ? 'none' : '0 8px 20px -3px rgba(108, 92, 231, 0.35)',
+              boxShadow: loading ? 'none' : '0 8px 20px -3px rgba(232, 135, 60, 0.35)',
               marginTop: '0.4rem',
               cursor: loading ? 'not-allowed' : 'pointer'
             }}
@@ -360,7 +361,7 @@ export const LoginPage: React.FC = () => {
           </button>
 
           {/* 8. Small Muted Footer Text */}
-          <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.75rem', color: '#94A3B8', fontWeight: 500 }}>
+          <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', fontWeight: 500 }}>
             🔒 Secured enterprise authentication • RIMS v2.0
           </div>
         </form>
