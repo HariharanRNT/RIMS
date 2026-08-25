@@ -116,14 +116,18 @@ public class IdleTimeServiceTests
         using var context = CreateInMemoryContext(nameof(Scenario5_GetCurrentState_ReturnsServerAuthoritativeStateAndTotals));
         var idleService = new IdleTimeService(context);
 
-        var loginTime = new DateTime(2026, 8, 17, 10, 0, 0, DateTimeKind.Utc);
+        var now = DateTime.UtcNow;
+        TimeZoneInfo tz;
+        try { tz = TimeZoneInfo.FindSystemTimeZoneById("Indian Standard Time"); } catch { tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"); }
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(now, tz));
+        var loginTime = now.AddMinutes(-30);
         context.AttendanceLogs.Add(new AttendanceLog { Id = 10, EmployeeId = 1, LoginTime = loginTime });
 
         // Add 1 completed idle log (10:00 - 10:15 = 900s)
         context.IdleTimeLogs.Add(new IdleTimeLog
         {
             EmployeeId = 1,
-            WorkDate = new DateOnly(2026, 8, 17),
+            WorkDate = today,
             StartTime = loginTime,
             EndTime = loginTime.AddMinutes(15),
             DurationSeconds = 900,

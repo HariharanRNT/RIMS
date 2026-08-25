@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Employee;
 using RIIMS.Application.Interfaces;
@@ -8,7 +9,7 @@ namespace RIIMS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin,Employee")]
+[Authorize]
 public class EmployeesController : ControllerBase
 {
     private readonly IEmployeeService _service;
@@ -21,7 +22,7 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Employee.View")]
     public async Task<IActionResult> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
@@ -33,7 +34,6 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpGet("profile")]
-    [Authorize(Roles = "Admin,Employee")]
     public async Task<IActionResult> GetMyProfile()
     {
         var empId = _currentUser.EmployeeId ?? 0;
@@ -45,10 +45,9 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = "Admin,Employee")]
     public async Task<IActionResult> GetById(int id)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != id)
+        if (_currentUser.EmployeeId != id && !await _currentUser.HasPermissionAsync("Employee.View"))
         {
             return Forbid();
         }
@@ -59,7 +58,7 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Employee.Create")]
     public async Task<IActionResult> Create(
         [FromBody] CreateEmployeeRequest request,
         [FromServices] FluentValidation.IValidator<CreateEmployeeRequest> validator)
@@ -77,7 +76,7 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Employee.Edit")]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdateEmployeeRequest request,
@@ -95,7 +94,7 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Employee.Delete", "Employee.Deactivate")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);
@@ -103,10 +102,9 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpGet("{id}/work-details")]
-    [Authorize(Roles = "Admin,Employee")]
     public async Task<IActionResult> GetWorkDetails(int id)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != id)
+        if (_currentUser.EmployeeId != id && !await _currentUser.HasPermissionAsync("Employee.View"))
         {
             return Forbid();
         }
@@ -117,7 +115,7 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPut("{id}/work-details")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Employee.Edit")]
     public async Task<IActionResult> UpdateWorkDetails(int id, [FromBody] UpdateWorkDetailRequest request)
     {
         var result = await _service.UpdateWorkDetailAsync(id, request);

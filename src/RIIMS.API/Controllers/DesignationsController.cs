@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Designation;
 using RIIMS.Application.Interfaces;
@@ -8,7 +9,7 @@ namespace RIIMS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class DesignationsController : ControllerBase
 {
     private readonly IDesignationService _service;
@@ -19,6 +20,7 @@ public class DesignationsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("Designation.View", "Employee.View")]
     public async Task<IActionResult> GetAll()
     {
         var result = await _service.GetAllAsync();
@@ -26,6 +28,7 @@ public class DesignationsController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission("Designation.View", "Employee.View")]
     public async Task<IActionResult> GetById(int id)
     {
         var result = await _service.GetByIdAsync(id);
@@ -34,6 +37,7 @@ public class DesignationsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("Designation.Manage")]
     public async Task<IActionResult> Create([FromBody] CreateDesignationRequest request)
     {
         var result = await _service.CreateAsync(request);
@@ -42,6 +46,7 @@ public class DesignationsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission("Designation.Manage")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateDesignationRequest request)
     {
         var result = await _service.UpdateAsync(id, request);
@@ -49,6 +54,7 @@ public class DesignationsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("Designation.Manage")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Lookup;
 using RIIMS.Application.Interfaces;
@@ -35,7 +36,7 @@ public class LeaveTypesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage", "Leave.View")]
     public async Task<IActionResult> Create([FromBody] CreateLookupRequest request)
     {
         var result = await _service.CreateAsync(request);
@@ -44,7 +45,7 @@ public class LeaveTypesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage", "Leave.View")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateLookupRequest request)
     {
         var result = await _service.UpdateAsync(id, request);
@@ -52,7 +53,7 @@ public class LeaveTypesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage", "Leave.View")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);

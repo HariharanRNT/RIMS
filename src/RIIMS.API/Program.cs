@@ -29,7 +29,7 @@ builder.Services.AddDbContext<RiimsDbContext>(options =>
            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // 2. ASP.NET Core Identity
-builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
+builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 {
     options.Password.RequireDigit = false;
     options.Password.RequireLowercase = false;
@@ -66,9 +66,12 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// 4. HTTP Context & Current User Service
+// 4. HTTP Context, Current User & Authorization Engine
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IPermissionManagementService, PermissionManagementService>();
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, RIIMS.API.Authorization.PermissionPolicyProvider>();
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, RIIMS.API.Authorization.PermissionAuthorizationHandler>();
 
 // 5. Repositories & Services
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
@@ -156,7 +159,7 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<RiimsDbContext>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
-        var roleManager = services.GetRequiredService<RoleManager<IdentityRole<int>>>();
+        var roleManager = services.GetRequiredService<RoleManager<ApplicationRole>>();
         await DataSeeder.SeedAsync(context, userManager, roleManager);
     }
     catch (Exception ex)

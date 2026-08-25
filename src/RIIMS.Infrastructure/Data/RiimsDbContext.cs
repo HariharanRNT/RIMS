@@ -7,7 +7,7 @@ using RIIMS.Infrastructure.Identity;
 
 namespace RIIMS.Infrastructure.Data;
 
-public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>, int>
+public class RiimsDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, int>
 {
     public RiimsDbContext(DbContextOptions<RiimsDbContext> options) : base(options)
     {
@@ -53,10 +53,12 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
     public DbSet<EmployeeSalaryStructure> EmployeeSalaryStructures => Set<EmployeeSalaryStructure>();
     public DbSet<SalaryComponent> SalaryComponents => Set<SalaryComponent>();
 
-    // Auth & Identity
+    // Auth, Identity & RBAC
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<AdminNotificationRead> AdminNotificationReads => Set<AdminNotificationRead>();
     public DbSet<CelebrationLog> CelebrationLogs => Set<CelebrationLog>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
     // Reports
     public DbSet<MonthlyReportLog> MonthlyReportLogs => Set<MonthlyReportLog>();
@@ -67,6 +69,30 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
 
         // Apply all IEntityTypeConfiguration classes from this assembly
         builder.ApplyConfigurationsFromAssembly(typeof(RiimsDbContext).Assembly);
+
+        builder.Entity<Permission>(entity =>
+        {
+            entity.HasIndex(p => p.Code).IsUnique();
+            entity.Property(p => p.Name).HasMaxLength(150).IsRequired();
+            entity.Property(p => p.Code).HasMaxLength(100).IsRequired();
+            entity.Property(p => p.Module).HasMaxLength(100).IsRequired();
+            entity.Property(p => p.Description).HasMaxLength(500);
+        });
+
+        builder.Entity<RolePermission>(entity =>
+        {
+            entity.HasKey(rp => new { rp.RoleId, rp.PermissionId });
+
+            entity.HasOne<ApplicationRole>()
+                .WithMany(r => r.RolePermissions)
+                .HasForeignKey(rp => rp.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rp => rp.Permission)
+                .WithMany(p => p.RolePermissions)
+                .HasForeignKey(rp => rp.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         builder.Entity<CelebrationLog>(entity =>
         {

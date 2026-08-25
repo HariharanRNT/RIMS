@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Payroll;
 using RIIMS.Application.Interfaces;
@@ -21,7 +22,7 @@ public class PayrollController : ControllerBase
     }
 
     [HttpPost("process")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Payroll.Generate")]
     public async Task<IActionResult> Process([FromBody] ProcessPayrollRequest request)
     {
         var result = await _service.ProcessMonthlyPayrollAsync(request.Month, request.Year);
@@ -29,7 +30,7 @@ public class PayrollController : ControllerBase
     }
 
     [HttpGet("summary")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Payroll.View")]
     public async Task<IActionResult> GetSummary([FromQuery] int month, [FromQuery] int year)
     {
         var result = await _service.GetMonthlyPayrollSummaryAsync(month, year);
@@ -39,8 +40,8 @@ public class PayrollController : ControllerBase
     [HttpGet("payslip/{employeeId}")]
     public async Task<IActionResult> GetPayslip(int employeeId, [FromQuery] int month, [FromQuery] int year)
     {
-        // Security Rule #10: Employees must not be able to access another employee's payslip
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // Strict IDOR Check: allow user to fetch their own payslip or if they hold Payroll.View permission
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Payroll.View"))
         {
             return Forbid();
         }
@@ -53,8 +54,8 @@ public class PayrollController : ControllerBase
     [HttpGet("my-payslips/{employeeId}")]
     public async Task<IActionResult> GetMyPayslips(int employeeId)
     {
-        // Security Rule #10: Employees must not be able to access another employee's payslip
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // Strict IDOR Check: allow user to fetch their own payslips or if they hold Payroll.View permission
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Payroll.View"))
         {
             return Forbid();
         }

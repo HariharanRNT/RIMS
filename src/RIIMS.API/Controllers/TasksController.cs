@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Task;
 using RIIMS.Application.Interfaces;
@@ -35,7 +36,7 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> Assign([FromBody] AssignTaskRequest request)
     {
         var currentUserId = GetEmployeeId();
-        var role = _currentUser.Role ?? "Employee";
+        var role = await _currentUser.HasPermissionAsync("Task.Assign") ? "Admin" : (_currentUser.Role ?? "Employee");
         var result = await _service.AssignTaskAsync(currentUserId, role, request);
         return Ok(ApiResponse<TaskDto>.SuccessResponse(result, "Task assigned successfully."));
     }
@@ -75,7 +76,8 @@ public class TasksController : ControllerBase
     [HttpGet("active/{employeeId}")]
     public async Task<IActionResult> GetActive(int employeeId)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // Strict IDOR Check
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Task.View"))
         {
             return Forbid();
         }
@@ -87,7 +89,8 @@ public class TasksController : ControllerBase
     [HttpGet("history/{employeeId}")]
     public async Task<IActionResult> GetHistory(int employeeId, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // Strict IDOR Check
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Task.View"))
         {
             return Forbid();
         }
@@ -99,7 +102,8 @@ public class TasksController : ControllerBase
     [HttpGet("assigned/{employeeId}")]
     public async Task<IActionResult> GetAssignedTasks(int employeeId)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // Strict IDOR Check
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Task.View"))
         {
             return Forbid();
         }
@@ -125,7 +129,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("admin-all")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Task.View")]
     public async Task<IActionResult> GetAdminTasks(
         [FromQuery] int? employeeId,
         [FromQuery] int? departmentId,
@@ -143,7 +147,7 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> Reassign(int id, [FromBody] ReassignTaskRequest request)
     {
         var currentUserId = GetEmployeeId();
-        var role = _currentUser.Role ?? "Employee";
+        var role = await _currentUser.HasPermissionAsync("Task.Assign") ? "Admin" : (_currentUser.Role ?? "Employee");
         var result = await _service.ReassignTaskAsync(id, currentUserId, role, request);
         return Ok(ApiResponse<TaskDto>.SuccessResponse(result, "Task reassigned successfully."));
     }
@@ -152,7 +156,7 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> Cancel(int id, [FromBody] CancelTaskRequest request)
     {
         var currentUserId = GetEmployeeId();
-        var role = _currentUser.Role ?? "Employee";
+        var role = await _currentUser.HasPermissionAsync("Task.Delete") ? "Admin" : (_currentUser.Role ?? "Employee");
         await _service.CancelTaskAsync(id, currentUserId, role, request);
         return Ok(ApiResponse.SuccessResponse("Task cancelled successfully."));
     }
@@ -161,7 +165,7 @@ public class TasksController : ControllerBase
     public async Task<IActionResult> GetTimeline(int id)
     {
         var currentUserId = GetEmployeeId();
-        var role = _currentUser.Role ?? "Employee";
+        var role = await _currentUser.HasPermissionAsync("Task.View") ? "Admin" : (_currentUser.Role ?? "Employee");
         var result = await _service.GetTaskTimelineAsync(id, currentUserId, role);
         return Ok(ApiResponse<List<TaskTimelineEventDto>>.SuccessResponse(result));
     }

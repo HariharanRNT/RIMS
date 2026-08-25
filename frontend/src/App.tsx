@@ -28,6 +28,10 @@ import { MonthlyCalendarPage } from './pages/admin/attendance/MonthlyCalendarPag
 import { AttendancePermissionsPage } from './pages/admin/attendance/AttendancePermissionsPage';
 import { AdminNotificationsPage } from './pages/admin/notifications/AdminNotificationsPage';
 
+import { UsersListPage } from './pages/admin/users/UsersListPage';
+import { RolesListPage } from './pages/admin/roles/RolesListPage';
+import { PermissionsManagementPage } from './pages/admin/permissions/PermissionsManagementPage';
+
 import { EmployeeDashboardPage } from './pages/employee/DashboardPage';
 import { WorkTaskPage } from './pages/employee/WorkTaskPage';
 import { LeaveRequestPage } from './pages/employee/LeaveRequestPage';
@@ -68,23 +72,161 @@ export const App: React.FC = () => {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="profile" element={<ProfilePage />} />
-            <Route path="attendance-permissions" element={<AttendancePermissionsPage />} />
-            <Route path="approvals" element={<ApprovalsPage />} />
-            <Route path="payroll" element={<PayrollProcessingPage />} />
-            <Route path="salary-structure" element={<EmployeeSalaryStructurePage />} />
-            <Route path="payroll/monthly-report" element={<MonthlyEmployeePayrollReportPage />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="tasks" element={<TaskAllocationPage />} />
-            <Route path="employees" element={<EmployeeListPage />} />
-            <Route path="departments" element={<DepartmentListPage />} />
-            <Route path="designations" element={<DesignationListPage />} />
-            <Route path="products" element={<ProductListPage />} />
-            <Route path="clients" element={<ClientListPage />} />
-            <Route path="mappings" element={<ProductClientMappingPage />} />
-            <Route path="lookups" element={<LookupListPage />} />
-            <Route path="settings" element={<SystemSettingsPage />} />
-            <Route path="attendance-calendar" element={<MonthlyCalendarPage />} />
+            <Route
+              path="attendance-permissions"
+              element={
+                <ProtectedRoute requiredPermissions={['Attendance.View', 'Permission.View', 'Report.View']}>
+                  <AttendancePermissionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="approvals"
+              element={
+                <ProtectedRoute requiredPermissions={['Leave.Approve', 'Permission.Approve', 'Attendance.Approve']}>
+                  <ApprovalsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="payroll"
+              element={
+                <ProtectedRoute requiredPermissions={['Payroll.View', 'Payroll.Generate']}>
+                  <PayrollProcessingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="salary-structure"
+              element={
+                <ProtectedRoute requiredPermissions={['SalaryStructure.View', 'SalaryStructure.Manage']}>
+                  <EmployeeSalaryStructurePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="payroll/monthly-report"
+              element={
+                <ProtectedRoute requiredPermissions={['Payroll.View', 'Report.View']}>
+                  <MonthlyEmployeePayrollReportPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="reports"
+              element={
+                <ProtectedRoute requiredPermission="Report.View">
+                  <ReportsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="tasks"
+              element={
+                <ProtectedRoute requiredPermissions={['Task.View', 'Task.Assign']}>
+                  <TaskAllocationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="employees"
+              element={
+                <ProtectedRoute requiredPermission="Employee.View">
+                  <EmployeeListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="departments"
+              element={
+                <ProtectedRoute requiredPermissions={['Department.View', 'Department.Manage']}>
+                  <DepartmentListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="designations"
+              element={
+                <ProtectedRoute requiredPermissions={['Designation.View', 'Designation.Manage']}>
+                  <DesignationListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="products"
+              element={
+                <ProtectedRoute requiredPermissions={['MasterData.Manage', 'Employee.View']}>
+                  <ProductListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="clients"
+              element={
+                <ProtectedRoute requiredPermissions={['MasterData.Manage', 'Employee.View']}>
+                  <ClientListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="mappings"
+              element={
+                <ProtectedRoute requiredPermissions={['MasterData.Manage', 'Employee.View']}>
+                  <ProductClientMappingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="lookups"
+              element={
+                <ProtectedRoute requiredPermissions={['MasterData.Manage', 'Break.Manage', 'SupportActivity.Manage']}>
+                  <LookupListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <ProtectedRoute requiredPermission="Settings.View">
+                  <SystemSettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="attendance-calendar"
+              element={
+                <ProtectedRoute requiredPermissions={['AttendanceCalendar.View', 'AttendanceCalendar.Manage']}>
+                  <MonthlyCalendarPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="notifications" element={<AdminNotificationsPage />} />
+
+            {/* RBAC Administration Routes */}
+            <Route
+              path="users"
+              element={
+                <ProtectedRoute requiredPermission="User.View">
+                  <UsersListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="roles"
+              element={
+                <ProtectedRoute requiredPermission="Role.View">
+                  <RolesListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="permissions"
+              element={
+                <ProtectedRoute requiredPermissions={['Role.Assign', 'SystemPermission.View', 'Role.View']}>
+                  <PermissionsManagementPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
           {/* Employee Routes */}

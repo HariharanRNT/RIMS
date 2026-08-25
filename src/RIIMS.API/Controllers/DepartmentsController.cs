@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Department;
 using RIIMS.Application.Interfaces;
@@ -8,7 +9,7 @@ namespace RIIMS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class DepartmentsController : ControllerBase
 {
     private readonly IDepartmentService _service;
@@ -19,6 +20,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("Department.View", "Employee.View")]
     public async Task<IActionResult> GetAll()
     {
         var result = await _service.GetAllAsync();
@@ -26,6 +28,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission("Department.View", "Employee.View")]
     public async Task<IActionResult> GetById(int id)
     {
         var result = await _service.GetByIdAsync(id);
@@ -34,6 +37,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission("Department.Manage")]
     public async Task<IActionResult> Create([FromBody] CreateDepartmentRequest request)
     {
         var result = await _service.CreateAsync(request);
@@ -42,6 +46,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [RequirePermission("Department.Manage")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateDepartmentRequest request)
     {
         var result = await _service.UpdateAsync(id, request);
@@ -49,6 +54,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission("Department.Manage")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);

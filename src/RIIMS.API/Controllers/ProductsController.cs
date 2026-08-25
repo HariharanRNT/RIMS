@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Product;
 using RIIMS.Application.Interfaces;
@@ -34,7 +35,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage")]
     public async Task<IActionResult> Create([FromBody] CreateProductRequest request)
     {
         var result = await _service.CreateAsync(request);
@@ -42,7 +43,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateProductRequest request)
     {
         var result = await _service.UpdateAsync(id, request);
@@ -50,7 +51,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);

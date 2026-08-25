@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Payroll;
 using RIIMS.Application.Interfaces;
@@ -21,25 +22,24 @@ public class SalaryStructureController : ControllerBase
     }
 
     [HttpPost("payroll/preview")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("SalaryStructure.View", "SalaryStructure.Manage", "Payroll.View")]
     public IActionResult PreviewSalaryStructure([FromBody] SalaryPreviewRequestDto request)
     {
         try
         {
             var result = _salaryStructureService.CalculateSalaryPreview(request);
-            return Ok(new { success = true, data = result });
+            return Ok(ApiResponse<SalaryPreviewResponseDto>.SuccessResponse(result));
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(ApiResponse.FailResponse(ex.Message));
         }
     }
 
     [HttpGet("employees/{employeeId}/salary-structure")]
-    [Authorize(Roles = "Admin,Employee")]
     public async Task<IActionResult> GetActiveSalaryStructure(int employeeId, [FromQuery] DateTime? forDate)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("SalaryStructure.View"))
         {
             return Forbid();
         }
@@ -47,34 +47,33 @@ public class SalaryStructureController : ControllerBase
         try
         {
             var result = await _salaryStructureService.GetActiveSalaryStructureAsync(employeeId, forDate);
-            return Ok(new { success = true, data = result });
+            return Ok(ApiResponse<SalaryStructureResponseDto>.SuccessResponse(result!));
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(ApiResponse.FailResponse(ex.Message));
         }
     }
 
     [HttpPost("employees/{employeeId}/salary-structure")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("SalaryStructure.Manage")]
     public async Task<IActionResult> CreateOrUpdateSalaryStructure(int employeeId, [FromBody] CreateSalaryStructureDto dto)
     {
         try
         {
             var result = await _salaryStructureService.CreateOrUpdateSalaryStructureAsync(employeeId, dto);
-            return Ok(new { success = true, message = "Salary structure saved successfully.", data = result });
+            return Ok(ApiResponse<SalaryStructureResponseDto>.SuccessResponse(result, "Salary structure saved successfully."));
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(ApiResponse.FailResponse(ex.Message));
         }
     }
 
     [HttpGet("employees/{employeeId}/salary-history")]
-    [Authorize(Roles = "Admin,Employee")]
     public async Task<IActionResult> GetSalaryHistory(int employeeId)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("SalaryStructure.View"))
         {
             return Forbid();
         }
@@ -82,11 +81,11 @@ public class SalaryStructureController : ControllerBase
         try
         {
             var result = await _salaryStructureService.GetSalaryHistoryAsync(employeeId);
-            return Ok(new { success = true, data = result });
+            return Ok(ApiResponse<List<SalaryStructureResponseDto>>.SuccessResponse(result));
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(ApiResponse.FailResponse(ex.Message));
         }
     }
 }

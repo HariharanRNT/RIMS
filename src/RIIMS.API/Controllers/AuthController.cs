@@ -65,4 +65,13 @@ public class AuthController : ControllerBase
         await _authService.ResetPasswordWithTokenAsync(request, ipAddress);
         return Ok(ApiResponse.SuccessResponse("Your password has been reset successfully."));
     }
+
+    [HttpGet("me")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> GetCurrentUserProfile()
+    {
+        var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+        var result = await _authService.GetCurrentUserProfileAsync(userId);
+        return Ok(ApiResponse<CurrentUserProfileDto>.SuccessResponse(result));
+    }
 }

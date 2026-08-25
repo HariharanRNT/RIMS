@@ -21,15 +21,17 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  Calculator
+  Calculator,
+  UserCog,
+  Shield
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { role, user, logout } = useAuth();
+  const { role, user, logout, isAdmin, hasAnyPermission, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
 
-  const profilePath = role === 'Admin' ? '/admin/profile' : '/profile';
+  const profilePath = isAdmin ? '/admin/profile' : '/profile';
 
   const handleLogout = async () => {
     await logout();
@@ -41,37 +43,45 @@ export const Sidebar: React.FC = () => {
       title: 'OVERVIEW',
       items: [
         { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/admin/attendance-permissions', label: 'Attendance & Permissions', icon: ShieldCheck },
-        { to: '/admin/approvals', label: 'Approval Queue', icon: CheckCircle },
+        { to: '/admin/attendance-permissions', label: 'Attendance & Permissions', icon: ShieldCheck, permissions: ['Attendance.View', 'Permission.View', 'Report.View'] },
+        { to: '/admin/approvals', label: 'Approval Queue', icon: CheckCircle, permissions: ['Leave.Approve', 'Permission.Approve', 'Attendance.Approve'] },
       ]
     },
     {
       title: 'WORKFORCE & ATTENDANCE',
       items: [
-        { to: '/admin/attendance-calendar', label: 'Monthly Calendar', icon: CalendarDays },
-        { to: '/admin/tasks', label: 'Task Allocation', icon: Briefcase },
-        { to: '/admin/employees', label: 'Employees', icon: Users },
-        { to: '/admin/departments', label: 'Departments', icon: Building2 },
-        { to: '/admin/designations', label: 'Designations', icon: Briefcase },
+        { to: '/admin/attendance-calendar', label: 'Monthly Calendar', icon: CalendarDays, permissions: ['AttendanceCalendar.View', 'AttendanceCalendar.Manage'] },
+        { to: '/admin/tasks', label: 'Task Allocation', icon: Briefcase, permissions: ['Task.View', 'Task.Assign'] },
+        { to: '/admin/employees', label: 'Employees', icon: Users, permissions: ['Employee.View', 'Employee.Create'] },
+        { to: '/admin/departments', label: 'Departments', icon: Building2, permissions: ['Department.View', 'Department.Manage'] },
+        { to: '/admin/designations', label: 'Designations', icon: Briefcase, permissions: ['Designation.View', 'Designation.Manage'] },
       ]
     },
     {
       title: 'FINANCE & REPORTS',
       items: [
-        { to: '/admin/payroll', label: 'Payroll & LOP', icon: CreditCard },
-        { to: '/admin/salary-structure', label: 'Salary Structure', icon: Calculator },
-        { to: '/admin/payroll/monthly-report', label: 'Monthly Employee Report', icon: FileSpreadsheet },
-        { to: '/admin/reports', label: 'Production Reports', icon: FileText },
+        { to: '/admin/payroll', label: 'Payroll & LOP', icon: CreditCard, permissions: ['Payroll.View', 'Payroll.Generate'] },
+        { to: '/admin/salary-structure', label: 'Salary Structure', icon: Calculator, permissions: ['SalaryStructure.View', 'SalaryStructure.Manage'] },
+        { to: '/admin/payroll/monthly-report', label: 'Monthly Employee Report', icon: FileSpreadsheet, permissions: ['Payroll.View', 'Report.View'] },
+        { to: '/admin/reports', label: 'Production Reports', icon: FileText, permissions: ['Report.View'] },
       ]
     },
     {
       title: 'CATALOG & SYSTEM',
       items: [
-        { to: '/admin/products', label: 'Products', icon: Package },
-        { to: '/admin/clients', label: 'Clients', icon: UserCheck },
-        { to: '/admin/mappings', label: 'Product-Client Maps', icon: Link2 },
-        { to: '/admin/lookups', label: 'Master Lookups', icon: Clock },
-        { to: '/admin/settings', label: 'System Settings', icon: Settings },
+        { to: '/admin/products', label: 'Products', icon: Package, permissions: ['MasterData.Manage', 'Employee.View'] },
+        { to: '/admin/clients', label: 'Clients', icon: UserCheck, permissions: ['MasterData.Manage', 'Employee.View'] },
+        { to: '/admin/mappings', label: 'Product-Client Maps', icon: Link2, permissions: ['MasterData.Manage', 'Employee.View'] },
+        { to: '/admin/lookups', label: 'Master Lookups', icon: Clock, permissions: ['MasterData.Manage', 'Break.Manage', 'SupportActivity.Manage'] },
+        { to: '/admin/settings', label: 'System Settings', icon: Settings, permissions: ['Settings.View', 'Settings.Edit'] },
+      ]
+    },
+    {
+      title: 'ADMINISTRATION & RBAC',
+      items: [
+        { to: '/admin/users', label: 'Admin Users', icon: UserCog, permissions: ['User.View', 'User.Create'] },
+        { to: '/admin/roles', label: 'Roles', icon: Shield, permissions: ['Role.View', 'Role.Create'] },
+        { to: '/admin/permissions', label: 'Permissions Matrix', icon: ShieldCheck, permissions: ['Role.Assign', 'SystemPermission.View', 'Role.View'] },
       ]
     }
   ];
@@ -95,25 +105,43 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  const groups = role === 'Admin' ? adminNavGroups : employeeNavGroups;
+  // Filter groups according to permissions
+  const filteredAdminGroups = adminNavGroups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => {
+        if (isSuperAdmin) return true;
+        if (!item.permissions || item.permissions.length === 0) return true;
+        return hasAnyPermission(item.permissions);
+      })
+    }))
+    .filter(group => group.items.length > 0);
 
-  const formatDisplayName = (name?: string, userRole?: string) => {
-    if (!name) return userRole === 'Admin' ? 'System Administrator' : 'Employee';
+  const groups = isAdmin ? filteredAdminGroups : employeeNavGroups;
+
+  const formatDisplayName = (name?: string) => {
+    if (!name) return isAdmin ? 'Administrator' : 'Employee';
     if (name.includes('@')) {
       const localPart = name.split('@')[0];
       const cleanName = localPart.replace(/[0-9._-]/g, ' ').trim();
-      if (!cleanName) return userRole === 'Admin' ? 'System Administrator' : 'Employee';
+      if (!cleanName) return isAdmin ? 'Administrator' : 'Employee';
       return cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
     return name;
   };
 
   const getInitials = (name?: string) => {
-    const displayName = formatDisplayName(name, role ?? undefined);
+    const displayName = formatDisplayName(name);
     const parts = displayName.trim().split(' ');
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return displayName.substring(0, 2).toUpperCase();
   };
+
+  const portalLabel = isSuperAdmin
+    ? 'SUPER ADMIN'
+    : isAdmin
+    ? (user?.roles?.find(r => r.toLowerCase().endsWith('admin') || r.toLowerCase() === 'admin')?.toUpperCase() || 'ADMIN')
+    : 'EMPLOYEE';
 
   return (
     <aside style={{
@@ -168,7 +196,7 @@ export const Sidebar: React.FC = () => {
                 textTransform: 'uppercase',
                 marginTop: '3px'
               }}>
-                {role ? `${role.toUpperCase()} PORTAL` : 'PORTAL'}
+                {portalLabel} PORTAL
               </div>
             </div>
           )}
@@ -302,10 +330,10 @@ export const Sidebar: React.FC = () => {
               </div>
               <div style={{ lineHeight: 1.2, overflow: 'hidden' }}>
                 <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                  {formatDisplayName(user?.employeeName, user?.role)}
+                  {formatDisplayName(user?.employeeName)}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-faint)', fontWeight: 500, marginTop: '2px' }}>
-                  EMP #{user?.employeeId || '1'}
+                  {user?.roles && user.roles.length > 0 ? user.roles.join(', ') : (role || 'Employee')}
                 </div>
               </div>
             </div>

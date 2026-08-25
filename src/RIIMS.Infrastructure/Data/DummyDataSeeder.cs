@@ -9,7 +9,7 @@ namespace RIIMS.Infrastructure.Data;
 
 public static class DummyDataSeeder
 {
-    public static async Task SeedDummyDataAsync(RiimsDbContext context, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<int>> roleManager)
+    public static async Task SeedDummyDataAsync(RiimsDbContext context, UserManager<ApplicationUser> userManager, RoleManager<ApplicationRole> roleManager)
     {
         // Auto-fix reporting relationships so EMP-002 (John Doe) has reportees for manager testing
         var johnDoeEmp = await context.Employees.FirstOrDefaultAsync(e => e.EmployeeCode == "EMP-002");

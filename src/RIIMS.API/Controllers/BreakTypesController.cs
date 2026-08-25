@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Lookup;
 using RIIMS.Application.Interfaces;
@@ -35,7 +36,7 @@ public class BreakTypesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Break.Manage")]
     public async Task<IActionResult> Create([FromBody] CreateLookupRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -50,7 +51,7 @@ public class BreakTypesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Break.Manage")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateLookupRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -64,7 +65,7 @@ public class BreakTypesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Break.Manage")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);

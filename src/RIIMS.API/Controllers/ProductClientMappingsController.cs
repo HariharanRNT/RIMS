@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.ProductClientMapping;
 using RIIMS.Application.Interfaces;
@@ -7,7 +8,7 @@ using RIIMS.Application.Interfaces;
 namespace RIIMS.API.Controllers;
 
 [ApiController]
-[Route("api/mappings")]
+[Route("api/[controller]")]
 [Authorize]
 public class ProductClientMappingsController : ControllerBase
 {
@@ -19,14 +20,14 @@ public class ProductClientMappingsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int? clientId, [FromQuery] int? productId)
+    public async Task<IActionResult> GetAll()
     {
-        var result = await _service.GetAllAsync(clientId, productId);
+        var result = await _service.GetAllAsync();
         return Ok(ApiResponse<List<ProductClientMappingDto>>.SuccessResponse(result));
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage")]
     public async Task<IActionResult> Create([FromBody] CreateMappingRequest request)
     {
         var result = await _service.CreateAsync(request);
@@ -34,10 +35,10 @@ public class ProductClientMappingsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("MasterData.Manage")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);
-        return Ok(ApiResponse.SuccessResponse("Mapping removed."));
+        return Ok(ApiResponse.SuccessResponse("Mapping deleted."));
     }
 }

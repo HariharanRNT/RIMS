@@ -9,4 +9,5 @@ public interface IAuthService
     Task ForgotPasswordAsync(ForgotPasswordRequest request, string? ipAddress);
     Task<bool> ValidateResetTokenAsync(string token);
     Task ResetPasswordWithTokenAsync(ResetPasswordWithTokenRequest request, string? ipAddress);
+    Task<CurrentUserProfileDto> GetCurrentUserProfileAsync(int userId);
 }

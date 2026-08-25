@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Leave;
 using RIIMS.Application.Interfaces;
@@ -31,7 +32,8 @@ public class LeavesController : ControllerBase
     [HttpGet("my-requests/{employeeId}")]
     public async Task<IActionResult> GetMyRequests(int employeeId)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // IDOR Defense: only allow self or user with Leave.View permission
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Leave.View"))
         {
             return Forbid();
         }
@@ -44,11 +46,13 @@ public class LeavesController : ControllerBase
     public async Task<IActionResult> GetPendingApprovals()
     {
         var employeeId = GetEmployeeId();
-        var result = await _service.GetPendingApprovalsAsync(employeeId, _currentUser.IsAdmin);
+        var canApproveAll = await _currentUser.HasPermissionAsync("Leave.Approve") || await _currentUser.HasPermissionAsync("Leave.View");
+        var result = await _service.GetPendingApprovalsAsync(employeeId, canApproveAll);
         return Ok(ApiResponse<List<LeaveRequestDto>>.SuccessResponse(result));
     }
 
     [HttpPost("{id}/approve")]
+    [RequirePermission("Leave.Approve")]
     public async Task<IActionResult> Approve(int id)
     {
         var approverId = GetEmployeeId();
@@ -57,6 +61,7 @@ public class LeavesController : ControllerBase
     }
 
     [HttpPost("{id}/reject")]
+    [RequirePermission("Leave.Reject")]
     public async Task<IActionResult> Reject(int id)
     {
         var approverId = GetEmployeeId();

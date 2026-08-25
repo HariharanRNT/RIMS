@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Report;
 using RIIMS.Application.Interfaces;
@@ -21,9 +22,13 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("admin-dashboard")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetAdminDashboard()
     {
+        if (!_currentUser.IsAdmin)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetAdminDashboardMetricsAsync();
         return Ok(ApiResponse<AdminDashboardMetricsDto>.SuccessResponse(result));
     }
@@ -31,7 +36,7 @@ public class ReportsController : ControllerBase
     [HttpGet("employee-dashboard/{employeeId}")]
     public async Task<IActionResult> GetEmployeeDashboard(int employeeId)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Report.View"))
         {
             return Forbid();
         }
@@ -41,7 +46,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("monthly-production")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Report.View")]
     public async Task<IActionResult> GetMonthlyProduction([FromQuery] int month, [FromQuery] int year, [FromQuery] int? employeeId, [FromQuery] int? departmentId)
     {
         var result = await _service.GetMonthlyProductionReportAsync(month, year, employeeId, departmentId);
@@ -49,7 +54,6 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("daily-production")]
-    [Authorize]
     public async Task<IActionResult> GetDailyProduction(
         [FromQuery] DateTime? date,
         [FromQuery] DateTime? startDate,
@@ -57,7 +61,8 @@ public class ReportsController : ControllerBase
         [FromQuery] int? employeeId,
         [FromQuery] int? departmentId)
     {
-        if (!_currentUser.IsAdmin)
+        var hasReportView = await _currentUser.HasPermissionAsync("Report.View");
+        if (!hasReportView)
         {
             employeeId = _currentUser.EmployeeId;
         }
@@ -69,7 +74,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("export-daily-production")]
-    [Authorize]
+    [RequirePermission("Report.Export", "Attendance.Export", "Payroll.Export")]
     public async Task<IActionResult> ExportDailyProduction(
         [FromQuery] DateTime? date,
         [FromQuery] DateTime? startDate,
@@ -77,11 +82,6 @@ public class ReportsController : ControllerBase
         [FromQuery] int? employeeId,
         [FromQuery] int? departmentId)
     {
-        if (!_currentUser.IsAdmin)
-        {
-            employeeId = _currentUser.EmployeeId;
-        }
-
         var start = startDate ?? date ?? DateTime.UtcNow.Date;
         var end = endDate ?? date ?? DateTime.UtcNow.Date;
 
@@ -95,7 +95,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("attendance-permissions")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Attendance.View", "Permission.View", "Report.View")]
     public async Task<IActionResult> GetAttendancePermissions(
         [FromQuery] DateTime? date,
         [FromQuery] DateTime? startDate,
@@ -110,14 +110,13 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("daily-detail/{employeeId}")]
-    [Authorize]
     public async Task<IActionResult> GetDailyDetail(
         int employeeId,
         [FromQuery] DateTime? date,
         [FromQuery] DateTime? startDate,
         [FromQuery] DateTime? endDate)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Report.View"))
         {
             return Forbid();
         }
@@ -128,10 +127,8 @@ public class ReportsController : ControllerBase
         return Ok(ApiResponse<EmployeeDailyDetailDto>.SuccessResponse(result));
     }
 
-
-
     [HttpGet("work-distribution")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("Report.View")]
     public async Task<IActionResult> GetWorkDistribution([FromQuery] int month, [FromQuery] int year)
     {
         var result = await _service.GetWorkDistributionReportAsync(month, year);
@@ -139,9 +136,10 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("admin-notifications")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetAdminNotifications()
     {
+        if (!_currentUser.IsAdmin) return Forbid();
+
         var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
         var result = await _service.GetAdminNotificationsAsync(userId);
         return Ok(ApiResponse<AdminNotificationSummaryDto>.SuccessResponse(result));
@@ -153,21 +151,22 @@ public class ReportsController : ControllerBase
     }
 
     [HttpPost("admin-notifications/read")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> MarkNotificationRead([FromBody] MarkReadRequest request)
     {
+        if (!_currentUser.IsAdmin) return Forbid();
+
         var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
         await _service.MarkNotificationReadAsync(userId, request.Key);
         return Ok(ApiResponse.SuccessResponse("Notification marked as read."));
     }
 
     [HttpPost("admin-notifications/read-all")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> MarkAllNotificationsRead()
     {
+        if (!_currentUser.IsAdmin) return Forbid();
+
         var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
         await _service.MarkAllNotificationsReadAsync(userId);
         return Ok(ApiResponse.SuccessResponse("All notifications marked as read."));
     }
 }
-

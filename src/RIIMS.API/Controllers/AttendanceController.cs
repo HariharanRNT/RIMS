@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Attendance;
 using RIIMS.Application.Interfaces;
@@ -41,7 +42,8 @@ public class AttendanceController : ControllerBase
     [HttpGet("{employeeId}")]
     public async Task<IActionResult> GetByDate(int employeeId, [FromQuery] DateTime? date)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // IDOR check: allow own record or Attendance.View permission
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Attendance.View"))
         {
             return Forbid();
         }
@@ -53,7 +55,7 @@ public class AttendanceController : ControllerBase
     }
 
     [HttpPost("{id}/mark-permission")]
-    [Authorize(Roles = "Admin,Manager")]
+    [RequirePermission("Attendance.Edit", "Attendance.Approve")]
     public async Task<IActionResult> MarkPermission(int id, [FromQuery] bool force = false)
     {
         var result = await _service.MarkPermissionAsync(id, force);
@@ -63,7 +65,8 @@ public class AttendanceController : ControllerBase
     [HttpGet("permission-summary/{employeeId}")]
     public async Task<IActionResult> GetPermissionSummary(int employeeId, [FromQuery] int? month, [FromQuery] int? year)
     {
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        // IDOR check: allow own record or Attendance.View permission
+        if (_currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Attendance.View"))
         {
             return Forbid();
         }

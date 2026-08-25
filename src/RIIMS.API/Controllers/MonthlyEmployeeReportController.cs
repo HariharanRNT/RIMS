@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Payroll;
 using RIIMS.Application.Interfaces;
@@ -8,7 +9,7 @@ namespace RIIMS.API.Controllers;
 
 [ApiController]
 [Route("api/payroll/monthly-report")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class MonthlyEmployeeReportController : ControllerBase
 {
     private readonly IMonthlyEmployeeReportService _reportService;
@@ -19,6 +20,7 @@ public class MonthlyEmployeeReportController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("Payroll.View", "Report.View")]
     public async Task<IActionResult> GetMonthlyReport(
         [FromQuery] int year,
         [FromQuery] int month,
@@ -42,6 +44,7 @@ public class MonthlyEmployeeReportController : ControllerBase
     }
 
     [HttpGet("export")]
+    [RequirePermission("Payroll.Export", "Report.Export")]
     public async Task<IActionResult> ExportExcel(
         [FromQuery] int year,
         [FromQuery] int month)

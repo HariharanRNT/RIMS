@@ -8,7 +8,7 @@ namespace RIIMS.Infrastructure.Data;
 
 public static class DataSeeder
 {
-    public static async Task SeedAsync(RiimsDbContext context, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<int>> roleManager)
+    public static async Task SeedAsync(RiimsDbContext context, UserManager<ApplicationUser> userManager, RoleManager<ApplicationRole> roleManager)
     {
         // Ensure Database Created / Migrated
         try
@@ -67,17 +67,234 @@ public static class DataSeeder
             // Table already exists or migration handled
         }
 
-        // 1. Roles
-        string[] roles = { "Admin", "Employee" };
-        foreach (var role in roles)
+        // 1. Seed Permissions Catalog
+        var permissionDefinitions = new (string Code, string Name, string Module, string Description)[]
         {
-            if (!await roleManager.RoleExistsAsync(role))
+            // Employee Module
+            ("Employee.View", "View Employees", "Employee", "View employee list and employee master records"),
+            ("Employee.Create", "Create Employee", "Employee", "Create and register new employee profiles"),
+            ("Employee.Edit", "Edit Employee", "Employee", "Modify employee profile details and work allocations"),
+            ("Employee.Delete", "Delete Employee", "Employee", "Delete employee records"),
+            ("Employee.Activate", "Activate Employee", "Employee", "Reactivate deactivated employee profiles"),
+            ("Employee.Deactivate", "Deactivate Employee", "Employee", "Deactivate active employee profiles"),
+
+            // Department & Designation
+            ("Department.View", "View Departments", "Department", "View department master directory"),
+            ("Department.Manage", "Manage Departments", "Department", "Create, edit, and delete departments"),
+            ("Designation.View", "View Designations", "Designation", "View designation master directory"),
+            ("Designation.Manage", "Manage Designations", "Designation", "Create, edit, and delete designations"),
+
+            // Attendance & Calendar
+            ("Attendance.View", "View Attendance", "Attendance", "View real-time and historical attendance records"),
+            ("Attendance.Edit", "Edit Attendance", "Attendance", "Modify employee attendance punch logs"),
+            ("Attendance.Approve", "Approve Attendance", "Attendance", "Approve attendance records and deviations"),
+            ("Attendance.Export", "Export Attendance", "Attendance", "Export attendance logs to Excel/CSV"),
+            ("AttendanceCalendar.View", "View Calendar", "AttendanceCalendar", "View monthly work schedule and holidays"),
+            ("AttendanceCalendar.Manage", "Manage Calendar", "AttendanceCalendar", "Update working day / holiday / weekend classifications"),
+            ("AttendanceCalendar.Publish", "Publish Calendar", "AttendanceCalendar", "Publish monthly attendance calendar to workforce"),
+
+            // Leave & Permission Requests
+            ("Leave.View", "View Leaves", "Leave", "View leave requests across employees"),
+            ("Leave.Create", "Create Leave", "Leave", "Apply for leave requests"),
+            ("Leave.Approve", "Approve Leave", "Leave", "Approve pending employee leave requests"),
+            ("Leave.Reject", "Reject Leave", "Leave", "Reject pending employee leave requests"),
+            ("Permission.View", "View Permissions", "Permission", "View late login / permission requests"),
+            ("Permission.Approve", "Approve Permission", "Permission", "Approve pending employee permission requests"),
+            ("Permission.Reject", "Reject Permission", "Permission", "Reject pending employee permission requests"),
+
+            // Task & Support Management
+            ("Task.View", "View Tasks", "Task", "View task allocation engine and timeline"),
+            ("Task.Create", "Create Task", "Task", "Create and allocate tasks"),
+            ("Task.Assign", "Assign Task", "Task", "Reassign tasks among team members"),
+            ("Task.Edit", "Edit Task", "Task", "Modify task parameters and deadlines"),
+            ("Task.Delete", "Delete Task", "Task", "Delete allocated tasks"),
+            ("Break.View", "View Breaks", "Break", "View employee break logs"),
+            ("Break.Manage", "Manage Breaks", "Break", "Configure break types and thresholds"),
+            ("SupportActivity.View", "View Support Activities", "SupportActivity", "View support activity sessions and logs"),
+            ("SupportActivity.Manage", "Manage Support Activities", "SupportActivity", "Configure support activity categories"),
+
+            // Payroll & Salary Structure
+            ("Payroll.View", "View Payroll", "Payroll", "View monthly payroll and LOP deductions"),
+            ("Payroll.Generate", "Generate Payroll", "Payroll", "Process and calculate monthly payroll calculations"),
+            ("Payroll.Edit", "Edit Payroll", "Payroll", "Override and adjust payroll calculations"),
+            ("Payroll.Approve", "Approve Payroll", "Payroll", "Finalize and approve payroll batches"),
+            ("Payroll.Export", "Export Payroll", "Payroll", "Export payslips and payroll registers"),
+            ("SalaryStructure.View", "View Salary Structure", "SalaryStructure", "View employee salary structures"),
+            ("SalaryStructure.Manage", "Manage Salary Structure", "SalaryStructure", "Configure employee salary structures"),
+
+            // Reports & Celebrations
+            ("Report.View", "View Reports", "Report", "View production, attendance, and analytics reports"),
+            ("Report.Export", "Export Reports", "Report", "Export management summary reports"),
+            ("Celebration.View", "View Celebrations", "Celebration", "View birthday and anniversary logs"),
+            ("Celebration.Manage", "Manage Celebrations", "Celebration", "Configure celebration preferences"),
+
+            // Administration, RBAC & Settings
+            ("Settings.View", "View System Settings", "Settings", "View system configuration and rules"),
+            ("Settings.Edit", "Edit System Settings", "Settings", "Update system settings and operational parameters"),
+            ("User.View", "View Admin Users", "User", "View administrator accounts"),
+            ("User.Create", "Create Admin User", "User", "Register new administrator accounts"),
+            ("User.Edit", "Edit Admin User", "User", "Modify administrator details and assign roles"),
+            ("User.Deactivate", "Deactivate Admin User", "User", "Deactivate administrator accounts"),
+            ("User.ResetPassword", "Reset User Password", "User", "Reset administrator account credentials"),
+            ("Role.View", "View Roles", "Role", "View defined system and custom roles"),
+            ("Role.Create", "Create Role", "Role", "Create custom authorization roles"),
+            ("Role.Edit", "Edit Role", "Role", "Modify role attributes and description"),
+            ("Role.Assign", "Assign Role Permissions", "Role", "Configure permission matrix for roles"),
+            ("SystemPermission.View", "View System Permissions", "SystemPermission", "Inspect application permission dictionary"),
+            ("MasterData.View", "View Master Data", "MasterData", "View products, clients, and lookup mappings"),
+            ("MasterData.Manage", "Manage Master Data", "MasterData", "Create and edit products, clients, and mappings")
+        };
+
+        var permissionDict = new Dictionary<string, Permission>();
+        foreach (var def in permissionDefinitions)
+        {
+            var existingPerm = await context.Permissions.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Code == def.Code);
+            if (existingPerm == null)
             {
-                await roleManager.CreateAsync(new IdentityRole<int>(role));
+                existingPerm = new Permission
+                {
+                    Code = def.Code,
+                    Name = def.Name,
+                    Module = def.Module,
+                    Description = def.Description,
+                    IsActive = true
+                };
+                context.Permissions.Add(existingPerm);
             }
+            else
+            {
+                existingPerm.Name = def.Name;
+                existingPerm.Module = def.Module;
+                existingPerm.Description = def.Description;
+                existingPerm.IsActive = true;
+            }
+            permissionDict[def.Code] = existingPerm;
+        }
+        await context.SaveChangesAsync();
+
+        // 2. Roles Definition & Seeding
+        var roleDefinitions = new (string Name, string Description, bool IsSystem, bool IsProtected)[]
+        {
+            ("Super Admin", "Super Administrator with unrestricted access to all modules and configurations", true, true),
+            ("HR Admin", "HR Administrator - Manages employees, leaves, approvals, and celebrations", true, false),
+            ("Attendance Admin", "Attendance Administrator - Manages attendance logs, shifts, and calendar", true, false),
+            ("Payroll Admin", "Payroll Administrator - Manages salary structures, LOP, and monthly payroll", true, false),
+            ("Task Admin", "Task Administrator - Manages task allocations and support activity logs", true, false),
+            ("Reports Admin", "Reports Administrator - Views and exports organizational and financial reports", true, false),
+            ("Employee Admin", "Employee Directory Administrator - Manages workforce master data", true, false),
+            ("Employee", "Standard Employee Access", true, true),
+            ("Admin", "Legacy Full Administrator", false, false)
+        };
+
+        var roleEntityDict = new Dictionary<string, ApplicationRole>();
+        foreach (var rDef in roleDefinitions)
+        {
+            var role = await roleManager.FindByNameAsync(rDef.Name);
+            if (role == null)
+            {
+                role = new ApplicationRole
+                {
+                    Name = rDef.Name,
+                    Description = rDef.Description,
+                    IsSystemRole = rDef.IsSystem,
+                    IsProtected = rDef.IsProtected,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await roleManager.CreateAsync(role);
+            }
+            else
+            {
+                role.Description = rDef.Description;
+                role.IsSystemRole = rDef.IsSystem;
+                role.IsProtected = rDef.IsProtected;
+                role.IsActive = true;
+                await roleManager.UpdateAsync(role);
+            }
+            roleEntityDict[rDef.Name] = role;
         }
 
-        // 2. Department & Designation for Admin
+        // 3. Seed Role-Permissions Map
+        var rolePermissionsMap = new Dictionary<string, string[]>
+        {
+            ["HR Admin"] = new[]
+            {
+                "Employee.View", "Employee.Create", "Employee.Edit",
+                "Leave.View", "Leave.Approve", "Leave.Reject",
+                "Permission.View", "Permission.Approve", "Permission.Reject",
+                "Attendance.View", "AttendanceCalendar.View",
+                "Celebration.View", "Celebration.Manage",
+                "Report.View", "Department.View", "Designation.View"
+            },
+            ["Attendance Admin"] = new[]
+            {
+                "Attendance.View", "Attendance.Edit", "Attendance.Approve", "Attendance.Export",
+                "AttendanceCalendar.View", "AttendanceCalendar.Manage", "AttendanceCalendar.Publish",
+                "Break.View", "Break.Manage",
+                "Report.View"
+            },
+            ["Payroll Admin"] = new[]
+            {
+                "Payroll.View", "Payroll.Generate", "Payroll.Edit", "Payroll.Approve", "Payroll.Export",
+                "SalaryStructure.View", "SalaryStructure.Manage",
+                "Attendance.View", "Leave.View",
+                "Report.View", "Report.Export"
+            },
+            ["Task Admin"] = new[]
+            {
+                "Task.View", "Task.Create", "Task.Assign", "Task.Edit", "Task.Delete",
+                "SupportActivity.View", "SupportActivity.Manage",
+                "Break.View", "Report.View"
+            },
+            ["Reports Admin"] = new[]
+            {
+                "Report.View", "Report.Export",
+                "Attendance.Export", "Payroll.Export",
+                "Employee.View", "Attendance.View", "Leave.View", "Payroll.View", "Task.View"
+            },
+            ["Employee Admin"] = new[]
+            {
+                "Employee.View", "Employee.Create", "Employee.Edit", "Employee.Activate", "Employee.Deactivate",
+                "Department.View", "Department.Manage",
+                "Designation.View", "Designation.Manage",
+                "MasterData.View", "MasterData.Manage"
+            },
+            ["Employee"] = new[]
+            {
+                "Leave.Create", "Task.View", "AttendanceCalendar.View"
+            },
+            ["Admin"] = permissionDefinitions.Select(p => p.Code).ToArray()
+        };
+
+        foreach (var (roleName, permCodes) in rolePermissionsMap)
+        {
+            if (!roleEntityDict.TryGetValue(roleName, out var role)) continue;
+
+            var existingRolePerms = await context.RolePermissions
+                .Where(rp => rp.RoleId == role.Id)
+                .ToListAsync();
+
+            var existingPermIds = existingRolePerms.Select(rp => rp.PermissionId).ToHashSet();
+
+            foreach (var code in permCodes)
+            {
+                if (permissionDict.TryGetValue(code, out var perm))
+                {
+                    if (!existingPermIds.Contains(perm.Id))
+                    {
+                        context.RolePermissions.Add(new RolePermission
+                        {
+                            RoleId = role.Id,
+                            PermissionId = perm.Id
+                        });
+                    }
+                }
+            }
+        }
+        await context.SaveChangesAsync();
+
+        // 4. Department & Designation for Admin
         var adminDept = await context.Departments.FirstOrDefaultAsync(d => d.Name == "Administration");
         if (adminDept == null)
         {
@@ -114,7 +331,7 @@ public static class DataSeeder
         }
         await context.SaveChangesAsync();
 
-        // 3. Admin Employee & Identity User
+        // 5. Admin Employee & Identity User (admin@riims.local) -> Super Admin
         var adminEmail = "admin@riims.local";
         var adminEmp = await context.Employees
             .IgnoreQueryFilters()
@@ -143,17 +360,26 @@ public static class DataSeeder
                 UserName = adminEmail,
                 Email = adminEmail,
                 EmployeeId = adminEmp.Id,
-                MustChangePassword = false
+                MustChangePassword = false,
+                IsActive = true
             };
 
             var result = await userManager.CreateAsync(adminUser, "Admin@123456");
             if (result.Succeeded)
             {
+                await userManager.AddToRoleAsync(adminUser, "Super Admin");
                 await userManager.AddToRoleAsync(adminUser, "Admin");
             }
         }
+        else
+        {
+            if (!await userManager.IsInRoleAsync(adminUser, "Super Admin"))
+            {
+                await userManager.AddToRoleAsync(adminUser, "Super Admin");
+            }
+        }
 
-        // 3b. Admin Employee & Identity User (harideepa0611@gmail.com)
+        // 5b. Admin Employee & Identity User (harideepa0611@gmail.com) -> Super Admin
         var admin2Email = "harideepa0611@gmail.com";
         var admin2Emp = await context.Employees
             .IgnoreQueryFilters()
@@ -182,13 +408,45 @@ public static class DataSeeder
                 UserName = admin2Email,
                 Email = admin2Email,
                 EmployeeId = admin2Emp.Id,
-                MustChangePassword = false
+                MustChangePassword = false,
+                IsActive = true
             };
 
             var result = await userManager.CreateAsync(admin2User, "Admin@123");
             if (result.Succeeded)
             {
+                await userManager.AddToRoleAsync(admin2User, "Super Admin");
                 await userManager.AddToRoleAsync(admin2User, "Admin");
+            }
+        }
+        else
+        {
+            if (!await userManager.IsInRoleAsync(admin2User, "Super Admin"))
+            {
+                await userManager.AddToRoleAsync(admin2User, "Super Admin");
+            }
+        }
+
+        // 5c. Automatically migrate all existing users and ensure IsActive = true
+        var allUsers = await userManager.Users.ToListAsync();
+        foreach (var u in allUsers)
+        {
+            if (!u.IsActive)
+            {
+                u.IsActive = true;
+                await userManager.UpdateAsync(u);
+            }
+
+            var uRoles = await userManager.GetRolesAsync(u);
+            if (uRoles.Contains("Admin") || 
+                uRoles.Contains("Super Admin") ||
+                u.Email?.Contains("admin", StringComparison.OrdinalIgnoreCase) == true ||
+                u.Email == "hariharanrntgemini@gmail.com")
+            {
+                if (!uRoles.Contains("Super Admin"))
+                {
+                    await userManager.AddToRoleAsync(u, "Super Admin");
+                }
             }
         }
 

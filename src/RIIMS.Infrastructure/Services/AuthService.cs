@@ -22,6 +22,7 @@ public class AuthService : IAuthService
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
     private readonly RiimsDbContext _context;
+    private readonly IPermissionManagementService _permissionService;
 
     public AuthService(
         UserManager<ApplicationUser> userManager,
@@ -29,7 +30,8 @@ public class AuthService : IAuthService
         ISessionService sessionService,
         IEmailService emailService,
         IConfiguration configuration,
-        RiimsDbContext context)
+        RiimsDbContext context,
+        IPermissionManagementService permissionService)
     {
         _userManager = userManager;
         _passwordHasher = passwordHasher;
@@ -37,6 +39,7 @@ public class AuthService : IAuthService
         _emailService = emailService;
         _configuration = configuration;
         _context = context;
+        _permissionService = permissionService;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
@@ -44,6 +47,9 @@ public class AuthService : IAuthService
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user == null)
             throw new UnauthorizedAccessException("Invalid email or password.");
+
+        if (!user.IsActive)
+            throw new UnauthorizedAccessException("Your account has been deactivated. Please contact an administrator.");
 
         // 1. Password Verification & Legacy Plaintext Migration Strategy
         bool isPasswordValid = false;
@@ -81,18 +87,24 @@ public class AuthService : IAuthService
         if (!isPasswordValid)
             throw new UnauthorizedAccessException("Invalid email or password.");
 
-        var roles = await _userManager.GetRolesAsync(user);
-        var role = roles.FirstOrDefault() ?? "Employee";
+        var roles = (await _userManager.GetRolesAsync(user)).ToList();
+        var primaryRole = roles.FirstOrDefault(r => r == "Super Admin" || r.EndsWith("Admin") || r == "Admin") ?? roles.FirstOrDefault() ?? "Employee";
+        bool isSuperAdmin = roles.Contains("Super Admin", StringComparer.OrdinalIgnoreCase) || roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
 
         int employeeId = user.EmployeeId ?? 0;
 
         // 2. Create EmployeeSession (Enforces Single Active Session Policy)
         var (sessionId, tokenJti) = await _sessionService.CreateSessionAsync(employeeId);
 
-        // 3. Generate JWT Token containing SessionId & TokenJti claims
-        var token = GenerateJwtToken(user, role, sessionId, tokenJti);
+        // 3. Generate JWT Token containing SessionId, TokenJti, and all User Roles
+        var token = GenerateJwtToken(user, roles, primaryRole, sessionId, tokenJti);
 
-        string employeeName = role == "Admin" ? "System Administrator" : "Employee";
+        // 4. Retrieve unified permissions for the user
+        var permissions = await _permissionService.GetUserPermissionCodesAsync(user.Id);
+
+        string employeeName = primaryRole == "Super Admin" ? "Super Administrator" :
+                              primaryRole.EndsWith("Admin") ? $"{primaryRole}" : "Employee";
+
         if (user.EmployeeId.HasValue && user.EmployeeId.Value > 0)
         {
             var emp = await _context.Employees.FindAsync(user.EmployeeId.Value);
@@ -109,10 +121,48 @@ public class AuthService : IAuthService
         return new LoginResponse
         {
             Token = token,
-            Role = role,
+            Role = primaryRole,
+            Roles = roles,
+            Permissions = permissions,
+            IsSuperAdmin = isSuperAdmin,
             MustChangePassword = user.MustChangePassword,
             EmployeeId = employeeId,
             EmployeeName = employeeName
+        };
+    }
+
+    public async Task<CurrentUserProfileDto> GetCurrentUserProfileAsync(int userId)
+    {
+        var user = await _userManager.Users
+            .Include(u => u.Employee)
+                .ThenInclude(e => e!.Department)
+            .Include(u => u.Employee)
+                .ThenInclude(e => e!.Designation)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+            throw new KeyNotFoundException("User not found.");
+
+        var roles = (await _userManager.GetRolesAsync(user)).ToList();
+        var primaryRole = roles.FirstOrDefault(r => r == "Super Admin" || r.EndsWith("Admin") || r == "Admin") ?? roles.FirstOrDefault() ?? "Employee";
+        bool isSuperAdmin = roles.Contains("Super Admin", StringComparer.OrdinalIgnoreCase) || roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+        var permissions = await _permissionService.GetUserPermissionCodesAsync(user.Id);
+
+        return new CurrentUserProfileDto
+        {
+            UserId = user.Id,
+            Username = user.UserName ?? string.Empty,
+            Email = user.Email ?? string.Empty,
+            EmployeeId = user.EmployeeId ?? 0,
+            EmployeeCode = user.Employee?.EmployeeCode,
+            EmployeeName = user.Employee?.Name ?? user.UserName ?? "User",
+            DepartmentName = user.Employee?.Department?.Name,
+            DesignationName = user.Employee?.Designation?.Name,
+            PrimaryRole = primaryRole,
+            Roles = roles,
+            Permissions = permissions,
+            IsSuperAdmin = isSuperAdmin,
+            MustChangePassword = user.MustChangePassword
         };
     }
 
@@ -133,21 +183,29 @@ public class AuthService : IAuthService
         await _userManager.UpdateAsync(user);
     }
 
-    private string GenerateJwtToken(ApplicationUser user, string role, Guid sessionId, string tokenJti)
+    private string GenerateJwtToken(ApplicationUser user, List<string> roles, string primaryRole, Guid sessionId, string tokenJti)
     {
         var jwtSettings = _configuration.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email!),
-            new Claim(ClaimTypes.Role, role),
+            new Claim(ClaimTypes.Role, primaryRole),
             new Claim("employeeId", user.EmployeeId?.ToString() ?? "0"),
             new Claim("sessionId", sessionId.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, tokenJti)
         };
+
+        foreach (var r in roles.Distinct())
+        {
+            if (r != primaryRole)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, r));
+            }
+        }
 
         var token = new JwtSecurityToken(
             issuer: jwtSettings["Issuer"],

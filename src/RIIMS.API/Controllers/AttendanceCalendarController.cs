@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.AttendanceCalendar;
 using RIIMS.Application.Interfaces;
@@ -35,7 +36,7 @@ public class AttendanceCalendarController : ControllerBase
     }
 
     [HttpPost("generate")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("AttendanceCalendar.Manage")]
     public async Task<IActionResult> GenerateCalendar([FromBody] GenerateCalendarRequestDto dto)
     {
         var result = await _service.GenerateMonthlyCalendarAsync(dto.Year, dto.Month);
@@ -43,7 +44,7 @@ public class AttendanceCalendarController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("AttendanceCalendar.Manage")]
     public async Task<IActionResult> UpdateCalendarDay(int id, [FromBody] UpdateCalendarDayRequestDto dto)
     {
         var userId = _currentUser.EmployeeId ?? _currentUser.UserId ?? 0;
@@ -53,7 +54,7 @@ public class AttendanceCalendarController : ControllerBase
     }
 
     [HttpPost("{id:int}/change")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("AttendanceCalendar.Manage")]
     public async Task<IActionResult> ChangePublishedCalendarDay(int id, [FromBody] UpdateCalendarDayRequestDto dto)
     {
         var userId = _currentUser.EmployeeId ?? _currentUser.UserId ?? 0;
@@ -63,7 +64,7 @@ public class AttendanceCalendarController : ControllerBase
     }
 
     [HttpPost("{year:int}/{month:int}/publish")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("AttendanceCalendar.Publish", "AttendanceCalendar.Manage")]
     public async Task<IActionResult> PublishCalendar(int year, int month)
     {
         var userId = _currentUser.EmployeeId ?? _currentUser.UserId ?? 0;
@@ -72,7 +73,7 @@ public class AttendanceCalendarController : ControllerBase
     }
 
     [HttpGet("{id:int}/audits")]
-    [Authorize(Roles = "Admin")]
+    [RequirePermission("AttendanceCalendar.Manage", "AttendanceCalendar.View")]
     public async Task<IActionResult> GetAuditLogs(int id)
     {
         var result = await _service.GetCalendarAuditLogsAsync(id);
@@ -88,7 +89,7 @@ public class AttendanceCalendarController : ControllerBase
             return BadRequest(ApiResponse.FailResponse("Employee ID is required to fetch monthly attendance."));
         }
 
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != targetEmployeeId.Value)
+        if (_currentUser.EmployeeId != targetEmployeeId.Value && !await _currentUser.HasPermissionAsync("Attendance.View"))
         {
             return Forbid();
         }
@@ -106,7 +107,7 @@ public class AttendanceCalendarController : ControllerBase
             return BadRequest(ApiResponse.FailResponse("Employee ID is required to fetch monthly attendance report."));
         }
 
-        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != targetEmployeeId.Value)
+        if (_currentUser.EmployeeId != targetEmployeeId.Value && !await _currentUser.HasPermissionAsync("Attendance.View"))
         {
             return Forbid();
         }

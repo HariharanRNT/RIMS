@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RIIMS.API.Attributes;
 using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Settings;
 using RIIMS.Application.Interfaces;
@@ -8,7 +9,7 @@ namespace RIIMS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class SettingsController : ControllerBase
 {
     private readonly ISystemSettingService _service;
@@ -19,6 +20,7 @@ public class SettingsController : ControllerBase
     }
 
     [HttpGet]
+    [RequirePermission("Settings.View")]
     public async Task<IActionResult> GetAll()
     {
         var result = await _service.GetAllAsync();
@@ -26,6 +28,7 @@ public class SettingsController : ControllerBase
     }
 
     [HttpGet("{key}")]
+    [RequirePermission("Settings.View")]
     public async Task<IActionResult> GetByKey(string key)
     {
         var result = await _service.GetByKeyAsync(key);
@@ -34,6 +37,7 @@ public class SettingsController : ControllerBase
     }
 
     [HttpPut("{key}")]
+    [RequirePermission("Settings.Edit")]
     public async Task<IActionResult> Update(string key, [FromBody] UpdateSettingRequest request)
     {
         var result = await _service.UpdateAsync(key, request);
