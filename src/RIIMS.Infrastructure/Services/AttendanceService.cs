@@ -3,6 +3,7 @@ using RIIMS.Application.DTOs.Attendance;
 using RIIMS.Application.DTOs.Settings;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
+using RIIMS.Domain.Enums;
 using RIIMS.Infrastructure.Data;
 using TaskStatusEnum = RIIMS.Domain.Enums.TaskStatus;
 
@@ -12,11 +13,13 @@ public class AttendanceService : IAttendanceService
 {
     private readonly RiimsDbContext _context;
     private readonly ISystemSettingService _settingService;
+    private readonly IIdleTimeService _idleTimeService;
 
-    public AttendanceService(RiimsDbContext context, ISystemSettingService settingService)
+    public AttendanceService(RiimsDbContext context, ISystemSettingService settingService, IIdleTimeService idleTimeService)
     {
         _context = context;
         _settingService = settingService;
+        _idleTimeService = idleTimeService;
     }
 
     private static readonly TimeZoneInfo IstTimeZone = GetIstTimeZone();
@@ -66,17 +69,43 @@ public class AttendanceService : IAttendanceService
         // Daily First Login Rule: Only the earliest valid login event of the day is evaluated for late login.
         // Subsequent login events after a logout on the same date are break returns / additional sessions and MUST NEVER be marked late.
         bool isLate;
+        bool isPermission = false;
         string status;
 
         if (existingTodayLog != null)
         {
             isLate = false;
-            status = "Normal";
+            status = "Subsequent Session";
         }
         else
         {
-            isLate = loginTimeOfDay > graceEnd;
-            status = isLate ? "Late" : "Normal";
+            var todayDate = DateOnly.FromDateTime(nowIst.Date);
+            var todayLeave = await _context.LeaveRequests
+                .FirstOrDefaultAsync(l => l.EmployeeId == employeeId &&
+                                          l.Status == RequestStatus.Approved &&
+                                          l.FromDate.Date <= nowIst.Date &&
+                                          l.ToDate.Date >= nowIst.Date);
+
+            var todayPermission = await _context.PermissionRequests
+                .FirstOrDefaultAsync(p => p.EmployeeId == employeeId &&
+                                          p.Status == RequestStatus.Approved &&
+                                          p.RequestDate.Date == nowIst.Date);
+
+            var calEntry = await _context.AttendanceCalendars
+                .FirstOrDefaultAsync(c => c.CalendarDate == todayDate);
+
+            var eval = AttendanceRuleEvaluator.EvaluateDay(
+                todayDate,
+                now,
+                null,
+                todayLeave,
+                todayPermission,
+                calEntry,
+                settings);
+
+            isLate = eval.IsLateLogin;
+            isPermission = eval.IsPermissionUsed;
+            status = eval.Status;
         }
 
         DateTime allowedEndTimeUtc;
@@ -119,65 +148,16 @@ public class AttendanceService : IAttendanceService
             LoginTime = now,
             LogoutTime = null,
             IsLate = isLate,
-            IsPermission = false,
-            PermissionHours = 0,
+            IsPermission = isPermission,
+            PermissionHours = isPermission ? settings.PermissionHours : 0m,
             Status = status,
             AllowedEndTime = allowedEndTimeUtc
         };
 
         _context.AttendanceLogs.Add(attendance);
 
-        // Check for previous explicit logout on the same WorkDate to create IdleTimeLog gap record
-        var previousLogoutLog = todayLogs
-            .Where(a => a.LogoutTime.HasValue && TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone).Date == nowIst.Date)
-            .OrderByDescending(a => a.LogoutTime!.Value)
-            .FirstOrDefault();
-
-        if (previousLogoutLog != null && previousLogoutLog.LogoutTime.HasValue)
-        {
-            var gapStartUtc = previousLogoutLog.LogoutTime.Value;
-            var gapEndUtc = now;
-
-            if (allowedEndTimeUtc > DateTime.MinValue && gapEndUtc > allowedEndTimeUtc)
-            {
-                gapEndUtc = allowedEndTimeUtc;
-            }
-
-            if (gapEndUtc > gapStartUtc)
-            {
-                int durationMinutes = (int)Math.Max(1, Math.Round((gapEndUtc - gapStartUtc).TotalMinutes));
-
-                bool exists = await _context.IdleTimeLogs.AnyAsync(i =>
-                    i.EmployeeId == employeeId &&
-                    i.StartTime == gapStartUtc &&
-                    i.EndTime == gapEndUtc);
-
-                if (!exists)
-                {
-                    _context.IdleTimeLogs.Add(new IdleTimeLog
-                    {
-                        EmployeeId = employeeId,
-                        WorkDate = DateOnly.FromDateTime(nowIst),
-                        StartTime = gapStartUtc,
-                        EndTime = gapEndUtc,
-                        DurationMinutes = durationMinutes,
-                        Type = "LogoutLoginGap"
-                    });
-
-                    _context.ActivityTimelines.Add(new ActivityTimeline
-                    {
-                        EmployeeId = employeeId,
-                        ActivityType = "Idle",
-                        RefTable = "IdleTimeLogs",
-                        RefId = 0,
-                        StartTime = gapStartUtc,
-                        EndTime = gapEndUtc,
-                        Status = "Completed",
-                        Remarks = $"Logout-login gap idle time ({durationMinutes} mins)"
-                    });
-                }
-            }
-        }
+        // Start open idle record if no active task/support/break
+        await _idleTimeService.OnPunchInAsync(employeeId, now);
 
         if (isLate)
         {
@@ -285,6 +265,7 @@ public class AttendanceService : IAttendanceService
             });
         }
 
+        await _idleTimeService.OnPunchOutAsync(employeeId, now);
         await _context.SaveChangesAsync();
     }
 
@@ -319,7 +300,7 @@ public class AttendanceService : IAttendanceService
         return resultList;
     }
 
-    public async Task<AttendanceDto> MarkPermissionAsync(int attendanceId)
+    public async Task<MarkPermissionResultDto> MarkPermissionAsync(int attendanceId, bool force = false)
     {
         var attendance = await _context.AttendanceLogs
             .FirstOrDefaultAsync(a => a.Id == attendanceId);
@@ -330,20 +311,30 @@ public class AttendanceService : IAttendanceService
         if (!attendance.IsLate)
             throw new InvalidOperationException("This attendance record was a normal login and cannot be converted to permission.");
 
+        var settings = await _settingService.GetTypedSettingsAsync();
+
         if (attendance.IsPermission)
         {
-            var existingSettings = await _settingService.GetTypedSettingsAsync();
-            return await BuildAttendanceDtoAsync(attendance, existingSettings);
+            var attDto = await BuildAttendanceDtoAsync(attendance, settings);
+            return new MarkPermissionResultDto { WarningNeeded = false, Attendance = attDto };
         }
 
         var istTime = TimeZoneInfo.ConvertTimeFromUtc(attendance.LoginTime, IstTimeZone);
-        var permSummary = await GetPermissionSummaryAsync(attendance.EmployeeId, istTime.Year, istTime.Month);
+        
+        int monthPermissionCount = await _context.AttendanceLogs
+            .CountAsync(a => a.EmployeeId == attendance.EmployeeId && a.IsPermission && a.LoginTime.Year == istTime.Year && a.LoginTime.Month == istTime.Month && a.Id != attendance.Id);
 
-        var settings = await _settingService.GetTypedSettingsAsync();
+        int allowedPermissions = settings.MonthlyAllowedPermissions;
 
-        if (permSummary.RemainingHours < settings.PermissionHours)
+        if (monthPermissionCount >= allowedPermissions && !force)
         {
-            throw new InvalidOperationException($"Employee has already used their allocated permission ({permSummary.UsedHours}/{permSummary.AllocatedHours} hrs used) for this month.");
+            var emp = await _context.Employees.FindAsync(attendance.EmployeeId);
+            string empName = emp?.Name ?? "the employee";
+            return new MarkPermissionResultDto
+            {
+                WarningNeeded = true,
+                WarningMessage = $"{empName} has already used their monthly allowed permission limit ({monthPermissionCount}/{allowedPermissions} taken for this month). Do you still want to mark an extra permission for this day?"
+            };
         }
 
         attendance.IsPermission = true;
@@ -352,10 +343,15 @@ public class AttendanceService : IAttendanceService
 
         await _context.SaveChangesAsync();
 
-        // Recalculate LOP for the month (permission removes late login count!)
+        // Recalculate LOP for the month
         await RecalculateMonthlyAttendanceLOPAsync(attendance.EmployeeId, istTime.Year, istTime.Month);
 
-        return await BuildAttendanceDtoAsync(attendance, settings);
+        var finalDto = await BuildAttendanceDtoAsync(attendance, settings);
+        return new MarkPermissionResultDto
+        {
+            WarningNeeded = false,
+            Attendance = finalDto
+        };
     }
 
     public async Task<PermissionSummaryDto> GetPermissionSummaryAsync(int employeeId, int year, int month)

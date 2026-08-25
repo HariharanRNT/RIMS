@@ -86,9 +86,9 @@ public class MonthlyEmployeeReportTests
 
         var report = await reportService.GetMonthlyReportAsync(2026, 8);
 
-        Assert.Equal(2, report.Count);
-        var r1 = report.First(x => x.EmployeeId == 101);
-        var r2 = report.First(x => x.EmployeeId == 102);
+        Assert.Equal(2, report.Items.Count);
+        var r1 = report.Items.First(x => x.EmployeeId == 101);
+        var r2 = report.Items.First(x => x.EmployeeId == 102);
 
         Assert.Equal(33333.33m, r1.MonthlySalary);
         Assert.Equal(50000.00m, r2.MonthlySalary);
@@ -137,8 +137,8 @@ public class MonthlyEmployeeReportTests
 
         var report = await reportService.GetMonthlyReportAsync(2026, 8);
 
-        var r1 = report.First(x => x.EmployeeId == emp1.Id);
-        var r2 = report.First(x => x.EmployeeId == emp2.Id);
+        var r1 = report.Items.First(x => x.EmployeeId == emp1.Id);
+        var r2 = report.Items.First(x => x.EmployeeId == emp2.Id);
 
         Assert.Equal(2m, r1.ApprovedLeaveDays);
         Assert.Equal(1m, r1.LeaveLOPDays);
@@ -175,8 +175,8 @@ public class MonthlyEmployeeReportTests
 
         var report = await reportService.GetMonthlyReportAsync(2026, 8);
 
-        var r1 = report.First(x => x.EmployeeId == emp1.Id);
-        var r2 = report.First(x => x.EmployeeId == emp2.Id);
+        var r1 = report.Items.First(x => x.EmployeeId == emp1.Id);
+        var r2 = report.Items.First(x => x.EmployeeId == emp2.Id);
 
         Assert.Equal(3, r1.PermissionCount);
         Assert.Equal(1, r2.PermissionCount);
@@ -195,22 +195,22 @@ public class MonthlyEmployeeReportTests
         var emp2 = new Employee { Id = 402, EmployeeCode = "EMP002", Name = "Kumar", Email = "kumar@test.com", DepartmentId = dept.Id, DesignationId = desig.Id, IsActive = true };
         context.Employees.AddRange(emp1, emp2);
 
-        // Emp 1: 4 late logins
+        // Emp 1: 4 late logins (10:30 AM IST = 05:00 AM UTC)
         for (int i = 3; i <= 6; i++)
         {
             context.AttendanceLogs.Add(new AttendanceLog
             {
                 EmployeeId = emp1.Id,
-                LoginTime = new DateTime(2026, 8, i, 9, 45, 0, DateTimeKind.Utc),
+                LoginTime = new DateTime(2026, 8, i, 5, 0, 0, DateTimeKind.Utc),
                 IsLate = true
             });
         }
 
-        // Emp 2: 1 late login
+        // Emp 2: 1 late login (10:30 AM IST = 05:00 AM UTC)
         context.AttendanceLogs.Add(new AttendanceLog
         {
             EmployeeId = emp2.Id,
-            LoginTime = new DateTime(2026, 8, 5, 9, 40, 0, DateTimeKind.Utc),
+            LoginTime = new DateTime(2026, 8, 5, 5, 0, 0, DateTimeKind.Utc),
             IsLate = true
         });
 
@@ -218,8 +218,8 @@ public class MonthlyEmployeeReportTests
 
         var report = await reportService.GetMonthlyReportAsync(2026, 8);
 
-        var r1 = report.First(x => x.EmployeeId == emp1.Id);
-        var r2 = report.First(x => x.EmployeeId == emp2.Id);
+        var r1 = report.Items.First(x => x.EmployeeId == emp1.Id);
+        var r2 = report.Items.First(x => x.EmployeeId == emp2.Id);
 
         Assert.Equal(4, r1.LateLoginCount);
         Assert.Equal(1, r2.LateLoginCount);
@@ -260,7 +260,7 @@ public class MonthlyEmployeeReportTests
 
         var report = await reportService.GetMonthlyReportAsync(2026, 8);
 
-        var r = report.First(x => x.EmployeeId == emp.Id);
+        var r = report.Items.First(x => x.EmployeeId == emp.Id);
 
         Assert.Equal("Finalized", r.PayrollStatus);
         Assert.Equal(33333.33m, r.MonthlySalary);
@@ -292,7 +292,7 @@ public class MonthlyEmployeeReportTests
 
         Assert.Equal(initialPayslipCount, postPayslipCount);
         Assert.Equal(initialLopCount, postLopCount);
-        Assert.Single(report);
-        Assert.Equal("Pending / Live Preview", report[0].PayrollStatus);
+        Assert.Single(report.Items);
+        Assert.Equal("Pending / Live Preview", report.Items[0].PayrollStatus);
     }
 }

@@ -78,9 +78,16 @@ public class PayrollService : IPayrollService
             .Where(p => p.EmployeeId == emp.Id && p.Status == RequestStatus.Approved && p.RequestDate.Month == month && p.RequestDate.Year == year)
             .CountAsync();
 
-        var graceViolations = await _context.GraceTimeViolations
-            .Where(g => g.EmployeeId == emp.Id && g.Date.Month == month && g.Date.Year == year)
-            .CountAsync();
+        TimeZoneInfo istTimeZone;
+        try { istTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Indian Standard Time"); }
+        catch { istTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"); }
+
+        var firstLogsByDate = attendanceLogs
+            .GroupBy(a => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, istTimeZone)))
+            .Select(g => g.OrderBy(a => a.LoginTime).First())
+            .ToList();
+
+        var graceViolations = firstLogsByDate.Count(a => a.IsLate);
 
         // 2. Retrieve Active Employee Salary Structure for target month
         var payslipMonthStart = new DateTime(year, month, 1);
@@ -188,6 +195,11 @@ public class PayrollService : IPayrollService
 
         decimal totalSalary = basicPay + hra + conveyance + medical + allowances + arrears;
 
+        var approvedPermissions = await _context.PermissionRequests
+            .AsNoTracking()
+            .Where(p => p.EmployeeId == emp.Id && p.Status == RequestStatus.Approved && p.RequestDate >= startDateUtc && p.RequestDate <= endDateUtc)
+            .ToListAsync();
+
         // 3. Execute Leave & LOP Calculator (Formula: Daily Salary = Monthly Salary / 31)
         var lopResult = LeaveLopCalculator.Calculate(
             emp.Id,
@@ -198,7 +210,9 @@ public class PayrollService : IPayrollService
             totalSalary,
             calendarEntries,
             approvedLeaves,
-            attendanceLogs);
+            attendanceLogs,
+            approvedPermissions,
+            settings);
 
         // Upsert LOPCalculations records for audit tracking
         var existingLopRecords = await _context.LOPCalculations
@@ -263,8 +277,8 @@ public class PayrollService : IPayrollService
                 NetPay = netPay,
                 LOPDays = lopResult.TotalLOPDays,
                 LeavesTaken = (int)lopResult.ActualLeaveDays,
-                PermissionsUsed = permissionsUsed,
-                GraceViolations = graceViolations,
+                PermissionsUsed = lopResult.PermissionCount,
+                GraceViolations = lopResult.TotalLateCount,
                 MonthlyAllowedLeave = settings.MonthlyAllowedLeave,
                 ActualLeaveDays = lopResult.ActualLeaveDays,
                 SandwichLeaveDays = lopResult.SandwichLeaveDays,
@@ -291,8 +305,8 @@ public class PayrollService : IPayrollService
             existingPayslip.NetPay = netPay;
             existingPayslip.LOPDays = lopResult.TotalLOPDays;
             existingPayslip.LeavesTaken = (int)lopResult.ActualLeaveDays;
-            existingPayslip.PermissionsUsed = permissionsUsed;
-            existingPayslip.GraceViolations = graceViolations;
+            existingPayslip.PermissionsUsed = lopResult.PermissionCount;
+            existingPayslip.GraceViolations = lopResult.TotalLateCount;
             existingPayslip.MonthlyAllowedLeave = settings.MonthlyAllowedLeave;
             existingPayslip.ActualLeaveDays = lopResult.ActualLeaveDays;
             existingPayslip.SandwichLeaveDays = lopResult.SandwichLeaveDays;

@@ -12,7 +12,27 @@ public class StartTaskRequest
     public string? CustomClientName { get; set; }
     public string ModuleName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public TaskPriority Priority { get; set; } = TaskPriority.Medium;
+    public DateTime? PlannedStart { get; set; }
+    public DateTime? DueDate { get; set; }
+    public int? PlannedDurationMinutes { get; set; }
+    public string? Instructions { get; set; }
+    public string? Remarks { get; set; }
+    public string? HoldRemarks { get; set; }
 }
+
+public class StartAssignedTaskRequest
+{
+    public string? Remarks { get; set; }
+    public string? HoldRemarks { get; set; }
+}
+
+public class TaskActionRequest
+{
+    public string? Remarks { get; set; }
+    public string? HoldRemarks { get; set; }
+}
+
 
 public class AssignTaskRequest
 {

@@ -12,15 +12,22 @@ namespace RIIMS.API.Controllers;
 public class TimelineController : ControllerBase
 {
     private readonly ITimelineService _service;
+    private readonly ICurrentUserService _currentUser;
 
-    public TimelineController(ITimelineService service)
+    public TimelineController(ITimelineService service, ICurrentUserService currentUser)
     {
         _service = service;
+        _currentUser = currentUser;
     }
 
     [HttpGet("{employeeId}")]
     public async Task<IActionResult> GetTimeline(int employeeId, [FromQuery] DateTime? date)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var targetDate = date ?? DateTime.UtcNow.Date;
         var result = await _service.GetTimelineAsync(employeeId, targetDate);
         return Ok(ApiResponse<List<ActivityTimelineDto>>.SuccessResponse(result));

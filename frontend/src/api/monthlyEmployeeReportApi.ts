@@ -30,9 +30,9 @@ export interface MonthlyEmployeePayrollReportItem {
 }
 
 export const monthlyEmployeeReportApi = {
-  getMonthlyEmployeeReport: async (year: number, month: number) => {
+  getMonthlyEmployeeReport: async (year: number, month: number, page: number = 1, pageSize: number = 25, search?: string) => {
     const response = await apiClient.get('/payroll/monthly-report', {
-      params: { year, month },
+      params: { year, month, page, pageSize, search },
     });
     return response.data;
   },

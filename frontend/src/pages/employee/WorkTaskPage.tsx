@@ -6,6 +6,8 @@ import { TaskTimelineDrawer } from '../../components/tasks/TaskTimelineDrawer';
 import type { TaskTimelineEventDto } from '../../components/tasks/TaskTimelineDrawer';
 import { GlassSelect } from '../../components/ui/GlassSelect';
 import { GlassDatePicker } from '../../components/ui/GlassDatePicker';
+import { useDebounce } from '../../hooks/useDebounce';
+import { Pagination } from '../../components/ui/Pagination';
 import {
   Play,
   Pause,
@@ -83,14 +85,37 @@ interface TeamEmployee {
   designationName: string;
 }
 
+interface TaskActionModalState {
+  isOpen: boolean;
+  type: 'complete' | 'resume' | 'resume-switch' | 'start-self' | 'start-self-switch' | 'start-assigned' | 'start-assigned-switch' | 'hold';
+  taskId?: number;
+  taskTitle?: string;
+  activeTaskId?: number;
+  activeTaskTitle?: string;
+  pendingSelfTaskPayload?: any;
+  remarks: string;
+  holdRemarks: string;
+  submitting: boolean;
+  error?: string;
+}
+
 export const WorkTaskPage: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'my-tasks' | 'assigned-tasks' | 'team-tasks'>('my-tasks');
+
+  const [actionModal, setActionModal] = useState<TaskActionModalState>({
+    isOpen: false,
+    type: 'complete',
+    remarks: '',
+    holdRemarks: '',
+    submitting: false,
+  });
 
   // Master Data
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [mappings, setMappings] = useState<ProductClientMapping[]>([]);
+  const [currentUserProfile, setCurrentUserProfile] = useState<{ id: number; name: string; employeeCode: string } | null>(null);
 
   // Self Task Form State
   const [productId, setProductId] = useState<number | 'CUSTOM' | ''>('');
@@ -104,6 +129,30 @@ export const WorkTaskPage: React.FC = () => {
   const [moduleName, setModuleName] = useState('');
   const [description, setDescription] = useState('');
 
+  const [selfPriority, setSelfPriority] = useState<number>(1);
+  const [selfPlannedStart, setSelfPlannedStart] = useState<string>('');
+  const [selfDueDate, setSelfDueDate] = useState<string>('');
+  const [selfPlannedHours, setSelfPlannedHours] = useState<string>('8');
+  const [selfPlannedMinutes, setSelfPlannedMinutes] = useState<string>('00');
+  const [selfInstructions, setSelfInstructions] = useState<string>('');
+
+  const resetSelfTaskForm = () => {
+    setModuleName('');
+    setDescription('');
+    setProductId('');
+    setIsCustomProduct(false);
+    setCustomProductName('');
+    setClientId('');
+    setIsCustomClient(false);
+    setCustomClientName('');
+    setSelfPriority(1);
+    setSelfPlannedStart('');
+    setSelfDueDate('');
+    setSelfPlannedHours('8');
+    setSelfPlannedMinutes('00');
+    setSelfInstructions('');
+  };
+
   // Task Lists
   const [myTasks, setMyTasks] = useState<TaskItem[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<TaskItem[]>([]);
@@ -113,16 +162,29 @@ export const WorkTaskPage: React.FC = () => {
   const [teamTasks, setTeamTasks] = useState<TaskItem[]>([]);
   const [showTeamAssignModal, setShowTeamAssignModal] = useState(false);
 
+  // Team Tasks Pagination & Loading State
+  const [teamPage, setTeamPage] = useState<number>(1);
+  const [teamPageSize, setTeamPageSize] = useState<number>(25);
+  const [teamTotalCount, setTeamTotalCount] = useState<number>(0);
+  const [teamTotalPages, setTeamTotalPages] = useState<number>(0);
+  const [teamLoading, setTeamLoading] = useState<boolean>(false);
+
   // Team Tasks Filters & Smart View
   const [teamFilterEmployeeId, setTeamFilterEmployeeId] = useState<string>('');
   const [teamFilterStatus, setTeamFilterStatus] = useState<string>('');
   const [teamFilterPriority, setTeamFilterPriority] = useState<string>('');
   const [teamFilterOverdue, setTeamFilterOverdue] = useState<boolean>(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState<string>('');
+  const debouncedTeamSearch = useDebounce(teamSearchQuery, 350);
   const [teamFilterDatePreset, setTeamFilterDatePreset] = useState<string>('DEFAULT');
   const [teamCustomStartDate, setTeamCustomStartDate] = useState<string>('');
   const [teamCustomEndDate, setTeamCustomEndDate] = useState<string>('');
   const [teamShowAllTasks, setTeamShowAllTasks] = useState<boolean>(false);
+
+  // Reset teamPage to 1 whenever filters change
+  useEffect(() => {
+    setTeamPage(1);
+  }, [debouncedTeamSearch, teamFilterEmployeeId, teamFilterStatus, teamFilterPriority, teamFilterOverdue, teamCustomStartDate, teamCustomEndDate]);
 
   // Team Task Modal Form
   const [teamTargetEmployeeId, setTeamTargetEmployeeId] = useState('');
@@ -160,15 +222,17 @@ export const WorkTaskPage: React.FC = () => {
 
   const fetchLookups = async () => {
     try {
-      const [prodRes, clientRes, mapRes] = await Promise.all([
+      const [prodRes, clientRes, mapRes, profileRes] = await Promise.all([
         apiClient.get('/products'),
         apiClient.get('/clients'),
         apiClient.get('/mappings'),
+        apiClient.get('/employees/profile'),
       ]);
 
       if (prodRes.data.success) setProducts(prodRes.data.data);
       if (clientRes.data.success) setClients(clientRes.data.data);
       if (mapRes.data.success) setMappings(mapRes.data.data);
+      if (profileRes.data.success) setCurrentUserProfile(profileRes.data.data);
     } catch {
       // Ignore
     }
@@ -193,40 +257,98 @@ export const WorkTaskPage: React.FC = () => {
     }
   };
 
-  const fetchTeamData = async () => {
+  const fetchTeamEmployees = async () => {
     try {
-      const [teamEmpRes, teamTaskRes] = await Promise.all([
-        apiClient.get('/tasks/team-employees'),
-        apiClient.get('/tasks/team-tasks'),
-      ]);
-
-      if (teamEmpRes.data.success) setTeamEmployees(teamEmpRes.data.data);
-      if (teamTaskRes.data.success) setTeamTasks(teamTaskRes.data.data);
+      const res = await apiClient.get('/tasks/team-employees');
+      if (res.data.success) setTeamEmployees(res.data.data);
     } catch {
       // User may not be a reporting person
     }
   };
 
+  const fetchTeamTasks = async () => {
+    setTeamLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('page', teamPage.toString());
+      params.append('pageSize', teamPageSize.toString());
+      if (debouncedTeamSearch) params.append('search', debouncedTeamSearch);
+      if (teamFilterEmployeeId) params.append('employeeId', teamFilterEmployeeId);
+      if (teamFilterStatus) params.append('status', teamFilterStatus);
+      if (teamFilterPriority) params.append('priority', teamFilterPriority);
+      if (teamFilterOverdue) params.append('smartView', 'overdue');
+      if (teamCustomStartDate) params.append('fromDate', teamCustomStartDate);
+      if (teamCustomEndDate) params.append('toDate', teamCustomEndDate);
+
+      const res = await apiClient.get(`/tasks/team-tasks?${params.toString()}`);
+      if (res.data.success) {
+        if (Array.isArray(res.data.data)) {
+          setTeamTasks(res.data.data);
+          setTeamTotalCount(res.data.data.length);
+          setTeamTotalPages(1);
+        } else {
+          setTeamTasks(res.data.data.items || []);
+          setTeamTotalCount(res.data.data.totalCount || 0);
+          setTeamTotalPages(res.data.data.totalPages || 0);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch team tasks', err);
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'team-tasks') {
+      fetchTeamTasks();
+    }
+  }, [activeTab, teamPage, teamPageSize, debouncedTeamSearch, teamFilterEmployeeId, teamFilterStatus, teamFilterPriority, teamFilterOverdue, teamCustomStartDate, teamCustomEndDate]);
+
   useEffect(() => {
     fetchLookups();
     fetchMyTasksData();
-    fetchTeamData();
+    fetchTeamEmployees();
     fetchMetrics();
+    fetchServerState();
   }, [user]);
 
   useEffect(() => {
     const handleActivityChanged = () => {
       fetchMyTasksData();
       fetchMetrics();
+      fetchServerState();
     };
     window.addEventListener('activity-changed', handleActivityChanged);
     return () => window.removeEventListener('activity-changed', handleActivityChanged);
   }, [user]);
 
-  // Active Running Task & Metrics State
+  // Server State & Metrics
+  const [serverState, setServerState] = useState<{
+    state: string;
+    idleStartedAt?: string;
+    todayWorkSeconds: number;
+    todayBreakSeconds: number;
+    todayIdleSeconds: number;
+    todayActivitiesCount: number;
+  } | null>(null);
+
+  const fetchServerState = async () => {
+    if (!user?.employeeId) return;
+    try {
+      const res = await apiClient.get('/idle/current-state');
+      if (res.data.success) {
+        setServerState(res.data.data);
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
   const [metrics, setMetrics] = useState<{
     todayProductiveHours: number;
     todayBreakHours: number;
+    todayIdleHours: number;
     todayActivitiesCount: number;
   } | null>(null);
 
@@ -238,6 +360,7 @@ export const WorkTaskPage: React.FC = () => {
         setMetrics({
           todayProductiveHours: res.data.data.todayProductiveHours || 0,
           todayBreakHours: res.data.data.todayBreakHours || 0,
+          todayIdleHours: res.data.data.todayIdleHours || 0,
           todayActivitiesCount: res.data.data.todayActivitiesCount || 0,
         });
       }
@@ -335,88 +458,148 @@ export const WorkTaskPage: React.FC = () => {
       return;
     }
 
-    try {
-      const payload: any = {
-        moduleName: moduleName.trim(),
-        description: description.trim(),
-      };
+    const hoursNum = parseInt(selfPlannedHours || '0', 10);
+    const minsNum = parseInt(selfPlannedMinutes || '0', 10);
+    const totalPlannedMins = (isNaN(hoursNum) ? 0 : hoursNum) * 60 + (isNaN(minsNum) ? 0 : minsNum);
 
-      if (isCustomProduct) {
-        payload.customProductName = customProductName.trim();
-      } else {
-        payload.productId = Number(productId);
+    const payload: any = {
+      moduleName: moduleName.trim(),
+      description: description.trim(),
+      priority: selfPriority,
+      plannedStart: selfPlannedStart ? new Date(selfPlannedStart).toISOString() : null,
+      dueDate: selfDueDate ? new Date(selfDueDate).toISOString() : null,
+      plannedDurationMinutes: totalPlannedMins > 0 ? totalPlannedMins : null,
+      instructions: selfInstructions.trim() || null,
+    };
+
+    if (isCustomProduct) {
+      payload.customProductName = customProductName.trim();
+    } else {
+      payload.productId = Number(productId);
+    }
+
+    if (isCustomClient) {
+      payload.customClientName = customClientName.trim();
+    } else {
+      payload.clientId = Number(clientId);
+    }
+
+    if (activeRunningTask) {
+      // Confirmation switch popup
+      setActionModal({
+        isOpen: true,
+        type: 'start-self-switch',
+        pendingSelfTaskPayload: payload,
+        taskTitle: payload.moduleName,
+        activeTaskId: activeRunningTask.id,
+        activeTaskTitle: activeRunningTask.moduleName,
+        remarks: '',
+        holdRemarks: '',
+        submitting: false,
+      });
+    } else {
+      try {
+        const res = await apiClient.post('/tasks/start', payload);
+
+        if (res.data.success) {
+          resetSelfTaskForm();
+
+          window.dispatchEvent(new Event('activity-changed'));
+          fetchMyTasksData();
+          fetchMetrics();
+        }
+      } catch (err: any) {
+        alert(err.response?.data?.message || 'Failed to start task.');
       }
-
-      if (isCustomClient) {
-        payload.customClientCompanyName = customClientName.trim();
-      } else {
-        payload.clientId = Number(clientId);
-      }
-
-      const res = await apiClient.post('/tasks/self-start', payload);
-
-      if (res.data.success) {
-        setModuleName('');
-        setDescription('');
-        setProductId('');
-        setIsCustomProduct(false);
-        setCustomProductName('');
-        setClientId('');
-        setIsCustomClient(false);
-        setCustomClientName('');
-
-        window.dispatchEvent(new Event('activity-changed'));
-        fetchMyTasksData();
-        fetchMetrics();
-      }
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to start task.');
     }
   };
 
-  // Task Actions
-  const handleHoldTask = async (taskId: number) => {
-    try {
-      const res = await apiClient.post(`/tasks/${taskId}/hold`);
-      if (res.data.success) {
-        window.dispatchEvent(new Event('activity-changed'));
-        fetchMyTasksData();
-        fetchMetrics();
+  // Task Action Prompts
+  const handleHoldTask = (taskId: number, taskTitle?: string) => {
+    const target = myTasks.find((t) => t.id === taskId) || assignedTasks.find((t) => t.id === taskId);
+    const title = taskTitle || target?.moduleName || 'Task';
+    setActionModal({
+      isOpen: true,
+      type: 'hold',
+      taskId,
+      taskTitle: title,
+      remarks: '',
+      holdRemarks: '',
+      submitting: false,
+    });
+  };
+
+  const handleResumeTask = async (taskId: number, taskTitle?: string) => {
+    const target = myTasks.find((t) => t.id === taskId) || assignedTasks.find((t) => t.id === taskId);
+    const title = taskTitle || target?.moduleName || 'Task';
+
+    if (activeRunningTask && activeRunningTask.id !== taskId) {
+      // Switch Confirmation Popup
+      setActionModal({
+        isOpen: true,
+        type: 'resume-switch',
+        taskId,
+        taskTitle: title,
+        activeTaskId: activeRunningTask.id,
+        activeTaskTitle: activeRunningTask.moduleName,
+        remarks: '',
+        holdRemarks: '',
+        submitting: false,
+      });
+    } else {
+      // Direct resume when no task is running
+      try {
+        const res = await apiClient.post(`/tasks/${taskId}/resume`);
+        if (res.data.success) {
+          window.dispatchEvent(new Event('activity-changed'));
+          fetchMyTasksData();
+          fetchMetrics();
+        }
+      } catch (err: any) {
+        alert(err.response?.data?.message || 'Failed to resume task.');
       }
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to hold task.');
     }
   };
 
-  const handleResumeTask = async (taskId: number) => {
-    try {
-      const res = await apiClient.post(`/tasks/${taskId}/resume`);
-      if (res.data.success) {
-        window.dispatchEvent(new Event('activity-changed'));
-        fetchMyTasksData();
-        fetchMetrics();
-      }
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to resume task.');
+  const handleCompleteTask = (taskId: number, taskTitle?: string) => {
+    const target = myTasks.find((t) => t.id === taskId) || assignedTasks.find((t) => t.id === taskId);
+    const title = taskTitle || target?.moduleName || 'Task';
+    setActionModal({
+      isOpen: true,
+      type: 'complete',
+      taskId,
+      taskTitle: title,
+      remarks: '',
+      holdRemarks: '',
+      submitting: false,
+    });
+  };
+
+  const handleStartAssignedTask = (taskId: number, taskTitle?: string) => {
+    const target = assignedTasks.find((t) => t.id === taskId) || myTasks.find((t) => t.id === taskId);
+    const title = taskTitle || target?.moduleName || 'Task';
+
+    if (activeRunningTask && activeRunningTask.id !== taskId) {
+      // Switch Confirmation Popup
+      setActionModal({
+        isOpen: true,
+        type: 'start-assigned-switch',
+        taskId,
+        taskTitle: title,
+        activeTaskId: activeRunningTask.id,
+        activeTaskTitle: activeRunningTask.moduleName,
+        remarks: '',
+        holdRemarks: '',
+        submitting: false,
+      });
+    } else {
+      directStartAssignedTask(taskId);
     }
   };
 
-  const handleCompleteTask = async (taskId: number) => {
+  const directStartAssignedTask = async (taskId: number) => {
     try {
-      const res = await apiClient.post(`/tasks/${taskId}/complete`);
-      if (res.data.success) {
-        window.dispatchEvent(new Event('activity-changed'));
-        fetchMyTasksData();
-        fetchMetrics();
-      }
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to complete task.');
-    }
-  };
-
-  const handleStartAssignedTask = async (taskId: number) => {
-    try {
-      const res = await apiClient.post(`/tasks/assigned/${taskId}/start`);
+      const res = await apiClient.post(`/tasks/${taskId}/start-assigned`);
       if (res.data.success) {
         window.dispatchEvent(new Event('activity-changed'));
         fetchMyTasksData();
@@ -425,6 +608,73 @@ export const WorkTaskPage: React.FC = () => {
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to start assigned task.');
     }
+  };
+
+  const submitTaskActionModal = async () => {
+    setActionModal((prev) => ({ ...prev, submitting: true, error: undefined }));
+
+    try {
+      const { type, taskId, pendingSelfTaskPayload, remarks, holdRemarks } = actionModal;
+
+      if (type === 'complete') {
+        const res = await apiClient.post(`/tasks/${taskId}/complete`, { remarks: remarks.trim() });
+        if (res.data.success) finishModalSuccess();
+      } else if (type === 'hold') {
+        const res = await apiClient.post(`/tasks/${taskId}/hold`, { remarks: remarks.trim() });
+        if (res.data.success) finishModalSuccess();
+      } else if (type === 'resume') {
+        const res = await apiClient.post(`/tasks/${taskId}/resume`, { remarks: remarks.trim() });
+        if (res.data.success) finishModalSuccess();
+      } else if (type === 'resume-switch') {
+        const res = await apiClient.post(`/tasks/${taskId}/resume`, {
+          remarks: remarks.trim(),
+          holdRemarks: holdRemarks.trim(),
+        });
+        if (res.data.success) finishModalSuccess();
+      } else if (type === 'start-self') {
+        const payload = {
+          ...pendingSelfTaskPayload,
+          remarks: remarks.trim(),
+        };
+        const res = await apiClient.post('/tasks/start', payload);
+        if (res.data.success) {
+          resetSelfTaskForm();
+          finishModalSuccess();
+        }
+      } else if (type === 'start-self-switch') {
+        const payload = {
+          ...pendingSelfTaskPayload,
+          remarks: remarks.trim(),
+          holdRemarks: holdRemarks.trim(),
+        };
+        const res = await apiClient.post('/tasks/start', payload);
+        if (res.data.success) {
+          resetSelfTaskForm();
+          finishModalSuccess();
+        }
+      } else if (type === 'start-assigned') {
+        const res = await apiClient.post(`/tasks/${taskId}/start-assigned`, {
+          remarks: remarks.trim(),
+        });
+        if (res.data.success) finishModalSuccess();
+      } else if (type === 'start-assigned-switch') {
+        const res = await apiClient.post(`/tasks/${taskId}/start-assigned`, {
+          remarks: remarks.trim(),
+          holdRemarks: holdRemarks.trim(),
+        });
+        if (res.data.success) finishModalSuccess();
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Action failed. Please try again.';
+      setActionModal((prev) => ({ ...prev, submitting: false, error: msg }));
+    }
+  };
+
+  const finishModalSuccess = () => {
+    setActionModal({ isOpen: false, type: 'complete', remarks: '', holdRemarks: '', submitting: false });
+    window.dispatchEvent(new Event('activity-changed'));
+    fetchMyTasksData();
+    fetchMetrics();
   };
 
   // Team Task Actions
@@ -476,7 +726,7 @@ export const WorkTaskPage: React.FC = () => {
       }
 
       if (isTeamCustomClient) {
-        payload.customClientCompanyName = teamCustomClientName.trim();
+        payload.customClientName = teamCustomClientName.trim();
       } else {
         payload.clientId = Number(teamClientId);
       }
@@ -485,7 +735,7 @@ export const WorkTaskPage: React.FC = () => {
 
       if (res.data.success) {
         setShowTeamAssignModal(false);
-        fetchTeamData();
+        fetchTeamTasks();
       }
     } catch (err: any) {
       setTeamAssignError(err.response?.data?.message || 'Failed to assign team task.');
@@ -507,7 +757,9 @@ export const WorkTaskPage: React.FC = () => {
 
       if (res.data.success) {
         setReassignTask(null);
-        fetchTeamData();
+        fetchTeamTasks();
+        fetchMyTasksData();
+        fetchMetrics();
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to reassign task.');
@@ -528,7 +780,7 @@ export const WorkTaskPage: React.FC = () => {
 
       if (res.data.success) {
         setCancelTask(null);
-        fetchTeamData();
+        fetchTeamTasks();
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to cancel task.');
@@ -779,13 +1031,13 @@ export const WorkTaskPage: React.FC = () => {
 
     switch (priority) {
       case 3:
-        return <span style={{ ...badgeStyle, background: 'rgba(239, 68, 68, 0.15)', color: '#FF7B7B', border: '1px solid rgba(239, 68, 68, 0.3)' }}>Urgent</span>;
+        return <span style={{ ...badgeStyle, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Urgent</span>;
       case 2:
-        return <span style={{ ...badgeStyle, background: 'rgba(245, 165, 36, 0.15)', color: '#F5C060', border: '1px solid rgba(245, 165, 36, 0.3)' }}>High</span>;
+        return <span style={{ ...badgeStyle, background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a' }}>High</span>;
       case 1:
-        return <span style={{ ...badgeStyle, background: 'rgba(60, 130, 246, 0.15)', color: '#60A5FA', border: '1px solid rgba(60, 130, 246, 0.3)' }}>Medium</span>;
+        return <span style={{ ...badgeStyle, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}>Medium</span>;
       default:
-        return <span style={{ ...badgeStyle, background: 'rgba(255, 255, 255, 0.08)', color: 'rgba(255, 255, 255, 0.6)', border: '1px solid rgba(255, 255, 255, 0.12)' }}>Low</span>;
+        return <span style={{ ...badgeStyle, background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>Low</span>;
     }
   };
 
@@ -806,9 +1058,9 @@ export const WorkTaskPage: React.FC = () => {
       return (
         <span style={{
           ...badgeStyle,
-          background: 'rgba(239, 68, 68, 0.15)',
-          color: '#FF7B7B',
-          border: '1px solid rgba(239, 68, 68, 0.3)'
+          background: '#fef2f2',
+          color: '#dc2626',
+          border: '1px solid #fecaca'
         }}>
           <AlertCircle size={13} />
           Overdue
@@ -822,9 +1074,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: 'rgba(34, 197, 94, 0.15)',
-            color: '#34D399',
-            border: '1px solid rgba(34, 197, 94, 0.3)'
+            background: '#ecfdf5',
+            color: '#059669',
+            border: '1px solid #a7f3d0'
           }}>
             <Clock size={13} className="spin-animation" />
             Running
@@ -834,9 +1086,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: 'rgba(34, 197, 94, 0.15)',
-            color: '#34D399',
-            border: '1px solid rgba(34, 197, 94, 0.3)'
+            background: '#ecfdf5',
+            color: '#059669',
+            border: '1px solid #a7f3d0'
           }}>
             <CheckCircle2 size={13} />
             Completed
@@ -847,9 +1099,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: 'rgba(245, 165, 36, 0.15)',
-            color: '#F5C060',
-            border: '1px solid rgba(245, 165, 36, 0.3)'
+            background: '#fffbeb',
+            color: '#d97706',
+            border: '1px solid #fde68a'
           }}>
             <Pause size={13} />
             On Hold
@@ -859,9 +1111,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: 'rgba(255, 255, 255, 0.06)',
-            color: 'rgba(255, 255, 255, 0.4)',
-            border: '1px solid rgba(255, 255, 255, 0.12)'
+            background: '#f3f4f6',
+            color: '#6b7280',
+            border: '1px solid #e5e7eb'
           }}>
             <XCircle size={13} />
             Cancelled
@@ -873,9 +1125,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: 'rgba(60, 130, 246, 0.15)',
-            color: '#60A5FA',
-            border: '1px solid rgba(60, 130, 246, 0.3)'
+            background: '#eff6ff',
+            color: '#2563eb',
+            border: '1px solid #bfdbfe'
           }}>
             <UserCheck size={13} />
             Assigned
@@ -893,20 +1145,20 @@ export const WorkTaskPage: React.FC = () => {
           style={{
             marginBottom: '1.25rem',
             padding: '0.85rem 1.25rem',
-            borderLeft: '4px solid #34D399',
+            borderLeft: '4px solid var(--success)',
             display: 'flex',
             flexDirection: 'column',
             gap: '0.5rem',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.25)'
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
           }}
         >
           {/* Row 1: Badges & Product/Client Info Left, Right-aligned Pause & Complete Buttons */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
               <span style={{
-                backgroundColor: 'rgba(34,197,94,0.15)',
-                color: '#34D399',
-                border: '1px solid rgba(34,197,94,0.3)',
+                backgroundColor: '#ecfdf5',
+                color: '#059669',
+                border: '1px solid #a7f3d0',
                 fontWeight: 600,
                 padding: '0.2rem 0.6rem',
                 borderRadius: '9999px',
@@ -918,8 +1170,8 @@ export const WorkTaskPage: React.FC = () => {
                 <Clock size={12} className="spin-animation" />
                 Running
               </span>
-              <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
-                Product: <strong style={{ color: '#F5F5F5' }}>{activeRunningTask.productName}</strong> • Client: <strong style={{ color: '#F5F5F5' }}>{activeRunningTask.clientCompanyName}</strong>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                Product: <strong style={{ color: 'var(--text-main)' }}>{activeRunningTask.productName}</strong> • Client: <strong style={{ color: 'var(--text-main)' }}>{activeRunningTask.clientCompanyName}</strong>
               </span>
             </div>
 
@@ -928,9 +1180,9 @@ export const WorkTaskPage: React.FC = () => {
                 type="button"
                 className="btn btn-secondary btn-sm"
                 style={{
-                  borderColor: 'rgba(245,165,36,0.4)',
-                  color: '#F5C060',
-                  backgroundColor: 'rgba(245,165,36,0.12)',
+                  borderColor: '#fde68a',
+                  color: '#d97706',
+                  backgroundColor: '#fffbeb',
                   fontSize: '0.785rem',
                   padding: '0.3rem 0.75rem',
                   borderRadius: '6px',
@@ -948,9 +1200,6 @@ export const WorkTaskPage: React.FC = () => {
                 type="button"
                 className="btn btn-primary btn-sm"
                 style={{
-                  background: 'var(--accent-gradient)',
-                  borderColor: 'rgba(232,135,60,0.4)',
-                  color: '#FFFFFF',
                   fontSize: '0.785rem',
                   padding: '0.3rem 0.75rem',
                   borderRadius: '6px',
@@ -968,11 +1217,11 @@ export const WorkTaskPage: React.FC = () => {
 
           {/* Row 2: Task Title + Description on single line */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#F5F5F5', flexShrink: 0 }}>
+            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', flexShrink: 0 }}>
               {activeRunningTask.moduleName}
             </h4>
             {activeRunningTask.description && (
-              <span style={{ fontSize: '0.825rem', color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 — {activeRunningTask.description}
               </span>
             )}
@@ -980,61 +1229,79 @@ export const WorkTaskPage: React.FC = () => {
 
           {/* Row 3: Compact Inline Timer */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'monospace', color: '#34D399', letterSpacing: '0.5px' }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'monospace', color: '#059669', letterSpacing: '0.5px' }}>
               {formatSecondsToHHMMSS(timerSeconds)}
             </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'rgba(255,255,255,0.5)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
               Running Duration
             </span>
           </div>
         </div>
       )}
 
-      {/* Summary Metrics Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+
+
+      {/* Summary Metrics Cards (4 Columns) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '1rem' }}>
-          <div className="icon-badge icon-badge-primary" style={{ backgroundColor: 'rgba(232,135,60,0.15)', color: '#E8873C', padding: '0.65rem', borderRadius: '10px' }}>
+          <div className="icon-badge icon-badge-primary" style={{ backgroundColor: '#fff4e6', color: '#E8873C', padding: '0.65rem', borderRadius: '10px' }}>
             <Clock size={20} />
           </div>
           <div>
-            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Work Time</span>
-            <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: '#F5F5F5' }}>
-              {formatDurationToHoursMinutes(metrics?.todayProductiveHours || 0)}
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Work Time</span>
+            <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
+              {formatDurationToHoursMinutes((serverState?.todayWorkSeconds || (metrics?.todayProductiveHours ? metrics.todayProductiveHours * 3600 : 0)) / 3600)}
             </h4>
           </div>
         </div>
 
         <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '1rem' }}>
-          <div className="icon-badge icon-badge-warning" style={{ backgroundColor: 'rgba(245,165,36,0.15)', color: '#F5C060', padding: '0.65rem', borderRadius: '10px' }}>
+          <div className="icon-badge icon-badge-warning" style={{ backgroundColor: '#fffbeb', color: '#d97706', padding: '0.65rem', borderRadius: '10px' }}>
             <Coffee size={20} />
           </div>
           <div>
-            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Break Time</span>
-            <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: '#F5F5F5' }}>
-              {formatDurationToHoursMinutes(metrics?.todayBreakHours || 0)}
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Break Time</span>
+            <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
+              {formatDurationToHoursMinutes((serverState?.todayBreakSeconds || (metrics?.todayBreakHours ? metrics.todayBreakHours * 3600 : 0)) / 3600)}
             </h4>
           </div>
         </div>
 
         <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '1rem' }}>
-          <div className="icon-badge icon-badge-success" style={{ backgroundColor: 'rgba(61,214,140,0.15)', color: '#5EE0A0', padding: '0.65rem', borderRadius: '10px' }}>
+          <div className="icon-badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '0.65rem', borderRadius: '10px' }}>
+            <Clock size={20} />
+          </div>
+          <div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Idle Time</span>
+            <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
+              {formatDurationToHoursMinutes(
+                serverState?.todayIdleSeconds != null
+                  ? serverState.todayIdleSeconds / 3600
+                  : (metrics?.todayIdleHours || 0)
+              )}
+            </h4>
+          </div>
+        </div>
+
+        <div className="ui-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '1rem' }}>
+          <div className="icon-badge icon-badge-success" style={{ backgroundColor: '#ecfdf5', color: '#059669', padding: '0.65rem', borderRadius: '10px' }}>
             <Activity size={20} />
           </div>
           <div>
-            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Activities</span>
-            <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: '#F5F5F5' }}>
-              {metrics?.todayActivitiesCount || myTasks.length}
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Activities</span>
+            <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
+              {serverState?.todayActivitiesCount || metrics?.todayActivitiesCount || myTasks.length}
             </h4>
           </div>
         </div>
       </div>
 
-      {/* Tabs — Amber Tinted Glass Active Pill */}
+      {/* Tabs */}
       <div style={{
         display: 'flex',
         gap: '0.5rem',
         marginBottom: '1.5rem',
-        borderBottom: '1px solid rgba(255,255,255,0.10)',
+        borderBottom: '1px solid var(--border-color)',
         paddingBottom: '0.75rem',
         flexWrap: 'wrap'
       }}>
@@ -1050,10 +1317,9 @@ export const WorkTaskPage: React.FC = () => {
             fontWeight: 600,
             cursor: 'pointer',
             transition: 'all 0.15s ease',
-            border: activeTab === 'my-tasks' ? '1px solid rgba(232, 135, 60, 0.4)' : '1px solid rgba(255, 255, 255, 0.10)',
-            background: activeTab === 'my-tasks' ? 'rgba(232, 135, 60, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-            color: activeTab === 'my-tasks' ? '#E8873C' : 'rgba(255, 255, 255, 0.6)',
-            boxShadow: activeTab === 'my-tasks' ? '0 0 12px rgba(232, 135, 60, 0.2)' : 'none'
+            border: activeTab === 'my-tasks' ? '1px solid var(--primary)' : '1px solid #e5e7eb',
+            background: activeTab === 'my-tasks' ? '#fff4e6' : '#ffffff',
+            color: activeTab === 'my-tasks' ? 'var(--primary)' : 'var(--text-secondary)',
           }}
         >
           <Briefcase size={16} />
@@ -1072,10 +1338,9 @@ export const WorkTaskPage: React.FC = () => {
             fontWeight: 600,
             cursor: 'pointer',
             transition: 'all 0.15s ease',
-            border: activeTab === 'assigned-tasks' ? '1px solid rgba(232, 135, 60, 0.4)' : '1px solid rgba(255, 255, 255, 0.10)',
-            background: activeTab === 'assigned-tasks' ? 'rgba(232, 135, 60, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-            color: activeTab === 'assigned-tasks' ? '#E8873C' : 'rgba(255, 255, 255, 0.6)',
-            boxShadow: activeTab === 'assigned-tasks' ? '0 0 12px rgba(232, 135, 60, 0.2)' : 'none'
+            border: activeTab === 'assigned-tasks' ? '1px solid var(--primary)' : '1px solid #e5e7eb',
+            background: activeTab === 'assigned-tasks' ? '#fff4e6' : '#ffffff',
+            color: activeTab === 'assigned-tasks' ? 'var(--primary)' : 'var(--text-secondary)',
           }}
         >
           <UserCheck size={16} />
@@ -1096,10 +1361,9 @@ export const WorkTaskPage: React.FC = () => {
               fontWeight: 600,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
-              border: activeTab === 'team-tasks' ? '1px solid rgba(232, 135, 60, 0.4)' : '1px solid rgba(255, 255, 255, 0.10)',
-              background: activeTab === 'team-tasks' ? 'rgba(232, 135, 60, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-              color: activeTab === 'team-tasks' ? '#E8873C' : 'rgba(255, 255, 255, 0.6)',
-              boxShadow: activeTab === 'team-tasks' ? '0 0 12px rgba(232, 135, 60, 0.2)' : 'none'
+              border: activeTab === 'team-tasks' ? '1px solid var(--primary)' : '1px solid #e5e7eb',
+              background: activeTab === 'team-tasks' ? '#fff4e6' : '#ffffff',
+              color: activeTab === 'team-tasks' ? 'var(--primary)' : 'var(--text-secondary)',
             }}
           >
             <Users size={16} />
@@ -1113,7 +1377,7 @@ export const WorkTaskPage: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           {/* Full-Width "Start New Work Task" Form Card */}
           <div className="ui-card" style={{ padding: '1.5rem', width: '100%' }}>
-            <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#F5F5F5' }}>
+            <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#000000' }}>
               Start New Work Task
             </h3>
 
@@ -1250,7 +1514,7 @@ export const WorkTaskPage: React.FC = () => {
                   <span
                     style={{
                       fontSize: '0.725rem',
-                      color: moduleName.length >= 100 ? '#EF4444' : moduleName.length >= 90 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                      color: moduleName.length >= 100 ? '#ef4444' : moduleName.length >= 90 ? '#E8873C' : '#9ca3af',
                       fontWeight: moduleName.length >= 90 ? 600 : 400,
                       transition: 'color 0.15s ease',
                     }}
@@ -1270,13 +1534,13 @@ export const WorkTaskPage: React.FC = () => {
               </div>
 
               {/* Task Description (Full Width) */}
-              <div className="form-group">
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                   <label className="form-label" style={{ margin: 0 }}>Task Description *</label>
                   <span
                     style={{
                       fontSize: '0.725rem',
-                      color: description.length >= 500 ? '#EF4444' : description.length >= 450 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                      color: description.length >= 500 ? '#ef4444' : description.length >= 450 ? '#E8873C' : '#9ca3af',
                       fontWeight: description.length >= 450 ? 600 : 400,
                       transition: 'color 0.15s ease',
                     }}
@@ -1293,6 +1557,115 @@ export const WorkTaskPage: React.FC = () => {
                   maxLength={500}
                   required
                 />
+              </div>
+
+              {/* SECTION 3: SCHEDULING & INSTRUCTIONS */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid #f0f0f0' }}>
+
+                {/* Priority, Planned Start Date, Due Date (3 Columns) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+                  {/* Priority */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <GlassSelect
+                      label="Priority"
+                      value={selfPriority}
+                      onChange={(val) => setSelfPriority(Number(val))}
+                      options={[
+                        { value: 0, label: 'Low' },
+                        { value: 1, label: 'Medium' },
+                        { value: 2, label: 'High' },
+                        { value: 3, label: 'Urgent' },
+                      ]}
+                    />
+                  </div>
+
+                  {/* Planned Start Date */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <GlassDatePicker
+                      label="Planned Start Date"
+                      value={selfPlannedStart}
+                      onChange={(val) => setSelfPlannedStart(val)}
+                      minDate={new Date().toISOString().split('T')[0]}
+                      placeholder="Select start date..."
+                    />
+                  </div>
+
+                  {/* Due Date */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <GlassDatePicker
+                      label="Due Date"
+                      value={selfDueDate}
+                      onChange={(val) => setSelfDueDate(val)}
+                      minDate={selfPlannedStart || new Date().toISOString().split('T')[0]}
+                      placeholder="Select due date..."
+                    />
+                  </div>
+                </div>
+
+                {/* Planned Duration (Hours & Minutes) */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '0.3rem' }}>
+                    Planned Duration *
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                        Hours:
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        className="form-input"
+                        placeholder="8"
+                        value={selfPlannedHours}
+                        onChange={(e) => setSelfPlannedHours(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                        Minutes:
+                      </span>
+                      <GlassSelect
+                        placeholder="00 Mins"
+                        value={selfPlannedMinutes}
+                        onChange={(val) => setSelfPlannedMinutes(String(val))}
+                        options={[
+                          { value: '00', label: '00 Mins' },
+                          { value: '15', label: '15 Mins' },
+                          { value: '30', label: '30 Mins' },
+                          { value: '45', label: '45 Mins' },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructions / Remarks */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Instructions / Remarks</label>
+                    <span
+                      style={{
+                        fontSize: '0.725rem',
+                        color: selfInstructions.length >= 300 ? '#ef4444' : selfInstructions.length >= 270 ? '#E8873C' : '#9ca3af',
+                        fontWeight: selfInstructions.length >= 270 ? 600 : 400,
+                        transition: 'color 0.15s ease',
+                      }}
+                    >
+                      {selfInstructions.length}/300
+                    </span>
+                  </div>
+                  <textarea
+                    className="form-input"
+                    rows={2}
+                    value={selfInstructions}
+                    onChange={(e) => setSelfInstructions(e.target.value)}
+                    placeholder="Optional notes or instructions for yourself..."
+                    maxLength={300}
+                  />
+                </div>
               </div>
 
               {/* Start Button Right-Aligned */}
@@ -1313,7 +1686,7 @@ export const WorkTaskPage: React.FC = () => {
                   }}
                 >
                   <Play size={18} />
-                  <span>Start Task Engine</span>
+                  <span>Start Task</span>
                 </button>
               </div>
             </form>
@@ -1321,14 +1694,14 @@ export const WorkTaskPage: React.FC = () => {
 
           {/* Full-Width "Recent Work Tasks" Section Stacked Directly Below */}
           <div>
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#F5F5F5' }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
               Recent Work Tasks
             </h3>
 
             {loading ? (
-              <p style={{ color: 'rgba(255,255,255,0.6)' }}>Loading task history...</p>
+              <p style={{ color: 'var(--text-secondary)' }}>Loading task history...</p>
             ) : myRecentTasks.length === 0 ? (
-              <div className="ui-card" style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.5)' }}>
+              <div className="ui-card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
                 No active or today's tasks found.
               </div>
             ) : (
@@ -1336,11 +1709,11 @@ export const WorkTaskPage: React.FC = () => {
                 {myRecentTasks.map((t) => (
                   <div key={t.id} className="ui-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#F5F5F5' }}>{t.moduleName}</h4>
+                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{t.moduleName}</h4>
                       {getStatusBadge(t.status, t.isOverdue)}
                     </div>
 
-                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
+                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                       {t.description}
                     </p>
 
@@ -1349,28 +1722,28 @@ export const WorkTaskPage: React.FC = () => {
                       display: 'grid',
                       gridTemplateColumns: 'repeat(3, 1fr)',
                       gap: '1rem',
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      background: '#f9fafb',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '12px',
                       padding: '0.85rem 1.25rem'
                     }}>
                       <div>
-                        <span style={{ fontSize: '0.725rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', fontWeight: 500 }}>Product</span>
-                        <span style={{ fontSize: '0.875rem', color: '#F5F5F5', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.productName || 'N/A'}</span>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Product</span>
+                        <span style={{ fontSize: '0.875rem', color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.productName || 'N/A'}</span>
                       </div>
                       <div>
-                        <span style={{ fontSize: '0.725rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', fontWeight: 500 }}>Client</span>
-                        <span style={{ fontSize: '0.875rem', color: '#F5F5F5', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.clientCompanyName || 'N/A'}</span>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Client</span>
+                        <span style={{ fontSize: '0.875rem', color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.clientCompanyName || 'N/A'}</span>
                       </div>
                       <div>
-                        <span style={{ fontSize: '0.725rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', fontWeight: 500 }}>Worked</span>
-                        <span style={{ fontSize: '0.875rem', color: '#5EE0A0', fontWeight: 700, display: 'block' }}>{formatDurationToHoursMinutes(t.totalProductiveSeconds / 3600)}</span>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Worked</span>
+                        <span style={{ fontSize: '0.875rem', color: 'var(--success-text)', fontWeight: 700, display: 'block' }}>{formatDurationToHoursMinutes(t.totalProductiveSeconds / 3600)}</span>
                       </div>
                     </div>
 
                     {/* Footer & Standardized Action Buttons Row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         Created {formatDateIST(t.createdAt)} at {formatTimeIST(t.createdAt)}
                       </span>
 
@@ -1395,9 +1768,9 @@ export const WorkTaskPage: React.FC = () => {
                               padding: '0.4rem 0.85rem',
                               fontSize: '0.785rem',
                               borderRadius: '8px',
-                              background: 'rgba(245, 165, 36, 0.12)',
-                              border: '1px solid rgba(245, 165, 36, 0.3)',
-                              color: '#F5C060',
+                              backgroundColor: '#fffbeb',
+                              borderColor: '#fde68a',
+                              color: '#d97706',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '0.35rem'
@@ -1424,7 +1797,7 @@ export const WorkTaskPage: React.FC = () => {
                         <button
                           type="button"
                           className="btn btn-ghost"
-                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.785rem', borderRadius: '8px', color: 'rgba(255, 255, 255, 0.6)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.785rem', borderRadius: '8px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
                           onClick={() => setSelectedTaskForTimeline(t)}
                           title="View Audit Timeline"
                         >
@@ -1444,31 +1817,31 @@ export const WorkTaskPage: React.FC = () => {
       {/* TAB 2: Assigned Tasks */}
       {activeTab === 'assigned-tasks' && (
         <div>
-          <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#F5F5F5' }}>
+          <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
             Tasks Assigned To Me
           </h3>
 
           {loading ? (
-            <p style={{ color: 'rgba(255,255,255,0.6)' }}>Loading assigned tasks...</p>
+            <p style={{ color: 'var(--text-secondary)' }}>Loading assigned tasks...</p>
           ) : assignedTasks.length === 0 ? (
-            <div className="ui-card" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.5)' }}>
+            <div className="ui-card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
               No tasks currently assigned to you by Admin or Management.
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
               {assignedTasks.map((t) => (
-                <div key={t.id} className="ui-card" style={{ padding: '1.5rem', borderLeft: '4px solid #E8873C', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div key={t.id} className="ui-card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--primary)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                     <div>
-                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#F5F5F5' }}>{t.moduleName}</h4>
-                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginTop: '0.2rem' }}>
-                        Assigned By: <strong style={{ color: '#F5F5F5' }}>{t.assignedByName || (t.assignerType === 2 ? 'System Admin' : 'Manager')}</strong> ({t.assignerTypeName})
+                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{t.moduleName}</h4>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        Assigned By: <strong style={{ color: 'var(--text-main)' }}>{t.assignedByName || (t.assignerType === 2 ? 'System Admin' : 'Manager')}</strong> ({t.assignerTypeName})
                       </div>
                     </div>
                     {getPriorityBadge(t.priority)}
                   </div>
 
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
+                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                     {t.description}
                   </p>
 
@@ -1477,29 +1850,29 @@ export const WorkTaskPage: React.FC = () => {
                     display: 'grid',
                     gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: '0.75rem',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: '#f9fafb',
+                    border: '1px solid var(--border-color)',
                     borderRadius: '12px',
                     padding: '0.75rem 1rem'
                   }}>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', fontWeight: 500 }}>Product</span>
-                      <span style={{ fontSize: '0.85rem', color: '#F5F5F5', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.productName || 'N/A'}</span>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Product</span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.productName || 'N/A'}</span>
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', fontWeight: 500 }}>Client</span>
-                      <span style={{ fontSize: '0.85rem', color: '#F5F5F5', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.clientCompanyName || 'N/A'}</span>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Client</span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.clientCompanyName || 'N/A'}</span>
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: 'rgba(255, 255, 255, 0.5)', display: 'block', fontWeight: 500 }}>Due Date</span>
-                      <span style={{ fontSize: '0.85rem', color: t.isOverdue ? '#FF7B7B' : '#F5F5F5', fontWeight: 600, display: 'block' }}>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Due Date</span>
+                      <span style={{ fontSize: '0.85rem', color: t.isOverdue ? 'var(--danger)' : 'var(--text-main)', fontWeight: 600, display: 'block' }}>
                         {t.dueDate ? formatDateIST(t.dueDate) : 'No due date'}
                       </span>
                     </div>
                   </div>
 
                   {/* Footer & Action Buttons Row */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
                     <div>
                       {getStatusBadge(t.status, t.isOverdue)}
                     </div>
@@ -1524,9 +1897,9 @@ export const WorkTaskPage: React.FC = () => {
                             padding: '0.4rem 0.85rem',
                             fontSize: '0.785rem',
                             borderRadius: '8px',
-                            background: 'rgba(245, 165, 36, 0.12)',
-                            border: '1px solid rgba(245, 165, 36, 0.3)',
-                            color: '#F5C060',
+                            backgroundColor: '#fffbeb',
+                            borderColor: '#fde68a',
+                            color: '#d97706',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '0.35rem'
@@ -1562,7 +1935,7 @@ export const WorkTaskPage: React.FC = () => {
                       <button
                         type="button"
                         className="btn btn-ghost"
-                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.785rem', borderRadius: '8px', color: 'rgba(255, 255, 255, 0.6)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.785rem', borderRadius: '8px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
                         onClick={() => setSelectedTaskForTimeline(t)}
                         title="View Audit Timeline"
                       >
@@ -1586,7 +1959,7 @@ export const WorkTaskPage: React.FC = () => {
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#F5F5F5' }}>
                 My Direct Team Tasks
               </h3>
-              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.825rem', color: 'rgba(255,255,255,0.6)' }}>
+              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
                 Assign and monitor tasks for employees reporting to you ({teamEmployees.length} team members).
               </p>
             </div>
@@ -1621,9 +1994,9 @@ export const WorkTaskPage: React.FC = () => {
           </div>
 
           {teamEmployees.length === 0 ? (
-            <div className="ui-card" style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'rgba(255,255,255,0.6)' }}>
-              <Users size={36} style={{ color: 'rgba(255,255,255,0.3)', marginBottom: '0.75rem' }} />
-              <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#F5F5F5' }}>No Direct Reportees Linked</h4>
+            <div className="ui-card" style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'var(--text-secondary)' }}>
+              <Users size={36} style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }} />
+              <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: 'var(--text-main)' }}>No Direct Reportees Linked</h4>
               <p style={{ fontSize: '0.875rem', maxWidth: '480px', margin: '0 auto' }}>
                 You currently do not have any active employees assigned to report directly to you in the system. Contact your System Administrator to link employees to your profile in Employee Management.
               </p>
@@ -1645,7 +2018,7 @@ export const WorkTaskPage: React.FC = () => {
                         onChange={(e) => setTeamSearchQuery(e.target.value)}
                         style={{ paddingLeft: '2.2rem' }}
                       />
-                      <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                      <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
                     </div>
                   </div>
 
@@ -1721,7 +2094,7 @@ export const WorkTaskPage: React.FC = () => {
 
                 {/* Custom Date Range Pickers */}
                 {teamFilterDatePreset === 'CUSTOM' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
                     <div>
                       <GlassDatePicker
                         label="From Date"
@@ -1743,7 +2116,7 @@ export const WorkTaskPage: React.FC = () => {
                 )}
 
                 {/* Bottom Bar: Show All Button & Overdue Checkbox */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <button
                       type="button"
@@ -1753,9 +2126,9 @@ export const WorkTaskPage: React.FC = () => {
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.8rem',
                         fontWeight: 600,
-                        background: teamShowAllTasks ? 'rgba(232, 135, 60, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-                        color: teamShowAllTasks ? '#E8873C' : 'rgba(255, 255, 255, 0.6)',
-                        border: teamShowAllTasks ? '1px solid rgba(232, 135, 60, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+                        background: teamShowAllTasks ? '#fff4e6' : '#ffffff',
+                        color: teamShowAllTasks ? 'var(--primary)' : 'var(--text-secondary)',
+                        border: teamShowAllTasks ? '1px solid var(--primary)' : '1px solid #e5e7eb',
                         cursor: 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -1773,7 +2146,7 @@ export const WorkTaskPage: React.FC = () => {
                         checked={teamFilterOverdue}
                         onChange={(e) => setTeamFilterOverdue(e.target.checked)}
                       />
-                      <span style={{ color: teamFilterOverdue ? '#FF7B7B' : '#F5F5F5' }}>⚠️ Overdue Only</span>
+                      <span style={{ color: teamFilterOverdue ? 'var(--danger)' : 'var(--text-primary)' }}>⚠️ Overdue Only</span>
                     </label>
                   </div>
 
@@ -1784,7 +2157,7 @@ export const WorkTaskPage: React.FC = () => {
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: '#E8873C',
+                        color: 'var(--primary)',
                         fontSize: '0.8rem',
                         fontWeight: 600,
                         cursor: 'pointer',
@@ -1809,8 +2182,9 @@ export const WorkTaskPage: React.FC = () => {
                   justifyContent: 'space-between',
                   padding: '0.75rem 1.25rem',
                   borderRadius: 'var(--radius-md)',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: '#ffffff',
+                  border: '1px solid var(--border-color)',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
                   marginBottom: '1rem',
                   flexWrap: 'wrap',
                   gap: '0.75rem'
@@ -1822,8 +2196,8 @@ export const WorkTaskPage: React.FC = () => {
                       width: '32px',
                       height: '32px',
                       borderRadius: '8px',
-                      background: 'rgba(232, 135, 60, 0.15)',
-                      color: '#E8873C',
+                      background: '#fff4e6',
+                      color: 'var(--primary)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1841,36 +2215,36 @@ export const WorkTaskPage: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#F5F5F5' }}>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                       {teamFilterEmployeeId && selectedTeamMemberObj
                         ? `Showing full task history for ${selectedTeamMemberObj.employeeCode} - ${selectedTeamMemberObj.name}`
                         : teamFilterDatePreset !== 'DEFAULT'
-                        ? `Showing team tasks for date filter (${teamFilterDatePreset === 'CUSTOM' ? `${teamCustomStartDate || 'Start'} to ${teamCustomEndDate || 'End'}` : teamFilterDatePreset})`
-                        : teamShowAllTasks
-                        ? `Showing all team tasks (Complete Unfiltered View)`
-                        : `Showing today's activity + all pending items for your team`}
+                          ? `Showing team tasks for date filter (${teamFilterDatePreset === 'CUSTOM' ? `${teamCustomStartDate || 'Start'} to ${teamCustomEndDate || 'End'}` : teamFilterDatePreset})`
+                          : teamShowAllTasks
+                            ? `Showing all team tasks (Complete Unfiltered View)`
+                            : `Showing today's activity + all pending items for your team`}
                       <span
                         style={{
                           marginLeft: '0.75rem',
                           fontSize: '0.75rem',
                           padding: '0.2rem 0.6rem',
                           borderRadius: '12px',
-                          background: 'rgba(255, 255, 255, 0.08)',
-                          color: 'rgba(255, 255, 255, 0.6)',
+                          background: '#f3f4f6',
+                          color: 'var(--text-secondary)',
                           fontWeight: 600
                         }}
                       >
                         {displayTeamTasks.length} tasks
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.6)', marginTop: '0.1rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
                       {teamFilterEmployeeId && selectedTeamMemberObj
                         ? `Full historical record across all dates and statuses for this team member.`
                         : teamFilterDatePreset !== 'DEFAULT'
-                        ? `Showing team tasks across all statuses within the selected date window.`
-                        : teamShowAllTasks
-                        ? `Showing all historical completed, cancelled, and active team tasks.`
-                        : `Excluding older completed & cancelled tasks from earlier dates for daily focus.`}
+                          ? `Showing team tasks across all statuses within the selected date window.`
+                          : teamShowAllTasks
+                            ? `Showing all historical completed, cancelled, and active team tasks.`
+                            : `Excluding older completed & cancelled tasks from earlier dates for daily focus.`}
                     </div>
                   </div>
                 </div>
@@ -1894,7 +2268,7 @@ export const WorkTaskPage: React.FC = () => {
                   <tbody>
                     {displayTeamTasks.length === 0 ? (
                       <tr>
-                        <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.4)' }}>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                           No team tasks found matching selected criteria.
                         </td>
                       </tr>
@@ -1902,26 +2276,26 @@ export const WorkTaskPage: React.FC = () => {
                       displayTeamTasks.map((t) => (
                         <tr key={t.id}>
                           <td>
-                            <div style={{ fontWeight: 700, color: '#F5F5F5' }}>{t.moduleName}</div>
-                            <div style={{ fontSize: '0.785rem', color: 'rgba(255,255,255,0.6)' }}>{t.description}</div>
+                            <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{t.moduleName}</div>
+                            <div style={{ fontSize: '0.785rem', color: 'var(--text-secondary)' }}>{t.description}</div>
                           </td>
                           <td>
-                            <div style={{ fontWeight: 600, color: '#F5F5F5' }}>{t.employeeName}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>{t.employeeCode}</div>
+                            <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{t.employeeName}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t.employeeCode}</div>
                           </td>
                           <td>
-                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#F5F5F5' }}>{t.productName}</div>
-                            <div style={{ fontSize: '0.785rem', color: 'rgba(255,255,255,0.6)' }}>{t.clientCompanyName}</div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{t.productName}</div>
+                            <div style={{ fontSize: '0.785rem', color: 'var(--text-secondary)' }}>{t.clientCompanyName}</div>
                           </td>
                           <td>{getPriorityBadge(t.priority)}</td>
                           <td>
-                            <div style={{ fontSize: '0.785rem', color: 'rgba(255,255,255,0.6)' }}>
+                            <div style={{ fontSize: '0.785rem', color: 'var(--text-secondary)' }}>
                               Due: {t.dueDate ? formatDateIST(t.dueDate) : 'N/A'}
                             </div>
                           </td>
                           <td>{getStatusBadge(t.status, t.isOverdue)}</td>
                           <td>
-                            <div style={{ fontWeight: 700, color: '#5EE0A0' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--success-text)' }}>
                               {formatDurationToHoursMinutes(t.totalProductiveSeconds / 3600)}
                             </div>
                           </td>
@@ -1967,6 +2341,20 @@ export const WorkTaskPage: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+
+              {/* Server-Side Pagination Component */}
+              <Pagination
+                currentPage={teamPage}
+                totalPages={teamTotalPages}
+                totalCount={teamTotalCount}
+                pageSize={teamPageSize}
+                onPageChange={(p) => setTeamPage(p)}
+                onPageSizeChange={(s) => {
+                  setTeamPageSize(s);
+                  setTeamPage(1);
+                }}
+                disabled={teamLoading}
+              />
             </div>
           )}
         </div>
@@ -1983,34 +2371,32 @@ export const WorkTaskPage: React.FC = () => {
               maxHeight: '90vh',
               overflowY: 'auto',
               padding: '2rem',
-              background: 'rgba(255, 255, 255, 0.08)',
-              backdropFilter: 'blur(24px) saturate(150%)',
-              WebkitBackdropFilter: 'blur(24px) saturate(150%)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
               borderRadius: '20px',
-              boxShadow: '0 8px 40px rgba(0, 0, 0, 0.35)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#F5F5F5' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
                   Assign Task to Direct Team Member
                 </h3>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#6b7280' }}>
                   Create and schedule a new work task for your direct reportees.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowTeamAssignModal(false)}
-                style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', padding: '0.25rem' }}
+                style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '0.25rem' }}
               >
                 <XCircle size={20} />
               </button>
             </div>
 
             {teamAssignError && (
-              <div style={{ background: 'rgba(240,96,96,0.12)', color: '#FF7B7B', border: '1px solid rgba(240,96,96,0.25)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
+              <div style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
                 ⚠️ {teamAssignError}
               </div>
             )}
@@ -2018,7 +2404,7 @@ export const WorkTaskPage: React.FC = () => {
             <form onSubmit={handleCreateTeamTask} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
               {/* SECTION 1: ASSIGNMENT DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
                 <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   1. Assignment Details
                 </div>
@@ -2131,8 +2517,8 @@ export const WorkTaskPage: React.FC = () => {
                           !isTeamCustomProduct && !teamProductId
                             ? 'Select Product First'
                             : availableTeamClients.length === 0 && !isTeamCustomProduct
-                            ? 'No Mapped Clients'
-                            : 'Select Client'
+                              ? 'No Mapped Clients'
+                              : 'Select Client'
                         }
                         value={teamClientId}
                         onChange={(val) => {
@@ -2156,7 +2542,7 @@ export const WorkTaskPage: React.FC = () => {
               </div>
 
               {/* SECTION 2: TASK DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
                 <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   2. Task Details
                 </div>
@@ -2168,7 +2554,7 @@ export const WorkTaskPage: React.FC = () => {
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: teamModuleName.length >= 100 ? '#EF4444' : teamModuleName.length >= 90 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                        color: teamModuleName.length >= 100 ? '#ef4444' : teamModuleName.length >= 90 ? '#E8873C' : '#9ca3af',
                         fontWeight: teamModuleName.length >= 90 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -2194,7 +2580,7 @@ export const WorkTaskPage: React.FC = () => {
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: teamDescription.length >= 500 ? '#EF4444' : teamDescription.length >= 450 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                        color: teamDescription.length >= 500 ? '#ef4444' : teamDescription.length >= 450 ? '#E8873C' : '#9ca3af',
                         fontWeight: teamDescription.length >= 450 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -2267,7 +2653,7 @@ export const WorkTaskPage: React.FC = () => {
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Hours:
                       </span>
                       <input
@@ -2282,7 +2668,7 @@ export const WorkTaskPage: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Minutes:
                       </span>
                       <GlassSelect
@@ -2306,7 +2692,7 @@ export const WorkTaskPage: React.FC = () => {
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: teamInstructions.length >= 300 ? '#EF4444' : teamInstructions.length >= 270 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                        color: teamInstructions.length >= 300 ? '#ef4444' : teamInstructions.length >= 270 ? '#E8873C' : '#9ca3af',
                         fontWeight: teamInstructions.length >= 270 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -2326,15 +2712,15 @@ export const WorkTaskPage: React.FC = () => {
               </div>
 
               {/* ACTION BUTTONS */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid #f0f0f0', paddingTop: '1.25rem' }}>
                 <button
                   type="button"
                   onClick={() => setShowTeamAssignModal(false)}
                   style={{
                     padding: '0.65rem 1.35rem',
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    color: 'rgba(255, 255, 255, 0.8)',
-                    border: '1px solid rgba(255, 255, 255, 0.16)',
+                    background: '#ffffff',
+                    color: '#374151',
+                    border: '1px solid #e5e7eb',
                     borderRadius: '10px',
                     fontSize: '0.875rem',
                     fontWeight: 600,
@@ -2377,7 +2763,7 @@ export const WorkTaskPage: React.FC = () => {
       {reassignTask && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.15rem', fontWeight: 700, color: '#F5F5F5' }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)' }}>
               Reassign Task: {reassignTask.moduleName}
             </h3>
 
@@ -2391,11 +2777,18 @@ export const WorkTaskPage: React.FC = () => {
                   required
                 >
                   <option value="">Select Team Member</option>
-                  {teamEmployees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.employeeCode})
+                  {user?.employeeId && (
+                    <option value={user.employeeId}>
+                      {currentUserProfile?.name || user.employeeName} ({currentUserProfile?.employeeCode || `EMP #${user.employeeId}`})
                     </option>
-                  ))}
+                  )}
+                  {teamEmployees
+                    .filter((emp) => emp.id !== user?.employeeId)
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.employeeCode})
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -2427,7 +2820,7 @@ export const WorkTaskPage: React.FC = () => {
       {cancelTask && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.15rem', fontWeight: 700, color: '#F5F5F5' }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)' }}>
               Cancel Task: {cancelTask.moduleName}
             </h3>
 
@@ -2465,6 +2858,263 @@ export const WorkTaskPage: React.FC = () => {
           employeeName={selectedTaskForTimeline.employeeName || user?.employeeName || ''}
           events={selectedTaskForTimeline.timelineEvents || []}
         />
+      )}
+
+      {/* TASK ACTION & CONFIRMATION REMARKS MODAL */}
+      {actionModal.isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(17, 24, 39, 0.5)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            zIndex: 1200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            animation: 'fadeInOverlay 0.2s ease-out',
+          }}
+          onClick={() => !actionModal.submitting && setActionModal((prev) => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '540px',
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              overflow: 'hidden',
+              animation: 'modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid #f0f0f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: actionModal.type.includes('switch')
+                  ? 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)'
+                  : actionModal.type === 'complete'
+                    ? 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)'
+                    : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {actionModal.type.includes('switch') ? (
+                  <div style={{ padding: '0.5rem', borderRadius: '10px', background: '#F59E0B', color: '#ffffff', display: 'flex' }}>
+                    <AlertCircle size={20} />
+                  </div>
+                ) : actionModal.type === 'complete' ? (
+                  <div style={{ padding: '0.5rem', borderRadius: '10px', background: '#10B981', color: '#ffffff', display: 'flex' }}>
+                    <CheckCircle2 size={20} />
+                  </div>
+                ) : (
+                  <div style={{ padding: '0.5rem', borderRadius: '10px', background: '#3B82F6', color: '#ffffff', display: 'flex' }}>
+                    <Play size={20} />
+                  </div>
+                )}
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
+                    {actionModal.type.includes('switch')
+                      ? 'Task Currently Running'
+                      : actionModal.type === 'complete'
+                        ? 'Complete Work Task'
+                        : actionModal.type === 'hold'
+                          ? 'Put Task On Hold'
+                          : actionModal.type === 'resume'
+                            ? 'Resume Work Task'
+                            : actionModal.type === 'start-assigned'
+                              ? 'Start Assigned Task'
+                              : 'Start Work Task'}
+                  </h3>
+                  <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.8rem', color: '#4B5563' }}>
+                    {actionModal.taskTitle}
+                  </p>
+                </div>
+              </div>
+
+              {!actionModal.submitting && (
+                <button
+                  type="button"
+                  onClick={() => setActionModal((prev) => ({ ...prev, isOpen: false }))}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#6B7280',
+                    cursor: 'pointer',
+                    padding: '0.35rem',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <XCircle size={18} />
+                </button>
+              )}
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '1.5rem' }}>
+              {actionModal.error && (
+                <div style={{ padding: '0.75rem 1rem', background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  {actionModal.error}
+                </div>
+              )}
+
+              {actionModal.type.includes('switch') ? (
+                <>
+                  <div style={{ padding: '0.875rem 1rem', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', marginBottom: '1.25rem', fontSize: '0.875rem', color: '#92400E', lineHeight: 1.5 }}>
+                    Task <strong>"{actionModal.activeTaskTitle}"</strong> is currently running.<br />
+                    Do you want to put it <strong>On Hold</strong> and {actionModal.type === 'resume-switch' ? 'resume' : 'start'} <strong>"{actionModal.taskTitle}"</strong>?
+                  </div>
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>
+                      Remarks for putting "{actionModal.activeTaskTitle}" On Hold: <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Enter remarks for putting current task on hold..."
+                      value={actionModal.holdRemarks}
+                      onChange={(e) => setActionModal((prev) => ({ ...prev, holdRemarks: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: '8px',
+                        border: '1px solid #D1D5DB',
+                        fontSize: '0.875rem',
+                        color: '#111827',
+                        resize: 'none',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>
+                      Remarks for {actionModal.type === 'resume-switch' ? 'resuming' : 'starting'} "{actionModal.taskTitle}":
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Enter action remarks (optional)..."
+                      value={actionModal.remarks}
+                      onChange={(e) => setActionModal((prev) => ({ ...prev, remarks: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: '8px',
+                        border: '1px solid #D1D5DB',
+                        fontSize: '0.875rem',
+                        color: '#111827',
+                        resize: 'none',
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>
+                    Remarks for {
+                      actionModal.type === 'complete' ? 'completing' :
+                        actionModal.type === 'hold' ? 'holding' :
+                          actionModal.type === 'resume' ? 'resuming' : 'starting'
+                    } task: <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder={`Enter remarks for ${actionModal.type === 'complete' ? 'completing' :
+                        actionModal.type === 'hold' ? 'holding' :
+                          actionModal.type === 'resume' ? 'resuming' : 'starting'
+                      } this task...`}
+                    value={actionModal.remarks}
+                    onChange={(e) => setActionModal((prev) => ({ ...prev, remarks: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '0.6rem 0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      fontSize: '0.875rem',
+                      color: '#111827',
+                      resize: 'none',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div
+              style={{
+                padding: '1rem 1.5rem',
+                background: '#F9FAFB',
+                borderTop: '1px solid #F3F4F6',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+              }}
+            >
+              <button
+                type="button"
+                disabled={actionModal.submitting}
+                onClick={() => setActionModal((prev) => ({ ...prev, isOpen: false }))}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  background: '#ffffff',
+                  color: '#374151',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {actionModal.type.includes('switch') ? 'No' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  actionModal.submitting ||
+                  (actionModal.type.includes('switch') && !actionModal.holdRemarks.trim()) ||
+                  (!actionModal.type.includes('switch') && !actionModal.remarks.trim())
+                }
+                onClick={submitTaskActionModal}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: actionModal.type === 'complete' ? '#10B981' : '#3B82F6',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                  opacity:
+                    actionModal.submitting ||
+                      (actionModal.type.includes('switch') && !actionModal.holdRemarks.trim()) ||
+                      (!actionModal.type.includes('switch') && !actionModal.remarks.trim())
+                      ? 0.6
+                      : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                {actionModal.submitting
+                  ? 'Processing...'
+                  : actionModal.type.includes('switch')
+                    ? 'Yes, Switch & Proceed'
+                    : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

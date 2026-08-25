@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
+import { useConfirm } from '../../../contexts/ConfirmContext';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 interface Client {
@@ -126,13 +127,29 @@ export const ClientListPage: React.FC = () => {
     }
   };
 
+  const { confirm, showAlert } = useConfirm();
+
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to deactivate this client?')) {
+    const isConfirmed = await confirm({
+      title: 'Deactivate Client',
+      message: 'Are you sure you want to deactivate this client? All associated product mappings will also be affected.',
+      confirmText: 'Deactivate',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
       try {
         await apiClient.delete(`/clients/${id}`);
         fetchClients();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Failed to delete client.');
+        const errorMsg = err.response?.data?.message || 'Failed to delete client.';
+        await showAlert({
+          title: 'Cannot Deactivate Client',
+          message: errorMsg,
+          type: 'danger',
+          confirmText: 'Understood'
+        });
       }
     }
   };

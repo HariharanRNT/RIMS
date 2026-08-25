@@ -30,3 +30,10 @@ public class PermissionSummaryDto
     public decimal UsedHours { get; set; }
     public decimal RemainingHours { get; set; }
 }
+
+public class MarkPermissionResultDto
+{
+    public bool WarningNeeded { get; set; }
+    public string? WarningMessage { get; set; }
+    public AttendanceDto? Attendance { get; set; }
+}

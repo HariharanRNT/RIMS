@@ -60,6 +60,19 @@ public class SystemSettingService : ISystemSettingService
             }
         }
 
+        if (settings.TryGetValue("SecondHalfStartTime", out var secondStartVal))
+        {
+            result.SecondHalfStartTimeDisplay = secondStartVal;
+            if (TimeSpan.TryParse(secondStartVal, out var parsedSecond))
+            {
+                result.SecondHalfStartTime = parsedSecond;
+            }
+            else if (DateTime.TryParse(secondStartVal, out var dtSecond))
+            {
+                result.SecondHalfStartTime = dtSecond.TimeOfDay;
+            }
+        }
+
         if (settings.TryGetValue("GraceMinutes", out var graceVal) && int.TryParse(graceVal, out var graceParsed))
         {
             result.GraceMinutes = graceParsed;
@@ -68,6 +81,15 @@ public class SystemSettingService : ISystemSettingService
         if (settings.TryGetValue("PermissionHours", out var permVal) && decimal.TryParse(permVal, out var permParsed))
         {
             result.PermissionHours = permParsed;
+        }
+
+        if (settings.TryGetValue("MonthlyAllowedPermissions", out var permCountVal) && int.TryParse(permCountVal, out var permCountParsed) && permCountParsed >= 0)
+        {
+            result.MonthlyAllowedPermissions = permCountParsed;
+        }
+        else
+        {
+            result.MonthlyAllowedPermissions = (int)Math.Max(1, result.PermissionHours);
         }
 
         if (settings.TryGetValue("LateLoginsForHalfDay", out var lateVal) && int.TryParse(lateVal, out var lateParsed))
@@ -79,6 +101,28 @@ public class SystemSettingService : ISystemSettingService
         {
             result.MonthlyAllowedLeave = leaveParsed;
         }
+
+        // Celebration Settings
+        if (settings.TryGetValue("BirthdayWishesEnabled", out var bdayEnVal) && bool.TryParse(bdayEnVal, out var bdayEnParsed))
+            result.BirthdayWishesEnabled = bdayEnParsed;
+        if (settings.TryGetValue("BirthdayWishesChannel", out var bdayChVal) && !string.IsNullOrWhiteSpace(bdayChVal))
+            result.BirthdayWishesChannel = bdayChVal;
+        if (settings.TryGetValue("BirthdayWishesNotifyAllEmployees", out var bdayAllVal) && bool.TryParse(bdayAllVal, out var bdayAllParsed))
+            result.BirthdayWishesNotifyAllEmployees = bdayAllParsed;
+
+        if (settings.TryGetValue("CompanyAnniversaryWishesEnabled", out var compEnVal) && bool.TryParse(compEnVal, out var compEnParsed))
+            result.CompanyAnniversaryWishesEnabled = compEnParsed;
+        if (settings.TryGetValue("CompanyAnniversaryWishesChannel", out var compChVal) && !string.IsNullOrWhiteSpace(compChVal))
+            result.CompanyAnniversaryWishesChannel = compChVal;
+        if (settings.TryGetValue("CompanyAnniversaryWishesNotifyAllEmployees", out var compAllVal) && bool.TryParse(compAllVal, out var compAllParsed))
+            result.CompanyAnniversaryWishesNotifyAllEmployees = compAllParsed;
+
+        if (settings.TryGetValue("MarriageAnniversaryWishesEnabled", out var marrEnVal) && bool.TryParse(marrEnVal, out var marrEnParsed))
+            result.MarriageAnniversaryWishesEnabled = marrEnParsed;
+        if (settings.TryGetValue("MarriageAnniversaryWishesChannel", out var marrChVal) && !string.IsNullOrWhiteSpace(marrChVal))
+            result.MarriageAnniversaryWishesChannel = marrChVal;
+        if (settings.TryGetValue("MarriageAnniversaryWishesNotifyAllEmployees", out var marrAllVal) && bool.TryParse(marrAllVal, out var marrAllParsed))
+            result.MarriageAnniversaryWishesNotifyAllEmployees = marrAllParsed;
 
         return result;
     }
@@ -109,6 +153,63 @@ public class SystemSettingService : ISystemSettingService
 
         setting.Value = request.Value;
         await _context.SaveChangesAsync();
+
+        if (key.Equals("OfficeEndTime", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                TimeSpan newOfficeEnd;
+                if (TimeSpan.TryParse(request.Value, out var parsedSpan))
+                {
+                    newOfficeEnd = parsedSpan;
+                }
+                else if (DateTime.TryParse(request.Value, out var parsedDt))
+                {
+                    newOfficeEnd = parsedDt.TimeOfDay;
+                }
+                else
+                {
+                    newOfficeEnd = new TimeSpan(19, 0, 0);
+                }
+
+                TimeZoneInfo istTz;
+                try { istTz = TimeZoneInfo.FindSystemTimeZoneById("Indian Standard Time"); }
+                catch { istTz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"); }
+
+                var nowUtc = DateTime.UtcNow;
+                var nowIst = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, istTz);
+                var todayWorkDate = DateOnly.FromDateTime(nowIst);
+                var newOfficeEndIst = nowIst.Date.Add(newOfficeEnd);
+                var newOfficeEndUtc = TimeZoneInfo.ConvertTimeToUtc(newOfficeEndIst, istTz);
+
+                var activeSessions = await _context.EmployeeSessions
+                    .Where(s => s.IsActive && s.WorkDate == todayWorkDate)
+                    .ToListAsync();
+
+                foreach (var s in activeSessions)
+                {
+                    s.AllowedEndTime = newOfficeEndUtc;
+                }
+
+                var todayLogs = await _context.AttendanceLogs
+                    .Where(a => a.LogoutTime == null)
+                    .ToListAsync();
+
+                foreach (var a in todayLogs)
+                {
+                    if (TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, istTz).Date == nowIst.Date)
+                    {
+                        a.AllowedEndTime = newOfficeEndUtc;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+            }
+            catch
+            {
+                // Non-blocking fallback
+            }
+        }
 
         return new SystemSettingDto
         {

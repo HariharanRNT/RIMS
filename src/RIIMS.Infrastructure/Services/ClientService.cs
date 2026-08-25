@@ -1,16 +1,21 @@
+using Microsoft.EntityFrameworkCore;
 using RIIMS.Application.DTOs.Client;
+using RIIMS.Application.Exceptions;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
+using RIIMS.Infrastructure.Data;
 
 namespace RIIMS.Infrastructure.Services;
 
 public class ClientService : IClientService
 {
     private readonly IRepository<Client> _repository;
+    private readonly RiimsDbContext _context;
 
-    public ClientService(IRepository<Client> repository)
+    public ClientService(IRepository<Client> repository, RiimsDbContext context)
     {
         _repository = repository;
+        _context = context;
     }
 
     public async Task<List<ClientDto>> GetAllAsync()
@@ -98,6 +103,19 @@ public class ClientService : IClientService
 
     public async Task DeleteAsync(int id)
     {
+        var client = await _repository.GetByIdAsync(id);
+        if (client == null)
+            throw new KeyNotFoundException($"Client with ID {id} not found.");
+
+        var mappingCount = await _context.ProductClientMappings.CountAsync(m => m.ClientId == id);
+        var demoCount = await _context.DemoFollowUps.CountAsync(d => d.ClientId == id);
+        var logCount = await _context.SupportActivityLogs.CountAsync(s => s.ClientId == id);
+
+        if (mappingCount > 0 || demoCount > 0 || logCount > 0)
+        {
+            throw new ConflictException("Cannot delete this client — it is currently referenced by product mappings, demo follow-ups, or activity logs. Please remove those associations first.");
+        }
+
         await _repository.SoftDeleteAsync(id);
     }
 

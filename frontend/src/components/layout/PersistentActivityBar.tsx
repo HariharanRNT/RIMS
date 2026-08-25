@@ -14,11 +14,13 @@ import {
   User,
   MoreHorizontal,
   StopCircle,
+  PlayCircle,
   Clock,
   Check,
   Calendar,
   Sparkles,
   AlertCircle,
+  AlertTriangle,
   X,
   Info,
 } from 'lucide-react';
@@ -26,12 +28,14 @@ import {
 interface LookupItem {
   id: number;
   name: string;
+  allowedMinutes?: number;
 }
 
 interface ActiveBreak {
   id: number;
   breakTypeId: number;
   breakTypeName: string;
+  allowedMinutes?: number;
   startTime: string;
 }
 
@@ -54,7 +58,7 @@ interface Client {
 }
 
 const getBreakIcon = (name: string, isActive: boolean = false, size: number = 16) => {
-  const iconColor = isActive ? '#E8873C' : 'rgba(255, 255, 255, 0.7)';
+  const iconColor = isActive ? '#E8873C' : '#6b7280';
   const lower = name.toLowerCase();
 
   if (lower.includes('bio')) {
@@ -73,7 +77,7 @@ const getBreakIcon = (name: string, isActive: boolean = false, size: number = 16
 };
 
 const getSupportIcon = (name: string, isActive: boolean = false, size: number = 16) => {
-  const iconColor = isActive ? '#E8873C' : 'rgba(255, 255, 255, 0.7)';
+  const iconColor = isActive ? '#E8873C' : '#6b7280';
   const lower = name.toLowerCase();
 
   if (lower.includes('support')) {
@@ -105,7 +109,12 @@ export const PersistentActivityBar: React.FC = () => {
   const [mappings, setMappings] = useState<any[]>([]);
 
   const [activeBreak, setActiveBreak] = useState<ActiveBreak | null>(null);
+  const [pendingBreakType, setPendingBreakType] = useState<LookupItem | null>(null);
+  const [startingBreak, setStartingBreak] = useState(false);
+  const [stoppingBreak, setStoppingBreak] = useState(false);
   const [activeSupport, setActiveSupport] = useState<ActiveSupport | null>(null);
+  const [pendingSupportType, setPendingSupportType] = useState<LookupItem | null>(null);
+  const [startingSupport, setStartingSupport] = useState(false);
 
   // Stop / Demo Modal State
   const [showStopModal, setShowStopModal] = useState(false);
@@ -153,6 +162,7 @@ export const PersistentActivityBar: React.FC = () => {
 
   const availableClients = React.useMemo(() => {
     if (!stopProductId || isCustomProduct) return [];
+
     const mappedClientIds = mappings
       .filter((m) => m.productId === Number(stopProductId) && m.isActive !== false)
       .map((m) => m.clientId);
@@ -237,31 +247,43 @@ export const PersistentActivityBar: React.FC = () => {
     }
 
     try {
+      setStartingBreak(true);
       const res = await apiClient.post('/breaks/start', { breakTypeId: typeId });
       if (res.data.success) {
+        if (res.data.data) {
+          setActiveBreak(res.data.data);
+        }
+        setPendingBreakType(null);
         fetchActiveSessions();
         window.dispatchEvent(new Event('activity-changed'));
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to start break.');
+    } finally {
+      setStartingBreak(false);
     }
   };
 
   // Stop Break
   const handleStopBreak = async () => {
-    if (!activeBreak) return;
+    if (!activeBreak || stoppingBreak) return;
     try {
+      setStoppingBreak(true);
       await apiClient.post(`/breaks/${activeBreak.id}/stop`);
+      setToastNotification(`Break "${activeBreak.breakTypeName}" stopped successfully.`);
       setActiveBreak(null);
+      setPendingBreakType(null);
       fetchActiveSessions();
       window.dispatchEvent(new Event('activity-changed'));
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to stop break.');
+    } finally {
+      setStoppingBreak(false);
     }
   };
 
   // Start Support activity
-  const handleStartSupport = async (typeId: number, typeName: string) => {
+  const handleStartSupport = async (typeId: number) => {
     if (activeBreak || activeSupport) {
       alert('Cannot start a new activity while another session is active.');
       return;
@@ -272,11 +294,6 @@ export const PersistentActivityBar: React.FC = () => {
       if (res.data.success) {
         fetchActiveSessions();
         window.dispatchEvent(new Event('activity-changed'));
-
-        // If Demo activity clicked directly, prompt modal automatically or notify
-        if (typeName === 'Demo') {
-          handleOpenStopSupport();
-        }
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to start support activity.');
@@ -382,31 +399,536 @@ export const PersistentActivityBar: React.FC = () => {
     }
   };
 
-  const formatTimer = (totalSec: number) => {
+  const formatClock = (totalSec: number, forceHours: boolean = false) => {
     const hrs = Math.floor(totalSec / 3600);
     const mins = Math.floor((totalSec % 3600) / 60);
     const secs = totalSec % 60;
-    if (hrs > 0) {
+    if (forceHours || hrs > 0) {
       return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Allowed break minutes, stage, and exceeded calculations
+  const activeBreakAllowedMinutes = activeBreak
+    ? (activeBreak.allowedMinutes || breakTypes.find((bt) => bt.id === activeBreak.breakTypeId)?.allowedMinutes || 15)
+    : (pendingBreakType?.allowedMinutes || 15);
+
+  const allowedSec = activeBreakAllowedMinutes * 60;
+  const progressRatio = allowedSec > 0 ? (activeBreak ? elapsedSec / allowedSec : 0) : 0;
+  const isOverBreak = !!activeBreak && elapsedSec >= allowedSec;
+  const isWarningStage = !!activeBreak && !isOverBreak && progressRatio >= 0.8;
+  const exceededSec = isOverBreak ? elapsedSec - allowedSec : 0;
+  const remainingSec = !isOverBreak ? Math.max(0, allowedSec - elapsedSec) : 0;
+
+  const clampedRatio = Math.min(Math.max(progressRatio, 0), 1);
+  const progressPct = Math.round(progressRatio * 100);
+
+  // SVG Progress ring geometry (radius = 76, circumference = 2 * PI * 76 = 477.52)
+  const RING_RADIUS = 76;
+  const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+  const strokeDashoffset = isOverBreak ? 0 : RING_CIRCUMFERENCE * (1 - clampedRatio);
+
+  // Standardized format: if either elapsed or allowed is >= 1hr, format both with hh:mm:ss
+  const showHours = elapsedSec >= 3600 || allowedSec >= 3600;
+  const formattedElapsed = formatClock(activeBreak ? elapsedSec : 0, showHours);
+  const formattedAllowed = formatClock(allowedSec, showHours);
+  const formattedOverage = formatClock(exceededSec, showHours);
+
+  const formatExceededTime = (totalSec: number) => {
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    const parts: string[] = [];
+    if (hrs > 0) parts.push(`${hrs} ${hrs === 1 ? 'hr' : 'hrs'}`);
+    if (mins > 0) parts.push(`${mins} ${mins === 1 ? 'min' : 'mins'}`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs} ${secs === 1 ? 'sec' : 'secs'}`);
+    return parts.join(' ');
+  };
+
+  const formatRemainingTime = (totalSec: number) => {
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    if (mins > 0) {
+      return `${mins}m ${secs > 0 ? `${secs}s` : ''}`.trim();
+    }
+    return `${secs}s`;
+  };
+
+  // State-specific visual tokens with distinct golden warning and urgent exceeded button
+  const getBreakTheme = () => {
+    if (!activeBreak) {
+      return {
+        state: 'ready',
+        badgeLabel: 'Ready to Start Break',
+        badgeBg: '#ecfdf5',
+        badgeBorder: '#a7f3d0',
+        badgeColor: '#065f46',
+        badgeDotColor: '#10b981',
+        ringColor: '#10b981',
+        ringTrackBg: '#f3f4f6',
+        timerTextColor: '#111827',
+        progressTextColor: '#6b7280',
+        buttonBg: '#059669',
+        buttonShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+        srAnnouncement: 'Break ready to start',
+      };
+    }
+    if (isOverBreak) {
+      return {
+        state: 'exceeded',
+        badgeLabel: 'Break Time Exceeded',
+        badgeBg: '#fef2f2',
+        badgeBorder: '#fca5a5',
+        badgeColor: '#991b1b',
+        badgeDotColor: '#dc2626',
+        ringColor: '#dc2626',
+        ringTrackBg: '#fee2e2',
+        timerTextColor: '#dc2626',
+        progressTextColor: '#dc2626',
+        buttonBg: '#dc2626',
+        buttonShadow: '0 2px 8px rgba(220, 38, 38, 0.35)',
+        srAnnouncement: 'Break time limit exceeded',
+      };
+    }
+    if (isWarningStage) {
+      return {
+        state: 'warning',
+        badgeLabel: 'Approaching Limit',
+        badgeBg: '#fefce8',
+        badgeBorder: '#fef08a',
+        badgeColor: '#854d0e',
+        badgeDotColor: '#eab308',
+        ringColor: '#eab308',
+        ringTrackBg: '#fef9c3',
+        timerTextColor: '#a16207',
+        progressTextColor: '#854d0e',
+        buttonBg: '#E8873C',
+        buttonShadow: '0 2px 4px rgba(232, 135, 60, 0.25)',
+        srAnnouncement: 'Break time approaching limit',
+      };
+    }
+    return {
+      state: 'normal',
+      badgeLabel: 'Break in Progress',
+      badgeBg: '#ecfdf5',
+      badgeBorder: '#a7f3d0',
+      badgeColor: '#065f46',
+      badgeDotColor: '#10b981',
+      ringColor: '#10b981',
+      ringTrackBg: '#f3f4f6',
+      timerTextColor: '#111827',
+      progressTextColor: '#059669',
+      buttonBg: '#E8873C',
+      buttonShadow: '0 2px 4px rgba(232, 135, 60, 0.25)',
+      srAnnouncement: 'Break in progress',
+    };
+  };
+
+  const breakTheme = getBreakTheme();
+
   if (!user || user.role !== 'Employee') return null;
 
   return (
     <>
-      {/* Full-Screen Locked Break Modal Overlay */}
-      {activeBreak && (
+      {/* Full-Screen Break Modal Overlay */}
+      {(activeBreak || pendingBreakType) && (
         <div style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: 'rgba(17, 24, 39, 0.45)',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          zIndex: 999999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem',
+          userSelect: 'none',
+        }}>
+          {/* Screen reader live announcement for state changes */}
+          <div aria-live="polite" style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>
+            {breakTheme.srAnnouncement}
+          </div>
+
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
+              borderRadius: '22px',
+              width: '100%',
+              maxWidth: '480px',
+              padding: '1.35rem 1.25rem 1.15rem',
+              textAlign: 'center',
+              boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1)',
+              animation: 'modalIn 0.2s ease-out',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            {/* 1. Header: [Break icon] {Break Type Name} / ● {Status Label} */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.75rem',
+              textAlign: 'left',
+              marginBottom: '0.85rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: 1 }}>
+                {/* Circular Break Icon Badge */}
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: '#fff4e6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  {getBreakIcon(activeBreak ? activeBreak.breakTypeName : pendingBreakType!.name, true, 20)}
+                </div>
+
+                {/* Break Type Name & Status Pill */}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <h2
+                    title={activeBreak ? activeBreak.breakTypeName : pendingBreakType!.name}
+                    style={{
+                      fontSize: '1.15rem',
+                      fontWeight: 700,
+                      color: 'var(--text-main)',
+                      margin: 0,
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: '300px',
+                    }}
+                  >
+                    {activeBreak ? activeBreak.breakTypeName : pendingBreakType!.name}
+                  </h2>
+
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.15rem 0.55rem',
+                    borderRadius: '9999px',
+                    backgroundColor: breakTheme.badgeBg,
+                    border: `1px solid ${breakTheme.badgeBorder}`,
+                    color: breakTheme.badgeColor,
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    marginTop: '0.2rem',
+                  }}>
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: breakTheme.badgeDotColor,
+                        display: 'inline-block',
+                      }}
+                    />
+                    <span>{breakTheme.badgeLabel}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Close Button ONLY for Pending (Ready to Start) Modal — NO close button on active break */}
+              {!activeBreak && (
+                <button
+                  type="button"
+                  onClick={() => setPendingBreakType(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#9ca3af',
+                    padding: '0.35rem',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                  title="Cancel and close"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+
+            {/* 2. Break Information Row: Two-column layout */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#f9fafb',
+              border: '1px solid #e5e7eb',
+              borderRadius: '12px',
+              padding: '0.5rem 1rem',
+              marginBottom: '0.85rem',
+            }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Started
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '0.1rem' }}>
+                  {activeBreak ? formatStartTime(activeBreak.startTime) : 'Not yet started'}
+                </div>
+              </div>
+
+              <div style={{ width: '1px', height: '22px', backgroundColor: '#e5e7eb' }} />
+
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Allowed
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '0.1rem' }}>
+                  {activeBreakAllowedMinutes.toString().padStart(2, '0')} {activeBreakAllowedMinutes === 1 ? 'min' : 'mins'}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Timer Section (Compact Circular Progress Ring) */}
+            <div style={{
+              position: 'relative',
+              width: '184px',
+              height: '184px',
+              margin: '0 auto 0.4rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <svg
+                width="184"
+                height="184"
+                viewBox="0 0 184 184"
+                style={{
+                  position: 'absolute',
+                  transform: 'rotate(-90deg)',
+                  transformOrigin: '50% 50%',
+                }}
+              >
+                {/* Background Ring Track */}
+                <circle
+                  cx="92"
+                  cy="92"
+                  r={RING_RADIUS}
+                  fill="none"
+                  stroke={breakTheme.ringTrackBg}
+                  strokeWidth="6"
+                />
+                {/* Active Dynamic Progress Ring */}
+                <circle
+                  cx="92"
+                  cy="92"
+                  r={RING_RADIUS}
+                  fill="none"
+                  stroke={breakTheme.ringColor}
+                  strokeWidth="7"
+                  strokeDasharray={RING_CIRCUMFERENCE}
+                  strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="round"
+                  style={{
+                    transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s ease',
+                  }}
+                />
+              </svg>
+
+              {/* Centered Readout with clear vertical spacing */}
+              <div
+                aria-live="off"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  zIndex: 1,
+                  padding: '0.2rem',
+                }}
+              >
+                <div style={{
+                  fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                  fontSize: showHours ? '1.3rem' : '1.6rem',
+                  fontWeight: 800,
+                  color: breakTheme.timerTextColor,
+                  lineHeight: 1.1,
+                  letterSpacing: '0.02em',
+                }}>
+                  {formattedElapsed}
+                </div>
+                <div style={{ fontSize: '0.625rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.05rem' }}>
+                  Elapsed
+                </div>
+
+                <div style={{ width: '20px', height: '1px', backgroundColor: '#e5e7eb', margin: '0.25rem 0 0.2rem' }} />
+
+                <div style={{
+                  fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#4b5563',
+                  lineHeight: 1,
+                }}>
+                  {formattedAllowed}
+                </div>
+                <div style={{ fontSize: '0.6rem', fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.05rem' }}>
+                  Allowed
+                </div>
+              </div>
+            </div>
+
+            {/* Percentage Used Subtext */}
+            <div style={{
+              fontSize: '0.825rem',
+              fontWeight: 700,
+              color: breakTheme.progressTextColor,
+              marginBottom: isOverBreak ? '0.6rem' : '0.85rem',
+            }}>
+              {progressPct}% used
+            </div>
+
+            {/* 4. Exceeded Warning Banner (Only in Exceeded State) */}
+            {isOverBreak && (
+              <div style={{
+                background: '#fef2f2',
+                border: '1px solid #fca5a5',
+                borderRadius: '10px',
+                padding: '0.5rem 0.75rem',
+                marginBottom: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                textAlign: 'left',
+                color: '#991b1b',
+                fontSize: '0.775rem',
+                fontWeight: 600,
+                lineHeight: 1.3,
+              }}>
+                <AlertCircle size={15} style={{ color: '#dc2626', flexShrink: 0 }} />
+                <span>
+                  ⚠ You have exceeded your allowed break time by <strong>{formattedOverage}</strong>.
+                </span>
+              </div>
+            )}
+
+            {/* 5. Main Action Button (Red in Exceeded state, Orange in Normal/Warning) */}
+            {activeBreak ? (
+              <button
+                type="button"
+                onClick={handleStopBreak}
+                disabled={stoppingBreak}
+                style={{
+                  width: '100%',
+                  padding: '0.7rem 1.15rem',
+                  backgroundColor: breakTheme.buttonBg,
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: stoppingBreak ? 'not-allowed' : 'pointer',
+                  opacity: stoppingBreak ? 0.75 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem',
+                  boxShadow: breakTheme.buttonShadow,
+                  transition: 'all 0.2s ease',
+                  marginBottom: '0.65rem',
+                }}
+              >
+                {stoppingBreak ? (
+                  <>
+                    <span style={{ width: '15px', height: '15px', border: '2px solid #ffffff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                    <span>Stopping Break...</span>
+                  </>
+                ) : (
+                  <>
+                    <StopCircle size={17} style={{ color: '#ffffff' }} />
+                    <span>Stop Break & Resume Work</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleStartBreak(pendingBreakType!.id)}
+                disabled={startingBreak}
+                style={{
+                  width: '100%',
+                  padding: '0.7rem 1.15rem',
+                  backgroundColor: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: startingBreak ? 'not-allowed' : 'pointer',
+                  opacity: startingBreak ? 0.75 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem',
+                  boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                  transition: 'all 0.2s ease',
+                  marginBottom: '0.65rem',
+                }}
+              >
+                {startingBreak ? (
+                  <>
+                    <span style={{ width: '15px', height: '15px', border: '2px solid #ffffff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                    <span>Starting...</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle size={17} style={{ color: '#ffffff' }} />
+                    <span>Start Break</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* 6. Info Message (Single line compact helper) */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              color: '#6b7280',
+              fontSize: '0.75rem',
+              lineHeight: 1.3,
+              textAlign: 'center',
+            }}>
+              <Info size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />
+              <span>
+                {activeBreak
+                  ? 'Your break is being tracked automatically. Stopping the break will resume your work.'
+                  : 'Starting a break will automatically place your active work task on hold.'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-Screen Locked Support Activity Start Modal Overlay */}
+      {pendingSupportType && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(17, 24, 39, 0.4)',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
           zIndex: 999999,
           display: 'flex',
           alignItems: 'center',
@@ -415,19 +937,41 @@ export const PersistentActivityBar: React.FC = () => {
           userSelect: 'none',
         }}>
           <div style={{
-            background: 'rgba(255, 255, 255, 0.08)',
-            backdropFilter: 'blur(20px) saturate(140%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(140%)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
+            background: '#ffffff',
+            border: '1px solid #e5e7eb',
             borderRadius: '20px',
             width: '100%',
             maxWidth: '360px',
             padding: '1.75rem 1.5rem',
             textAlign: 'center',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             animation: 'modalIn 0.2s ease-out',
+            position: 'relative',
           }}>
-            {/* Amber Circular Icon Badge */}
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setPendingSupportType(null)}
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#9ca3af',
+                padding: '0.25rem',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Close"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Circular Icon Badge */}
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -435,166 +979,75 @@ export const PersistentActivityBar: React.FC = () => {
               width: '56px',
               height: '56px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(232, 135, 60, 0.15)',
-              color: '#E8873C',
+              backgroundColor: '#eff6ff',
+              color: '#3b82f6',
               marginBottom: '0.85rem',
-              boxShadow: '0 0 16px rgba(232, 135, 60, 0.2)',
             }}>
-              {getBreakIcon(activeBreak.breakTypeName, true, 26)}
+              {getSupportIcon(pendingSupportType.name, true, 26)}
             </div>
 
-            {/* Break Title */}
+            {/* Title */}
             <h2 style={{
               fontSize: '1.35rem',
               fontWeight: 700,
               color: 'var(--text-main)',
               marginBottom: '0.35rem',
-              letterSpacing: '-0.02em',
             }}>
-              {activeBreak.breakTypeName}
+              Start {pendingSupportType.name}?
             </h2>
 
-            {/* Status Badge ("Break in Progress") */}
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              padding: '0.25rem 0.75rem',
-              borderRadius: '9999px',
-              backgroundColor: 'rgba(232, 135, 60, 0.15)',
-              border: '1px solid rgba(232, 135, 60, 0.3)',
-              color: '#F5C060',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              marginBottom: '1.25rem',
-            }}>
-              <span className="pulse-dot" />
-              <span>Break in Progress</span>
-            </div>
-
-            {/* Live Monospace Timer Card with Amber Arc Ring Accent */}
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '16px',
-              padding: '1.25rem 1rem',
-              marginBottom: '1rem',
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-            }}>
-              {/* Thin Amber Circular Arc Progress Indicator Accent */}
-              <svg
-                width="140"
-                height="140"
-                viewBox="0 0 140 140"
-                style={{
-                  position: 'absolute',
-                  pointerEvents: 'none',
-                  filter: 'drop-shadow(0 0 8px rgba(232, 135, 60, 0.45))',
-                  animation: 'spin 8s linear infinite',
-                }}
-              >
-                <circle
-                  cx="70"
-                  cy="70"
-                  r="58"
-                  fill="none"
-                  stroke="rgba(255, 255, 255, 0.08)"
-                  strokeWidth="2.5"
-                />
-                <circle
-                  cx="70"
-                  cy="70"
-                  r="58"
-                  fill="none"
-                  stroke="rgba(232, 135, 60, 0.65)"
-                  strokeWidth="3"
-                  strokeDasharray="95 270"
-                  strokeLinecap="round"
-                />
-              </svg>
-
-              <div style={{
-                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                fontSize: '2.35rem',
-                fontWeight: 700,
-                color: '#FFFFFF',
-                lineHeight: 1,
-                letterSpacing: '0.04em',
-                marginBottom: '0.4rem',
-                position: 'relative',
-                zIndex: 1,
-              }}>
-                {formatTimer(elapsedSec)}
-              </div>
-              <span style={{
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                color: 'rgba(255, 255, 255, 0.5)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                position: 'relative',
-                zIndex: 1,
-              }}>
-                Break Duration
-              </span>
-            </div>
-
-            {/* Started At Timestamp */}
             <p style={{
               fontSize: '0.8rem',
               color: 'var(--text-secondary)',
               marginBottom: '1.1rem',
             }}>
-              Started at <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>{formatStartTime(activeBreak.startTime)}</strong>
+              Click <strong>Start Activity</strong> to begin the timer
             </p>
 
-            {/* Stop Break Action Glass Button */}
-            <button
-              type="button"
-              onClick={handleStopBreak}
-              className="btn-danger-glass"
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                borderRadius: '12px',
-                color: '#F87171',
-                boxShadow: '0 0 12px rgba(239, 68, 68, 0.15)',
-                marginBottom: '0.85rem',
-              }}
-            >
-              <StopCircle size={17} style={{ color: '#F87171' }} />
-              <span>Stop Break</span>
-            </button>
+            {/* Action Buttons: Yes / No */}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '0.85rem' }}>
+              <button
+                type="button"
+                onClick={() => setPendingSupportType(null)}
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '0.6rem 1rem', borderRadius: '10px' }}
+              >
+                Cancel
+              </button>
 
-            {/* Helpful Glass Inset Callout */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setStartingSupport(true);
+                  await handleStartSupport(pendingSupportType.id);
+                  setStartingSupport(false);
+                  setPendingSupportType(null);
+                }}
+                disabled={startingSupport}
+                className="btn-success-glass"
+                style={{ flex: 1.2, padding: '0.6rem 1rem', borderRadius: '10px' }}
+              >
+                <PlayCircle size={17} style={{ color: '#059669' }} />
+                <span>{startingSupport ? 'Starting...' : 'Start Activity'}</span>
+              </button>
+            </div>
+
+            {/* Inset Callout */}
             <div style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.10)',
+              background: '#f9fafb',
+              border: '1px solid #e5e7eb',
               borderRadius: '12px',
               padding: '0.65rem 0.85rem',
               fontSize: '0.75rem',
-              color: 'rgba(255, 255, 255, 0.65)',
+              color: '#4b5563',
               lineHeight: 1.4,
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
               textAlign: 'left',
             }}>
-              <Info size={16} style={{ color: 'rgba(255, 255, 255, 0.5)', flexShrink: 0 }} />
-              <span>
-                Your current task is temporarily <strong>on hold</strong> until you stop the break.
-              </span>
+              <Info size={16} style={{ color: '#9ca3af', flexShrink: 0 }} />
+              <span>Starting a support activity will automatically place your current work task <strong>on hold</strong>.</span>
             </div>
           </div>
         </div>
@@ -618,10 +1071,8 @@ export const PersistentActivityBar: React.FC = () => {
 
       {/* Persistent Activity Bar Header */}
       <div style={{
-        background: 'linear-gradient(135deg, rgba(12, 45, 43, 0.85) 0%, rgba(16, 87, 82, 0.75) 100%)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        borderBottom: '1px solid rgba(255,255,255,0.10)',
+        background: '#ffffff',
+        borderBottom: '1px solid #e5e7eb',
         padding: '0.6rem 1.5rem',
         display: 'flex',
         alignItems: 'center',
@@ -632,10 +1083,42 @@ export const PersistentActivityBar: React.FC = () => {
         {/* Active Session Badge & Counter */}
         {(activeBreak || activeSupport) ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            <span className={`badge ${activeBreak ? 'badge-warning' : 'badge-primary'}`} style={{ fontSize: '0.825rem', padding: '0.35rem 0.75rem' }}>
-              <Clock size={14} />
-              Active: <strong>{activeBreak ? activeBreak.breakTypeName : activeSupport?.activityTypeName}</strong> ({formatTimer(elapsedSec)})
-            </span>
+            {activeBreak ? (
+              <span
+                className={`badge ${isOverBreak ? 'badge-danger' : isWarningStage ? 'badge-warning' : 'badge-warning'}`}
+                style={{
+                  fontSize: '0.825rem',
+                  padding: '0.35rem 0.75rem',
+                  backgroundColor: isOverBreak ? '#fef2f2' : isWarningStage ? '#fefce8' : '#ecfdf5',
+                  borderColor: isOverBreak ? '#fca5a5' : isWarningStage ? '#fef08a' : '#a7f3d0',
+                  color: isOverBreak ? '#dc2626' : isWarningStage ? '#854d0e' : '#065f46',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                {isOverBreak ? (
+                  <AlertCircle size={14} style={{ color: '#dc2626' }} />
+                ) : isWarningStage ? (
+                  <AlertTriangle size={14} style={{ color: '#ca8a04' }} />
+                ) : (
+                  <Clock size={14} style={{ color: '#059669' }} />
+                )}
+                Active: <strong>{activeBreak.breakTypeName}</strong> ({formattedElapsed} / {formattedAllowed}
+                {isOverBreak
+                  ? ` • Exceeded by ${formatExceededTime(exceededSec)}`
+                  : isWarningStage
+                  ? ` • ${formatRemainingTime(remainingSec)} left`
+                  : ''}
+                )
+              </span>
+            ) : (
+              <span className="badge badge-primary" style={{ fontSize: '0.825rem', padding: '0.35rem 0.75rem' }}>
+                <Clock size={14} />
+                Active: <strong>{activeSupport?.activityTypeName}</strong> ({formatClock(elapsedSec)})
+              </span>
+            )}
 
             {activeBreak && (
               <button className="btn btn-danger btn-sm" onClick={handleStopBreak}>
@@ -666,7 +1149,7 @@ export const PersistentActivityBar: React.FC = () => {
         <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Breaks Group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.5)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
+            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
               Breaks:
             </span>
             {breakTypes.map((bt) => {
@@ -677,21 +1160,33 @@ export const PersistentActivityBar: React.FC = () => {
                   type="button"
                   className={`activity-btn ${isThisActive ? 'active' : ''}`}
                   disabled={!!activeSupport || (!!activeBreak && !isThisActive)}
-                  onClick={() => handleStartBreak(bt.id)}
+                  title={`${bt.name} (${bt.allowedMinutes ?? 15} mins allowed)`}
+                  onClick={() => {
+                    if (activeBreak || activeSupport) {
+                      alert('Cannot start a new activity while another session is active.');
+                      return;
+                    }
+                    setPendingBreakType(bt);
+                  }}
                 >
                   {getBreakIcon(bt.name, isThisActive, 15)}
                   <span>{bt.name}</span>
+                  {bt.allowedMinutes && (
+                    <span style={{ fontSize: '0.675rem', opacity: 0.7, marginLeft: '0.15rem' }}>
+                      ({bt.allowedMinutes}m)
+                    </span>
+                  )}
                   {isThisActive && <Check size={13} style={{ color: '#E8873C', marginLeft: '0.1rem' }} />}
                 </button>
               );
             })}
           </div>
 
-          <div style={{ width: '1px', height: '22px', backgroundColor: 'rgba(255,255,255,0.12)' }} />
+          <div style={{ width: '1px', height: '22px', backgroundColor: '#e5e7eb' }} />
 
           {/* Support Activities Group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.5)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
+            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
               Support Activities:
             </span>
             {supportTypes.map((st) => {
@@ -702,7 +1197,13 @@ export const PersistentActivityBar: React.FC = () => {
                   type="button"
                   className={`activity-btn ${isThisActive ? 'active' : ''}`}
                   disabled={!!activeBreak || (!!activeSupport && !isThisActive)}
-                  onClick={() => handleStartSupport(st.id, st.name)}
+                  onClick={() => {
+                    if (activeBreak || activeSupport) {
+                      alert('Cannot start a new activity while another session is active.');
+                      return;
+                    }
+                    setPendingSupportType(st);
+                  }}
                 >
                   {getSupportIcon(st.name, isThisActive, 15)}
                   <span>{st.name}</span>

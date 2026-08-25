@@ -94,6 +94,26 @@ public static class DataSeeder
             await context.SaveChangesAsync();
         }
 
+        // Reactivate any departments or designations that have active employees
+        var deptsToReactivate = await context.Departments
+            .IgnoreQueryFilters()
+            .Where(d => !d.IsActive && context.Employees.IgnoreQueryFilters().Any(e => e.DepartmentId == d.Id && e.IsActive))
+            .ToListAsync();
+        foreach (var d in deptsToReactivate)
+        {
+            d.IsActive = true;
+        }
+
+        var desigsToReactivate = await context.Designations
+            .IgnoreQueryFilters()
+            .Where(d => !d.IsActive && context.Employees.IgnoreQueryFilters().Any(e => e.DesignationId == d.Id && e.IsActive))
+            .ToListAsync();
+        foreach (var d in desigsToReactivate)
+        {
+            d.IsActive = true;
+        }
+        await context.SaveChangesAsync();
+
         // 3. Admin Employee & Identity User
         var adminEmail = "admin@riims.local";
         var adminEmp = await context.Employees
@@ -179,8 +199,22 @@ public static class DataSeeder
             ("OfficeEndTime", "07:00 PM", "Official office closing time"),
             ("GraceMinutes", "15", "Allowed grace period minutes after office start"),
             ("PermissionHours", "1", "Late login permission allocation hours per month"),
+            ("MonthlyAllowedPermissions", "1", "Number of permission requests allowed per employee per month before excess late logins apply"),
             ("LateLoginsForHalfDay", "2", "Number of unpermissioned late logins required for half-day LOP"),
-            ("MonthlyAllowedLeave", "1", "Number of leave days allowed for each employee per month before LOP is applied.")
+            ("MonthlyAllowedLeave", "1", "Number of leave days allowed for each employee per month before LOP is applied."),
+
+            // Employee Celebration Settings
+            ("BirthdayWishesEnabled", "true", "Enable automatic Birthday wishes"),
+            ("BirthdayWishesChannel", "Both", "Delivery channel for Birthday wishes: RIIMS, Email, or Both"),
+            ("BirthdayWishesNotifyAllEmployees", "true", "Broadcast Birthday wishes to all active employees"),
+
+            ("CompanyAnniversaryWishesEnabled", "true", "Enable automatic Company Anniversary wishes"),
+            ("CompanyAnniversaryWishesChannel", "Both", "Delivery channel for Company Anniversary wishes: RIIMS, Email, or Both"),
+            ("CompanyAnniversaryWishesNotifyAllEmployees", "true", "Broadcast Company Anniversary wishes to all active employees"),
+
+            ("MarriageAnniversaryWishesEnabled", "true", "Enable automatic Marriage Anniversary wishes"),
+            ("MarriageAnniversaryWishesChannel", "Both", "Delivery channel for Marriage Anniversary wishes: RIIMS, Email, or Both"),
+            ("MarriageAnniversaryWishesNotifyAllEmployees", "false", "Broadcast Marriage Anniversary wishes to all active employees")
         };
 
         foreach (var setting in defaultSettings)
@@ -197,13 +231,33 @@ public static class DataSeeder
         }
 
         // 5. Break Types
-        string[] breakTypes = { "Bio Break", "Tea Break", "Lunch Break" };
-        foreach (var b in breakTypes)
+        var defaultBreakTypes = new (string Name, int AllowedMinutes)[]
         {
-            if (!await context.BreakTypes.AnyAsync(x => x.Name == b))
+            ("Bio Break", 5),
+            ("Tea Break", 10),
+            ("Lunch Break", 60),
+            ("Call Break", 10),
+            ("Other", 15)
+        };
+
+        foreach (var b in defaultBreakTypes)
+        {
+            var existing = await context.BreakTypes.FirstOrDefaultAsync(x => x.Name == b.Name);
+            if (existing == null)
             {
-                context.BreakTypes.Add(new BreakType { Name = b });
+                context.BreakTypes.Add(new BreakType { Name = b.Name, AllowedMinutes = b.AllowedMinutes });
             }
+            else if (existing.AllowedMinutes <= 0)
+            {
+                existing.AllowedMinutes = b.AllowedMinutes;
+            }
+        }
+
+        // Ensure any other break types have a valid positive AllowedMinutes
+        var unconfiguredBreaks = await context.BreakTypes.Where(x => x.AllowedMinutes <= 0).ToListAsync();
+        foreach (var ub in unconfiguredBreaks)
+        {
+            ub.AllowedMinutes = 15;
         }
 
         // 6. Support Activity Types

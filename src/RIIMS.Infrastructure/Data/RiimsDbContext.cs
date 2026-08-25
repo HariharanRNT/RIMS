@@ -53,6 +53,11 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
     public DbSet<EmployeeSalaryStructure> EmployeeSalaryStructures => Set<EmployeeSalaryStructure>();
     public DbSet<SalaryComponent> SalaryComponents => Set<SalaryComponent>();
 
+    // Auth & Identity
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<AdminNotificationRead> AdminNotificationReads => Set<AdminNotificationRead>();
+    public DbSet<CelebrationLog> CelebrationLogs => Set<CelebrationLog>();
+
     // Reports
     public DbSet<MonthlyReportLog> MonthlyReportLogs => Set<MonthlyReportLog>();
 
@@ -62,6 +67,22 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
 
         // Apply all IEntityTypeConfiguration classes from this assembly
         builder.ApplyConfigurationsFromAssembly(typeof(RiimsDbContext).Assembly);
+
+        builder.Entity<CelebrationLog>(entity =>
+        {
+            entity.HasIndex(c => new { c.EmployeeId, c.EventType, c.EventDate }).IsUnique();
+        });
+
+        builder.Entity<AdminNotificationRead>(entity =>
+        {
+            entity.HasIndex(n => new { n.AdminUserId, n.NotificationKey });
+        });
+
+        builder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasIndex(t => new { t.TokenHash, t.IsUsed, t.ExpiresAt });
+            entity.HasIndex(t => new { t.UserId, t.IsUsed });
+        });
 
         builder.Entity<EmployeeSession>(entity =>
         {
@@ -76,6 +97,10 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<in
                 .WithMany()
                 .HasForeignKey(t => t.AssignedByEmployeeId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(t => new { t.EmployeeId, t.Status, t.Priority, t.CreatedAt });
+            entity.HasIndex(t => t.AssignedByEmployeeId);
+            entity.HasIndex(t => t.DueDate);
         });
 
         builder.Entity<TaskTimelineEvent>(entity =>

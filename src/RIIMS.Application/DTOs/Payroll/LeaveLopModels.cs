@@ -16,6 +16,9 @@ public class DailyLopDetail
     public bool IsLeave { get; set; }
     public bool IsSandwichLeave { get; set; }
     public bool IsLop { get; set; }
+    public bool IsHalfDayAttendance { get; set; }
+    public decimal LeaveDaysCount { get; set; }
+    public decimal PresentDaysCount { get; set; }
     public string? LopReason { get; set; }
     public string? LeaveReason { get; set; }
     public string? HolidayName { get; set; }
@@ -28,8 +31,8 @@ public class LeaveLopResult
     public int Month { get; set; }
     public int TotalCalendarDays { get; set; }
     public int WorkingDays { get; set; }
-    public int PresentDays { get; set; }
-    public int ApprovedLeaveDays { get; set; }
+    public decimal PresentDays { get; set; }
+    public decimal ApprovedLeaveDays { get; set; }
     public int WeekendDays { get; set; }
     public int HolidayDays { get; set; }
     public int MonthlyAllowedLeave { get; set; }
@@ -37,7 +40,11 @@ public class LeaveLopResult
     public decimal SandwichLeaveDays { get; set; }
     public decimal TotalLeaveLOPDays { get; set; }
     public decimal LeaveLOPDays { get; set; }
+    public int TotalLateCount { get; set; }
+    public int PermissionCount { get; set; }
     public int UnpermissionedLateCount { get; set; }
+    public decimal RawLateLoginLOPDays { get; set; }
+    public decimal AllowedLeaveOffset { get; set; }
     public decimal LateLoginLOPDays { get; set; }
     public decimal TotalLOPDays { get; set; }
     public decimal MonthlySalary { get; set; }

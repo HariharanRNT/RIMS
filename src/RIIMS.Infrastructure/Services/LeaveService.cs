@@ -20,12 +20,40 @@ public class LeaveService : ILeaveService
 
     public async Task<LeaveRequestDto> SubmitLeaveAsync(int employeeId, CreateLeaveRequest request)
     {
+        var fromDate = request.FromDate.Date;
+        var toDate = request.ToDate.Date;
+
+        // Overlap validation
+        var existingActiveLeaves = await _context.LeaveRequests
+            .Where(l => l.EmployeeId == employeeId &&
+                        l.Status != RequestStatus.Rejected &&
+                        l.FromDate.Date <= toDate &&
+                        l.ToDate.Date >= fromDate)
+            .ToListAsync();
+
+        foreach (var existing in existingActiveLeaves)
+        {
+            if (existing.LeaveDuration == LeaveDuration.FullDay || request.LeaveDuration == LeaveDuration.FullDay)
+            {
+                throw new InvalidOperationException($"An active leave request already exists for the requested period.");
+            }
+            if (existing.LeaveDuration == LeaveDuration.HalfDay && request.LeaveDuration == LeaveDuration.HalfDay)
+            {
+                if (existing.HalfDayType == request.HalfDayType)
+                {
+                    throw new InvalidOperationException($"An active {request.HalfDayType} leave request already exists for {fromDate:yyyy-MM-dd}.");
+                }
+            }
+        }
+
         var leave = new LeaveRequest
         {
             EmployeeId = employeeId,
             LeaveTypeId = request.LeaveTypeId,
-            FromDate = request.FromDate.Date,
-            ToDate = request.ToDate.Date,
+            FromDate = fromDate,
+            ToDate = toDate,
+            LeaveDuration = request.LeaveDuration,
+            HalfDayType = request.LeaveDuration == LeaveDuration.HalfDay ? request.HalfDayType : null,
             Reason = request.Reason,
             Status = RequestStatus.Pending
         };
@@ -256,23 +284,29 @@ public class LeaveService : ILeaveService
 
     private LeaveRequestDto MapToDto(LeaveRequest l)
     {
-        // Calculate leave duration excluding weekends and holidays
         decimal days = 0;
-        for (var d = l.FromDate.Date; d <= l.ToDate.Date; d = d.AddDays(1))
+        if (l.LeaveDuration == LeaveDuration.HalfDay)
         {
-            var cal = _context.AttendanceCalendars.FirstOrDefault(c => c.CalendarDate == DateOnly.FromDateTime(d));
-            if (cal != null)
+            days = 0.5m;
+        }
+        else
+        {
+            for (var d = l.FromDate.Date; d <= l.ToDate.Date; d = d.AddDays(1))
             {
-                if (cal.DayType == AttendanceDayType.WorkingDay || cal.DayType == AttendanceDayType.SpecialWorkingDay)
+                var cal = _context.AttendanceCalendars.FirstOrDefault(c => c.CalendarDate == DateOnly.FromDateTime(d));
+                if (cal != null)
                 {
-                    days += 1;
+                    if (cal.DayType == AttendanceDayType.WorkingDay || cal.DayType == AttendanceDayType.SpecialWorkingDay)
+                    {
+                        days += 1;
+                    }
                 }
-            }
-            else
-            {
-                if (d.DayOfWeek != DayOfWeek.Saturday && d.DayOfWeek != DayOfWeek.Sunday)
+                else
                 {
-                    days += 1;
+                    if (d.DayOfWeek != DayOfWeek.Saturday && d.DayOfWeek != DayOfWeek.Sunday)
+                    {
+                        days += 1;
+                    }
                 }
             }
         }
@@ -288,6 +322,8 @@ public class LeaveService : ILeaveService
             LeaveTypeName = l.LeaveType.Name,
             FromDate = l.FromDate,
             ToDate = l.ToDate,
+            LeaveDuration = l.LeaveDuration,
+            HalfDayType = l.HalfDayType,
             LeaveDays = days,
             Reason = l.Reason,
             Status = l.Status.ToString(),

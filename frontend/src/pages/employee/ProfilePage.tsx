@@ -116,8 +116,8 @@ export const ProfilePage: React.FC = () => {
     return (
       <div className="page-container" style={{ padding: '2rem' }}>
         <div style={{
-          background: 'rgba(239, 68, 68, 0.08)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
           borderRadius: 'var(--radius-md)',
           padding: '2rem',
           textAlign: 'center',
@@ -154,30 +154,15 @@ export const ProfilePage: React.FC = () => {
       
       {/* Header Banner */}
       <div style={{
-        background: 'rgba(255,255,255,0.06)',
-        backdropFilter: 'blur(20px) saturate(140%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+        background: '#ffffff',
         borderRadius: 'var(--radius-lg)',
-        padding: '2.25rem 2rem',
-        color: '#F5F5F5',
+        padding: '2rem 2rem',
         position: 'relative',
         overflow: 'hidden',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-        border: '1px solid rgba(255,255,255,0.12)',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+        border: '1px solid var(--border-color)',
         marginBottom: '2rem'
       }}>
-        {/* Subtle Background Glow */}
-        <div style={{
-          position: 'absolute',
-          top: '-40px',
-          right: '-40px',
-          width: '240px',
-          height: '240px',
-          background: 'radial-gradient(circle, rgba(232, 135, 60, 0.20) 0%, rgba(255,255,255,0) 70%)',
-          borderRadius: '50%',
-          pointerEvents: 'none'
-        }} />
-
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -190,18 +175,17 @@ export const ProfilePage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
             {/* Avatar Pill */}
             <div style={{
-              width: '84px',
-              height: '84px',
-              borderRadius: '24px',
+              width: '80px',
+              height: '80px',
+              borderRadius: '20px',
               background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
               color: '#FFFFFF',
-              fontSize: '2rem',
+              fontSize: '1.85rem',
               fontWeight: 800,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-              border: '3px solid rgba(255,255,255,0.25)',
+              boxShadow: '0 4px 12px rgba(232, 135, 60, 0.25)',
               flexShrink: 0
             }}>
               {initials}
@@ -209,7 +193,7 @@ export const ProfilePage: React.FC = () => {
 
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+                <h1 style={{ fontSize: '1.65rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: '#111827' }}>
                   {profile.name}
                 </h1>
                 <span style={{
@@ -220,21 +204,21 @@ export const ProfilePage: React.FC = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.35rem',
-                  backgroundColor: profile.isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                  color: profile.isActive ? '#34D399' : '#FCA5A5',
-                  border: `1px solid ${profile.isActive ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`
+                  backgroundColor: profile.isActive ? '#ecfdf5' : '#fef2f2',
+                  color: profile.isActive ? '#059669' : '#dc2626',
+                  border: `1px solid ${profile.isActive ? '#a7f3d0' : '#fecaca'}`
                 }}>
                   {profile.isActive ? <CheckCircle size={13} /> : <XCircle size={13} />}
                   {profile.isActive ? 'Active Status' : 'Inactive Status'}
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginTop: '0.4rem', color: 'rgba(255,255,255,0.85)', fontSize: '0.875rem' }}>
-                <span style={{ fontWeight: 600 }}>{profile.designationName}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginTop: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{profile.designationName}</span>
                 <span>•</span>
                 <span>{profile.departmentName}</span>
                 <span>•</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(255,255,255,0.15)', padding: '0.15rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: '#f3f4f6', color: 'var(--text-main)', padding: '0.15rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
                   <Hash size={13} />
                   {profile.employeeCode}
                 </span>
@@ -243,21 +227,20 @@ export const ProfilePage: React.FC = () => {
           </div>
 
           <div style={{
-            background: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
+            background: '#f9fafb',
             borderRadius: 'var(--radius-md)',
             padding: '0.85rem 1.25rem',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
+            border: '1px solid var(--border-color)',
             display: 'flex',
             alignItems: 'center',
             gap: '0.85rem'
           }}>
-            <Building2 size={24} style={{ color: '#818CF8' }} />
+            <Building2 size={24} style={{ color: 'var(--primary)' }} />
             <div>
-              <div style={{ fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>
+              <div style={{ fontSize: '0.725rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontWeight: 700 }}>
                 Company
               </div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#FFFFFF' }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
                 {profile.companyName || 'RNT Technologies'}
               </div>
             </div>

@@ -24,6 +24,11 @@ public class EmployeeDto
     public string? Username { get; set; }
     public string? CompanyName { get; set; }
     public DateTime? DesignationFromDate { get; set; }
+    public string? Gender { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public DateTime? CompanyAnniversaryDate { get; set; }
+    public string? MaritalStatus { get; set; }
+    public DateTime? MarriageDate { get; set; }
     public string? PfNumber { get; set; }
     public string? PanNumber { get; set; }
     public string? EsiNumber { get; set; }
@@ -59,6 +64,11 @@ public class CreateEmployeeRequest
     public int? ReportingPersonId { get; set; }
     public DateTime DateOfJoining { get; set; }
     public string? CompanyName { get; set; }
+    public string? Gender { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public DateTime? CompanyAnniversaryDate { get; set; }
+    public string? MaritalStatus { get; set; }
+    public DateTime? MarriageDate { get; set; }
     public string? PfNumber { get; set; }
     public string? PanNumber { get; set; }
     public string? EsiNumber { get; set; }
@@ -91,6 +101,11 @@ public class UpdateEmployeeRequest
     public int? ReportingPersonId { get; set; }
     public DateTime DateOfJoining { get; set; }
     public string? CompanyName { get; set; }
+    public string? Gender { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public DateTime? CompanyAnniversaryDate { get; set; }
+    public string? MaritalStatus { get; set; }
+    public DateTime? MarriageDate { get; set; }
     public string? PfNumber { get; set; }
     public string? PanNumber { get; set; }
     public string? EsiNumber { get; set; }

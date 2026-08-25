@@ -25,7 +25,7 @@ public class EmailService : IEmailService
         var username = smtpSettings["Username"] ?? "";
         var password = smtpSettings["Password"] ?? "";
         var from = smtpSettings["From"] ?? "noreply@riims.local";
-        var enableSsl = bool.Parse(smtpSettings["EnableSsl"] ?? "false");
+        var enableSsl = bool.Parse(smtpSettings["EnableSsl"] ?? "true");
 
         _logger.LogInformation("Attempting to send email to {To} (CC: {CC}) with Subject: '{Subject}'", to, cc ?? "None", subject);
 
@@ -33,9 +33,11 @@ public class EmailService : IEmailService
         {
             using var client = new SmtpClient(host, port)
             {
+                UseDefaultCredentials = false,
                 Credentials = new NetworkCredential(username, password),
                 EnableSsl = enableSsl,
-                Timeout = 10000 // 10 second timeout
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                Timeout = 30000 // 30 second timeout
             };
 
             var message = new MailMessage(from, to, subject, body)
@@ -48,7 +50,9 @@ public class EmailService : IEmailService
                 message.CC.Add(cc.Trim());
             }
 
-            await client.SendMailAsync(message);
+            // Execute synchronous Send wrapped in Task.Run to prevent SmtpClient.SendMailAsync STARTTLS async thread deadlock
+            await Task.Run(() => client.Send(message));
+
             _logger.LogInformation("Email successfully dispatched to {To} (CC: {CC}) via SMTP {Host}:{Port}", to, cc ?? "None", host, port);
         }
         catch (Exception ex)

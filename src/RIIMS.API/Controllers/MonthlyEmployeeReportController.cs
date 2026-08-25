@@ -21,15 +21,24 @@ public class MonthlyEmployeeReportController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetMonthlyReport(
         [FromQuery] int year,
-        [FromQuery] int month)
+        [FromQuery] int month,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? search = null,
+        [FromQuery] int? departmentId = null,
+        [FromQuery] int? designationId = null,
+        [FromQuery] string? lop = null,
+        [FromQuery] string? salary = null,
+        [FromQuery] int? employeeId = null)
     {
         if (year < 2000 || year > 2100 || month < 1 || month > 12)
         {
             return BadRequest(ApiResponse<string>.FailResponse("Invalid year or month specified."));
         }
 
-        var report = await _reportService.GetMonthlyReportAsync(year, month);
-        return Ok(ApiResponse<List<MonthlyEmployeePayrollReportDto>>.SuccessResponse(report, "Monthly employee payroll report fetched successfully."));
+        var report = await _reportService.GetMonthlyReportAsync(
+            year, month, page, pageSize, search, departmentId, designationId, lop, salary, employeeId);
+        return Ok(ApiResponse<PagedResult<MonthlyEmployeePayrollReportDto>>.SuccessResponse(report, "Monthly employee payroll report fetched successfully."));
     }
 
     [HttpGet("export")]

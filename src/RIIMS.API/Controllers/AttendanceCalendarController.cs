@@ -88,6 +88,11 @@ public class AttendanceCalendarController : ControllerBase
             return BadRequest(ApiResponse.FailResponse("Employee ID is required to fetch monthly attendance."));
         }
 
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != targetEmployeeId.Value)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetEmployeeMonthlyAttendanceAsync(targetEmployeeId.Value, year, month);
         return Ok(ApiResponse<List<EmployeeDailyAttendanceSummaryDto>>.SuccessResponse(result));
     }
@@ -99,6 +104,11 @@ public class AttendanceCalendarController : ControllerBase
         if (!targetEmployeeId.HasValue || targetEmployeeId.Value <= 0)
         {
             return BadRequest(ApiResponse.FailResponse("Employee ID is required to fetch monthly attendance report."));
+        }
+
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != targetEmployeeId.Value)
+        {
+            return Forbid();
         }
 
         var result = await _service.GetEmployeeMonthlyAttendanceReportAsync(targetEmployeeId.Value, year, month);

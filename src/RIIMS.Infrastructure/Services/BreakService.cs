@@ -10,10 +10,12 @@ namespace RIIMS.Infrastructure.Services;
 public class BreakService : IBreakService
 {
     private readonly RiimsDbContext _context;
+    private readonly IIdleTimeService _idleTimeService;
 
-    public BreakService(RiimsDbContext context)
+    public BreakService(RiimsDbContext context, IIdleTimeService idleTimeService)
     {
         _context = context;
+        _idleTimeService = idleTimeService;
     }
 
     public async Task<BreakLogDto> StartBreakAsync(int employeeId, StartBreakRequest request)
@@ -63,6 +65,19 @@ public class BreakService : IBreakService
                 Remarks = "Task paused for break"
             });
         }
+        else
+        {
+            // If no running task, check if the employee has an OnHold task from earlier today
+            var onHoldTask = await _context.WorkTasks
+                .Where(t => t.EmployeeId == employeeId && t.Status == TaskStatusEnum.OnHold)
+                .OrderByDescending(t => t.UpdatedAt)
+                .FirstOrDefaultAsync();
+
+            if (onHoldTask != null)
+            {
+                heldTaskId = onHoldTask.Id;
+            }
+        }
 
         // 3. Create BreakLog
         var breakLog = new BreakLog
@@ -86,6 +101,8 @@ public class BreakService : IBreakService
             Status = "Active",
             Remarks = "Started break"
         });
+
+        await _idleTimeService.OnActivityStartingAsync(employeeId, now, "Break");
 
         await _context.SaveChangesAsync();
 
@@ -115,6 +132,7 @@ public class BreakService : IBreakService
             Remarks = "Stopped break"
         });
 
+        bool taskAutoResumed = false;
         // Auto-resume held task (Business Rule #3)
         if (breakLog.HeldTaskId.HasValue)
         {
@@ -122,6 +140,7 @@ public class BreakService : IBreakService
             if (heldTask != null && heldTask.Status == TaskStatusEnum.OnHold)
             {
                 heldTask.Status = TaskStatusEnum.Running;
+                taskAutoResumed = true;
 
                 _context.TaskTimeLogs.Add(new TaskTimeLog
                 {
@@ -143,6 +162,12 @@ public class BreakService : IBreakService
         }
 
         await _context.SaveChangesAsync();
+
+        if (!taskAutoResumed)
+        {
+            await _idleTimeService.OnActivityEndingAsync(employeeId, now, "Break");
+        }
+
         return (await GetByIdAsync(breakLogId))!;
     }
 
@@ -150,6 +175,7 @@ public class BreakService : IBreakService
     {
         var breakLog = await _context.BreakLogs
             .Include(b => b.BreakType)
+            .Include(b => b.HeldTask)
             .FirstOrDefaultAsync(b => b.EmployeeId == employeeId && b.EndTime == null);
 
         return breakLog != null ? MapToDto(breakLog) : null;
@@ -159,6 +185,7 @@ public class BreakService : IBreakService
     {
         var b = await _context.BreakLogs
             .Include(bl => bl.BreakType)
+            .Include(bl => bl.HeldTask)
             .FirstOrDefaultAsync(bl => bl.Id == id);
 
         return b != null ? MapToDto(b) : null;
@@ -175,8 +202,10 @@ public class BreakService : IBreakService
             Id = b.Id,
             EmployeeId = b.EmployeeId,
             BreakTypeId = b.BreakTypeId,
-            BreakTypeName = b.BreakType.Name,
+            BreakTypeName = b.BreakType?.Name ?? "Break",
+            AllowedMinutes = b.BreakType?.AllowedMinutes ?? 15,
             HeldTaskId = b.HeldTaskId,
+            HeldTaskModule = b.HeldTask?.ModuleName,
             StartTime = DateTime.SpecifyKind(b.StartTime, DateTimeKind.Utc),
             EndTime = b.EndTime.HasValue ? DateTime.SpecifyKind(b.EndTime.Value, DateTimeKind.Utc) : null,
             Duration = duration

@@ -38,6 +38,12 @@ public class BreakTypesController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreateLookupRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(ApiResponse.FailResponse("Break type name is required."));
+
+        if (request.AllowedMinutes.HasValue && request.AllowedMinutes.Value <= 0)
+            return BadRequest(ApiResponse.FailResponse("Allowed break time must be greater than 0 minutes."));
+
         var result = await _service.CreateAsync(request);
         return CreatedAtAction(nameof(GetById), new { id = result.Id },
             ApiResponse<LookupDto>.SuccessResponse(result));
@@ -47,6 +53,12 @@ public class BreakTypesController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateLookupRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(ApiResponse.FailResponse("Break type name is required."));
+
+        if (request.AllowedMinutes.HasValue && request.AllowedMinutes.Value <= 0)
+            return BadRequest(ApiResponse.FailResponse("Allowed break time must be greater than 0 minutes."));
+
         var result = await _service.UpdateAsync(id, request);
         return Ok(ApiResponse<LookupDto>.SuccessResponse(result));
     }

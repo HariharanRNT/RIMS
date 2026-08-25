@@ -10,6 +10,8 @@ import {
   monthlyEmployeeReportApi
 } from '../../../api/monthlyEmployeeReportApi';
 import type { MonthlyEmployeePayrollReportItem } from '../../../api/monthlyEmployeeReportApi';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { Pagination } from '../../../components/ui/Pagination';
 
 export const MonthlyEmployeePayrollReportPage: React.FC = () => {
   const currentDate = new Date();
@@ -21,6 +23,13 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
   const [reportData, setReportData] = useState<MonthlyEmployeePayrollReportItem[] | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const debouncedSearch = useDebounce(searchQuery, 350);
+
+  // Pagination State
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(0);
 
   const months = [
     { id: 1, name: 'January' },
@@ -45,27 +54,46 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
     try {
       const response = await monthlyEmployeeReportApi.getMonthlyEmployeeReport(
         selectedYear,
-        selectedMonth
+        selectedMonth,
+        page,
+        pageSize,
+        debouncedSearch
       );
       if (response.success && response.data) {
-        setReportData(response.data);
+        if (Array.isArray(response.data)) {
+          setReportData(response.data);
+          setTotalCount(response.data.length);
+          setTotalPages(1);
+        } else {
+          setReportData(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+          setTotalPages(response.data.totalPages || 0);
+        }
       } else {
         setErrorMessage(response.message || 'Failed to load monthly employee report.');
         setReportData([]);
+        setTotalCount(0);
+        setTotalPages(0);
       }
     } catch (err: any) {
       setErrorMessage(
         err.response?.data?.message || 'Failed to load monthly employee report.'
       );
       setReportData([]);
+      setTotalCount(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    setPage(1);
+  }, [selectedMonth, selectedYear, debouncedSearch]);
+
+  useEffect(() => {
     fetchReport();
-  }, [selectedMonth, selectedYear]);
+  }, [selectedMonth, selectedYear, page, pageSize, debouncedSearch]);
 
   const handleGenerateReport = () => {
     fetchReport();
@@ -103,14 +131,7 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
     })}`;
   };
 
-  const filteredData = reportData
-    ? reportData.filter(
-      (item) =>
-        item.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.employeeCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.department && item.department.toLowerCase().includes(searchQuery.toLowerCase()))
-    )
-    : [];
+  const filteredData = reportData || [];
 
   const monthName = months.find((m) => m.id === selectedMonth)?.name || `Month ${selectedMonth}`;
 
@@ -425,6 +446,18 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          pageSize={pageSize}
+          onPageChange={(p) => setPage(p)}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(1);
+          }}
+          disabled={loading}
+        />
       </div>
     </div>
   );

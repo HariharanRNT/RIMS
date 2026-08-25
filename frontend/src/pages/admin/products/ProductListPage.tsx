@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
+import { useConfirm } from '../../../contexts/ConfirmContext';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 interface Product {
@@ -66,13 +67,29 @@ export const ProductListPage: React.FC = () => {
     }
   };
 
+  const { confirm, showAlert } = useConfirm();
+
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to deactivate this product?')) {
+    const isConfirmed = await confirm({
+      title: 'Deactivate Product',
+      message: 'Are you sure you want to deactivate this product? It will no longer be available for new task/support allocations.',
+      confirmText: 'Deactivate',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
       try {
         await apiClient.delete(`/products/${id}`);
         fetchProducts();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Failed to delete product.');
+        const errorMsg = err.response?.data?.message || 'Failed to delete product.';
+        await showAlert({
+          title: 'Cannot Deactivate Product',
+          message: errorMsg,
+          type: 'danger',
+          confirmText: 'Understood'
+        });
       }
     }
   };

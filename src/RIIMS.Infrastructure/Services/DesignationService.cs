@@ -1,16 +1,21 @@
+using Microsoft.EntityFrameworkCore;
 using RIIMS.Application.DTOs.Designation;
+using RIIMS.Application.Exceptions;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
+using RIIMS.Infrastructure.Data;
 
 namespace RIIMS.Infrastructure.Services;
 
 public class DesignationService : IDesignationService
 {
     private readonly IRepository<Designation> _repository;
+    private readonly RiimsDbContext _context;
 
-    public DesignationService(IRepository<Designation> repository)
+    public DesignationService(IRepository<Designation> repository, RiimsDbContext context)
     {
         _repository = repository;
+        _context = context;
     }
 
     public async Task<List<DesignationDto>> GetAllAsync()
@@ -52,5 +57,21 @@ public class DesignationService : IDesignationService
         return new DesignationDto { Id = designation.Id, Name = designation.Name, IsActive = designation.IsActive };
     }
 
-    public async Task DeleteAsync(int id) => await _repository.SoftDeleteAsync(id);
+    public async Task DeleteAsync(int id)
+    {
+        var designation = await _repository.GetByIdAsync(id);
+        if (designation == null)
+            throw new KeyNotFoundException($"Designation with Id {id} not found.");
+
+        var employeeCount = await _context.Employees
+            .IgnoreQueryFilters()
+            .CountAsync(e => e.DesignationId == id && e.IsActive);
+        if (employeeCount > 0)
+        {
+            throw new ConflictException(
+                $"Cannot delete this designation — {employeeCount} employee(s) are currently assigned to it. Please reassign or remove them first.");
+        }
+
+        await _repository.SoftDeleteAsync(id);
+    }
 }

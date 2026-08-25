@@ -1,0 +1,932 @@
+$ErrorActionPreference = "Continue"
+$BASE = "http://localhost:5000/api"
+$results = @()
+
+function Test-API {
+    param(
+        [string]$TestId,
+        [string]$Category,
+        [string]$Description,
+        [string]$Method,
+        [string]$Url,
+        [string]$Body = $null,
+        [string]$Token = $null,
+        [int[]]$ExpectedStatus = @(200),
+        [string]$ExpectField = $null,
+        [string]$ExpectValue = $null,
+        [switch]$ExpectFail
+    )
+    
+    $params = @{
+        Uri = $Url
+        Method = $Method
+        ContentType = "application/json"
+        ErrorAction = "SilentlyContinue"
+    }
+    if ($Body) { $params.Body = $Body }
+    if ($Token) { $params.Headers = @{ Authorization = "Bearer $Token" } }
+    
+    try {
+        $response = Invoke-WebRequest @params
+        $statusCode = $response.StatusCode
+        $content = $response.Content | ConvertFrom-Json
+    } catch {
+        $statusCode = $_.Exception.Response.StatusCode.value__
+        if (!$statusCode) { $statusCode = 0 }
+        try { $content = $_.ErrorDetails.Message | ConvertFrom-Json } catch { $content = $null }
+    }
+    
+    $pass = $ExpectedStatus -contains $statusCode
+    if ($ExpectFail -and $content -and $content.success -eq $true) { $pass = $false }
+    if ($ExpectField -and $content) {
+        $val = $content
+        foreach ($p in $ExpectField.Split('.')) { $val = $val.$p }
+        if ($ExpectValue -and $val -ne $ExpectValue) { $pass = $false }
+    }
+    
+    $result = [PSCustomObject]@{
+        TestId = $TestId
+        Category = $Category
+        Description = $Description
+        Method = $Method
+        Url = $Url
+        StatusCode = $statusCode
+        ExpectedStatus = ($ExpectedStatus -join ",")
+        Pass = $pass
+        ResponsePreview = if ($content) { ($content | ConvertTo-Json -Depth 3 -Compress).Substring(0, [Math]::Min(300, ($content | ConvertTo-Json -Depth 3 -Compress).Length)) } else { "NO_RESPONSE" }
+    }
+    $script:results += $result
+    $symbol = if ($pass) { "PASS" } else { "FAIL" }
+    Write-Host "[$symbol] $TestId - $Description (HTTP $statusCode)"
+    return @{ Status = $statusCode; Content = $content; Pass = $pass }
+}
+
+Write-Host "=============================================="
+Write-Host "RIIMS COMPREHENSIVE API TESTING"
+Write-Host "=============================================="
+Write-Host ""
+
+# ============================================================
+# 1. AUTHENTICATION TESTING
+# ============================================================
+Write-Host "`n=== 1. AUTHENTICATION TESTING ==="
+
+# TC-AUTH-01: Valid admin login
+$r = Test-API -TestId "TC-AUTH-01" -Category "Auth" -Description "Valid admin login" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"email":"admin@riims.local","password":"Admin@123456"}' `
+    -ExpectedStatus @(200) -ExpectField "data.role" -ExpectValue "Admin"
+$adminToken = $r.Content.data.token
+$adminEmpId = $r.Content.data.employeeId
+
+# TC-AUTH-02: Invalid password
+Test-API -TestId "TC-AUTH-02" -Category "Auth" -Description "Login with wrong password" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"email":"admin@riims.local","password":"wrongpassword"}' `
+    -ExpectedStatus @(400,401) -ExpectFail
+
+# TC-AUTH-03: Non-existent email
+Test-API -TestId "TC-AUTH-03" -Category "Auth" -Description "Login with non-existent email" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"email":"noone@example.com","password":"test123"}' `
+    -ExpectedStatus @(400,401,404) -ExpectFail
+
+# TC-AUTH-04: Empty credentials
+Test-API -TestId "TC-AUTH-04" -Category "Auth" -Description "Login with empty body" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{}' `
+    -ExpectedStatus @(400) -ExpectFail
+
+# TC-AUTH-05: Missing email field
+Test-API -TestId "TC-AUTH-05" -Category "Auth" -Description "Login with missing email" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"password":"test123"}' `
+    -ExpectedStatus @(400) -ExpectFail
+
+# TC-AUTH-06: Missing password field
+Test-API -TestId "TC-AUTH-06" -Category "Auth" -Description "Login with missing password" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"email":"admin@riims.local"}' `
+    -ExpectedStatus @(400) -ExpectFail
+
+# TC-AUTH-07: SQL Injection in email
+Test-API -TestId "TC-AUTH-07" -Category "Security" -Description "SQL Injection in login email" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"email":"admin@riims.local'' OR 1=1 --","password":"test"}' `
+    -ExpectedStatus @(400,401,500) -ExpectFail
+
+# TC-AUTH-08: XSS in email
+Test-API -TestId "TC-AUTH-08" -Category "Security" -Description "XSS in login email field" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"email":"<script>alert(1)</script>","password":"test"}' `
+    -ExpectedStatus @(400,401) -ExpectFail
+
+# TC-AUTH-09: Very long email
+$longEmail = "a" * 500 + "@test.com"
+Test-API -TestId "TC-AUTH-09" -Category "Edge Case" -Description "Login with extremely long email (500+ chars)" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body "{`"email`":`"$longEmail`",`"password`":`"test`"}" `
+    -ExpectedStatus @(400,401,500) -ExpectFail
+
+# TC-AUTH-10: Forgot password with valid email
+Test-API -TestId "TC-AUTH-10" -Category "Auth" -Description "Forgot password with valid email" `
+    -Method POST -Url "$BASE/auth/forgot-password" `
+    -Body '{"email":"admin@riims.local"}' `
+    -ExpectedStatus @(200)
+
+# TC-AUTH-11: Forgot password with invalid email
+Test-API -TestId "TC-AUTH-11" -Category "Auth" -Description "Forgot password with non-existent email (no enumeration)" `
+    -Method POST -Url "$BASE/auth/forgot-password" `
+    -Body '{"email":"nonexistent@test.com"}' `
+    -ExpectedStatus @(200)
+
+# TC-AUTH-12: Change password without auth
+Test-API -TestId "TC-AUTH-12" -Category "Auth/AuthZ" -Description "Change password without auth token" `
+    -Method POST -Url "$BASE/auth/change-password" `
+    -Body '{"currentPassword":"Admin@123456","newPassword":"NewPass@123"}' `
+    -ExpectedStatus @(401)
+
+# TC-AUTH-13: Validate reset token with invalid token
+Test-API -TestId "TC-AUTH-13" -Category "Auth" -Description "Validate reset with invalid token" `
+    -Method GET -Url "$BASE/auth/validate-reset-token?token=invalidtoken123" `
+    -ExpectedStatus @(200)
+
+# TC-AUTH-14: Reset password with invalid token
+Test-API -TestId "TC-AUTH-14" -Category "Auth" -Description "Reset password with invalid token" `
+    -Method POST -Url "$BASE/auth/reset-password" `
+    -Body '{"token":"invalidtoken","newPassword":"Test@123"}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+
+# ============================================================
+# 2. AUTHORIZATION (RBAC) TESTING
+# ============================================================
+Write-Host "`n=== 2. AUTHORIZATION TESTING ==="
+
+# TC-AUTHZ-01: Unauthenticated access to protected endpoint
+Test-API -TestId "TC-AUTHZ-01" -Category "AuthZ" -Description "Access employees list without token" `
+    -Method GET -Url "$BASE/employees" `
+    -ExpectedStatus @(401)
+
+# TC-AUTHZ-02: Access with invalid JWT
+Test-API -TestId "TC-AUTHZ-02" -Category "AuthZ" -Description "Access with forged JWT token" `
+    -Method GET -Url "$BASE/employees" `
+    -Token "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxOTk5OTk5OTk5fQ.fakesignature" `
+    -ExpectedStatus @(401)
+
+# TC-AUTHZ-03: Access admin-only endpoint with admin token
+Test-API -TestId "TC-AUTHZ-03" -Category "AuthZ" -Description "Admin accesses admin-only employees endpoint" `
+    -Method GET -Url "$BASE/employees" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+# TC-AUTHZ-04: Get employee session from employee login for RBAC testing
+# First get a valid employee token (we need an employee user)
+$empLoginResult = Test-API -TestId "TC-AUTHZ-04a" -Category "Auth" -Description "Login as second admin (harideepa)" `
+    -Method POST -Url "$BASE/auth/login" `
+    -Body '{"email":"harideepa0611@gmail.com","password":"Admin@123"}' `
+    -ExpectedStatus @(200)
+$admin2Token = $empLoginResult.Content.data.token
+
+# TC-AUTHZ-05: Expired token simulation
+Test-API -TestId "TC-AUTHZ-05" -Category "AuthZ" -Description "Access with malformed token" `
+    -Method GET -Url "$BASE/employees" `
+    -Token "not.a.jwt.token.at.all" `
+    -ExpectedStatus @(401)
+
+# ============================================================
+# 3. EMPLOYEES CRUD TESTING (Admin)
+# ============================================================
+Write-Host "`n=== 3. EMPLOYEES CRUD TESTING ==="
+
+# TC-EMP-01: Get all employees
+$empListResult = Test-API -TestId "TC-EMP-01" -Category "Employees" -Description "Get all employees (Admin)" `
+    -Method GET -Url "$BASE/employees?page=1&pageSize=50" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+# TC-EMP-02: Get employees with pagination
+Test-API -TestId "TC-EMP-02" -Category "Employees" -Description "Get employees page 1, size 5" `
+    -Method GET -Url "$BASE/employees?page=1&pageSize=5" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+# TC-EMP-03: Get employee by ID
+Test-API -TestId "TC-EMP-03" -Category "Employees" -Description "Get employee by ID" `
+    -Method GET -Url "$BASE/employees/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+# TC-EMP-04: Get non-existent employee
+Test-API -TestId "TC-EMP-04" -Category "Employees" -Description "Get non-existent employee (ID=99999)" `
+    -Method GET -Url "$BASE/employees/99999" `
+    -Token $adminToken `
+    -ExpectedStatus @(404) -ExpectFail
+
+# TC-EMP-05: Get employee with negative ID
+Test-API -TestId "TC-EMP-05" -Category "Edge Case" -Description "Get employee with negative ID" `
+    -Method GET -Url "$BASE/employees/-1" `
+    -Token $adminToken `
+    -ExpectedStatus @(400,404) -ExpectFail
+
+# TC-EMP-06: Get employee with string ID (IDOR test)
+Test-API -TestId "TC-EMP-06" -Category "Security" -Description "Get employee with string ID" `
+    -Method GET -Url "$BASE/employees/abc" `
+    -Token $adminToken `
+    -ExpectedStatus @(400,404)
+
+# TC-EMP-07: Get my profile
+Test-API -TestId "TC-EMP-07" -Category "Employees" -Description "Get my profile (Admin)" `
+    -Method GET -Url "$BASE/employees/profile" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+# TC-EMP-08: Get work details
+Test-API -TestId "TC-EMP-08" -Category "Employees" -Description "Get work details for employee 1" `
+    -Method GET -Url "$BASE/employees/1/work-details" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,404)
+
+# TC-EMP-09: Create employee with missing required fields
+Test-API -TestId "TC-EMP-09" -Category "Validation" -Description "Create employee with empty body" `
+    -Method POST -Url "$BASE/employees" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400) -ExpectFail
+
+# TC-EMP-10: Create employee with invalid email format
+Test-API -TestId "TC-EMP-10" -Category "Validation" -Description "Create employee with invalid email" `
+    -Method POST -Url "$BASE/employees" `
+    -Token $adminToken `
+    -Body '{"employeeCode":"TEST-001","name":"Test User","email":"not-an-email","departmentId":1,"designationId":1,"dateOfJoining":"2026-01-01"}' `
+    -ExpectedStatus @(400) -ExpectFail
+
+# TC-EMP-11: Create employee with duplicate email
+Test-API -TestId "TC-EMP-11" -Category "Validation" -Description "Create employee with duplicate email" `
+    -Method POST -Url "$BASE/employees" `
+    -Token $adminToken `
+    -Body '{"employeeCode":"DUP-001","name":"Duplicate User","email":"admin@riims.local","phone":"1234567890","departmentId":1,"designationId":1,"dateOfJoining":"2026-01-01","password":"Test@123"}' `
+    -ExpectedStatus @(400,409,500) -ExpectFail
+
+# TC-EMP-12: SQL Injection in employee search
+Test-API -TestId "TC-EMP-12" -Category "Security" -Description "SQL Injection in employee search" `
+    -Method GET -Url "$BASE/employees?search='; DROP TABLE Employees; --" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 4. DEPARTMENTS TESTING
+# ============================================================
+Write-Host "`n=== 4. DEPARTMENTS TESTING ==="
+
+Test-API -TestId "TC-DEPT-01" -Category "Departments" -Description "Get all departments" `
+    -Method GET -Url "$BASE/departments" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-DEPT-02" -Category "Departments" -Description "Create department" `
+    -Method POST -Url "$BASE/departments" `
+    -Token $adminToken `
+    -Body '{"name":"Test Department QA"}' `
+    -ExpectedStatus @(200,201)
+
+Test-API -TestId "TC-DEPT-03" -Category "Validation" -Description "Create department with empty name" `
+    -Method POST -Url "$BASE/departments" `
+    -Token $adminToken `
+    -Body '{"name":""}' `
+    -ExpectedStatus @(400) -ExpectFail
+
+Test-API -TestId "TC-DEPT-04" -Category "Validation" -Description "Create duplicate department" `
+    -Method POST -Url "$BASE/departments" `
+    -Token $adminToken `
+    -Body '{"name":"Administration"}' `
+    -ExpectedStatus @(400,409,500) -ExpectFail
+
+
+# ============================================================
+# 5. DESIGNATIONS TESTING
+# ============================================================
+Write-Host "`n=== 5. DESIGNATIONS TESTING ==="
+
+Test-API -TestId "TC-DESG-01" -Category "Designations" -Description "Get all designations" `
+    -Method GET -Url "$BASE/designations" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-DESG-02" -Category "Designations" -Description "Create designation" `
+    -Method POST -Url "$BASE/designations" `
+    -Token $adminToken `
+    -Body '{"name":"QA Engineer Test"}' `
+    -ExpectedStatus @(200,201)
+
+
+# ============================================================
+# 6. PRODUCTS TESTING
+# ============================================================
+Write-Host "`n=== 6. PRODUCTS TESTING ==="
+
+Test-API -TestId "TC-PROD-01" -Category "Products" -Description "Get all products" `
+    -Method GET -Url "$BASE/products" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-PROD-02" -Category "Products" -Description "Create product" `
+    -Method POST -Url "$BASE/products" `
+    -Token $adminToken `
+    -Body '{"name":"Test Product QA","code":"QA-TEST-001"}' `
+    -ExpectedStatus @(200,201)
+
+Test-API -TestId "TC-PROD-03" -Category "Validation" -Description "Create product with empty body" `
+    -Method POST -Url "$BASE/products" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-PROD-04" -Category "Security" -Description "SQL Injection in product name" `
+    -Method POST -Url "$BASE/products" `
+    -Token $adminToken `
+    -Body '{"name":"Test''; DROP TABLE Products; --","code":"SQLI-001"}' `
+    -ExpectedStatus @(200,201,400,500)
+
+
+# ============================================================
+# 7. CLIENTS TESTING
+# ============================================================
+Write-Host "`n=== 7. CLIENTS TESTING ==="
+
+Test-API -TestId "TC-CLI-01" -Category "Clients" -Description "Get all clients" `
+    -Method GET -Url "$BASE/clients" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-CLI-02" -Category "Clients" -Description "Create client" `
+    -Method POST -Url "$BASE/clients" `
+    -Token $adminToken `
+    -Body '{"companyName":"QA Test Company","customerName":"QA Customer","country":"India","state":"Tamil Nadu","city":"Chennai","pincode":"600001"}' `
+    -ExpectedStatus @(200,201)
+
+Test-API -TestId "TC-CLI-03" -Category "Validation" -Description "Create client with empty body" `
+    -Method POST -Url "$BASE/clients" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-CLI-04" -Category "Validation" -Description "Get non-existent client" `
+    -Method GET -Url "$BASE/clients/99999" `
+    -Token $adminToken `
+    -ExpectedStatus @(404) -ExpectFail
+
+
+# ============================================================
+# 8. PRODUCT-CLIENT MAPPINGS TESTING
+# ============================================================
+Write-Host "`n=== 8. PRODUCT-CLIENT MAPPINGS TESTING ==="
+
+Test-API -TestId "TC-MAP-01" -Category "Mappings" -Description "Get all mappings" `
+    -Method GET -Url "$BASE/productclientmappings" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 9. BREAK TYPES TESTING
+# ============================================================
+Write-Host "`n=== 9. BREAK TYPES TESTING ==="
+
+Test-API -TestId "TC-BRK-01" -Category "BreakTypes" -Description "Get all break types" `
+    -Method GET -Url "$BASE/breaktypes" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+# ============================================================
+# 10. SUPPORT ACTIVITY TYPES TESTING
+# ============================================================
+Write-Host "`n=== 10. SUPPORT ACTIVITY TYPES TESTING ==="
+
+Test-API -TestId "TC-SAT-01" -Category "SupportActivityTypes" -Description "Get all support activity types" `
+    -Method GET -Url "$BASE/supportactivitytypes" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 11. LEAVE TYPES TESTING
+# ============================================================
+Write-Host "`n=== 11. LEAVE TYPES TESTING ==="
+
+Test-API -TestId "TC-LT-01" -Category "LeaveTypes" -Description "Get all leave types" `
+    -Method GET -Url "$BASE/leavetypes" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 12. TASKS TESTING
+# ============================================================
+Write-Host "`n=== 12. TASKS TESTING ==="
+
+Test-API -TestId "TC-TASK-01" -Category "Tasks" -Description "Get active task for employee 1" `
+    -Method GET -Url "$BASE/tasks/active/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-TASK-02" -Category "Tasks" -Description "Get task history for employee 1" `
+    -Method GET -Url "$BASE/tasks/history/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-TASK-03" -Category "Tasks" -Description "Get assigned tasks for employee 1" `
+    -Method GET -Url "$BASE/tasks/assigned/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-TASK-04" -Category "Tasks" -Description "Get admin all tasks" `
+    -Method GET -Url "$BASE/tasks/admin-all" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-TASK-05" -Category "Tasks" -Description "Get team employees" `
+    -Method GET -Url "$BASE/tasks/team-employees" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-TASK-06" -Category "Validation" -Description "Start task without required fields" `
+    -Method POST -Url "$BASE/tasks/start" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-TASK-07" -Category "Edge Case" -Description "Hold non-existent task" `
+    -Method POST -Url "$BASE/tasks/99999/hold" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+Test-API -TestId "TC-TASK-08" -Category "Edge Case" -Description "Complete non-existent task" `
+    -Method POST -Url "$BASE/tasks/99999/complete" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+Test-API -TestId "TC-TASK-09" -Category "Edge Case" -Description "Resume non-existent task" `
+    -Method POST -Url "$BASE/tasks/99999/resume" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+Test-API -TestId "TC-TASK-10" -Category "Security" -Description "Get active task for another employee (IDOR)" `
+    -Method GET -Url "$BASE/tasks/active/99999" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-TASK-11" -Category "Edge Case" -Description "Get task timeline for non-existent task" `
+    -Method GET -Url "$BASE/tasks/99999/timeline" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,400,404)
+
+
+# ============================================================
+# 13. BREAKS TESTING
+# ============================================================
+Write-Host "`n=== 13. BREAKS TESTING ==="
+
+Test-API -TestId "TC-BREAK-01" -Category "Breaks" -Description "Get active break for employee 1" `
+    -Method GET -Url "$BASE/breaks/active/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-BREAK-02" -Category "Validation" -Description "Start break without breakTypeId" `
+    -Method POST -Url "$BASE/breaks/start" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-BREAK-03" -Category "Edge Case" -Description "Stop non-existent break" `
+    -Method POST -Url "$BASE/breaks/99999/stop" `
+    -Token $adminToken `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+Test-API -TestId "TC-BREAK-04" -Category "Validation" -Description "Start break with invalid breakTypeId" `
+    -Method POST -Url "$BASE/breaks/start" `
+    -Token $adminToken `
+    -Body '{"breakTypeId":99999}' `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+
+# ============================================================
+# 14. SUPPORT ACTIVITIES TESTING
+# ============================================================
+Write-Host "`n=== 14. SUPPORT ACTIVITIES TESTING ==="
+
+Test-API -TestId "TC-SUP-01" -Category "Support" -Description "Get active support for employee 1" `
+    -Method GET -Url "$BASE/support/active/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-SUP-02" -Category "Support" -Description "Get my pending demo follow-ups" `
+    -Method GET -Url "$BASE/support/demo-followups/my-pending" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-SUP-03" -Category "Validation" -Description "Start support without activityTypeId" `
+    -Method POST -Url "$BASE/support/start" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-SUP-04" -Category "Edge Case" -Description "Complete non-existent demo follow-up" `
+    -Method POST -Url "$BASE/support/demo-followups/99999/complete" `
+    -Token $adminToken `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+
+# ============================================================
+# 15. LEAVES TESTING
+# ============================================================
+Write-Host "`n=== 15. LEAVES TESTING ==="
+
+Test-API -TestId "TC-LEAVE-01" -Category "Leaves" -Description "Get my leave requests" `
+    -Method GET -Url "$BASE/leaves/my-requests/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-LEAVE-02" -Category "Leaves" -Description "Get pending leave approvals" `
+    -Method GET -Url "$BASE/leaves/pending-approvals" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-LEAVE-03" -Category "Validation" -Description "Submit leave with empty body" `
+    -Method POST -Url "$BASE/leaves/submit" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-LEAVE-04" -Category "Validation" -Description "Submit leave with toDate before fromDate" `
+    -Method POST -Url "$BASE/leaves/submit" `
+    -Token $adminToken `
+    -Body '{"leaveTypeId":1,"fromDate":"2026-08-20","toDate":"2026-08-18","reason":"Test invalid dates"}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-LEAVE-05" -Category "Edge Case" -Description "Approve non-existent leave" `
+    -Method POST -Url "$BASE/leaves/99999/approve" `
+    -Token $adminToken `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+Test-API -TestId "TC-LEAVE-06" -Category "Edge Case" -Description "Reject non-existent leave" `
+    -Method POST -Url "$BASE/leaves/99999/reject" `
+    -Token $adminToken `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+Test-API -TestId "TC-LEAVE-07" -Category "Validation" -Description "Submit leave with missing reason" `
+    -Method POST -Url "$BASE/leaves/submit" `
+    -Token $adminToken `
+    -Body '{"leaveTypeId":1,"fromDate":"2026-09-01","toDate":"2026-09-01"}' `
+    -ExpectedStatus @(400,200,500)
+
+Test-API -TestId "TC-LEAVE-08" -Category "Security" -Description "SQL Injection in leave reason" `
+    -Method POST -Url "$BASE/leaves/submit" `
+    -Token $adminToken `
+    -Body "{`"leaveTypeId`":1,`"fromDate`":`"2026-09-05`",`"toDate`":`"2026-09-05`",`"reason`":`"'; DROP TABLE LeaveRequests; --`"}" `
+    -ExpectedStatus @(200,400,500)
+
+
+# ============================================================
+# 16. PERMISSIONS TESTING
+# ============================================================
+Write-Host "`n=== 16. PERMISSIONS TESTING ==="
+
+Test-API -TestId "TC-PERM-01" -Category "Permissions" -Description "Get my permission requests" `
+    -Method GET -Url "$BASE/permissions/my-requests/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-PERM-02" -Category "Permissions" -Description "Get pending permission approvals" `
+    -Method GET -Url "$BASE/permissions/pending-approvals" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-PERM-03" -Category "Validation" -Description "Submit permission with empty body" `
+    -Method POST -Url "$BASE/permissions/submit" `
+    -Token $adminToken `
+    -Body '{}' `
+    -ExpectedStatus @(400,500) -ExpectFail
+
+Test-API -TestId "TC-PERM-04" -Category "Edge Case" -Description "Approve non-existent permission" `
+    -Method POST -Url "$BASE/permissions/99999/approve" `
+    -Token $adminToken `
+    -ExpectedStatus @(400,404,500) -ExpectFail
+
+
+# ============================================================
+# 17. PAYROLL TESTING
+# ============================================================
+Write-Host "`n=== 17. PAYROLL TESTING ==="
+
+Test-API -TestId "TC-PAY-01" -Category "Payroll" -Description "Get payslip for employee 1, July 2026" `
+    -Method GET -Url "$BASE/payroll/payslip/1?month=7&year=2026" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,404)
+
+Test-API -TestId "TC-PAY-02" -Category "Payroll" -Description "Get payslip history for employee 1" `
+    -Method GET -Url "$BASE/payroll/my-payslips/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-PAY-03" -Category "Payroll" -Description "Get payroll summary July 2026" `
+    -Method GET -Url "$BASE/payroll/summary?month=7&year=2026" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-PAY-04" -Category "Validation" -Description "Get payslip with invalid month" `
+    -Method GET -Url "$BASE/payroll/payslip/1?month=13&year=2026" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,400,404)
+
+Test-API -TestId "TC-PAY-05" -Category "Security/IDOR" -Description "Access another employee's payslip (IDOR test)" `
+    -Method GET -Url "$BASE/payroll/payslip/2?month=7&year=2026" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,403,404)
+
+
+# ============================================================
+# 18. SALARY STRUCTURE TESTING
+# ============================================================
+Write-Host "`n=== 18. SALARY STRUCTURE TESTING ==="
+
+Test-API -TestId "TC-SAL-01" -Category "Salary" -Description "Get salary structure for employee 1" `
+    -Method GET -Url "$BASE/employees/1/salary-structure" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,400)
+
+Test-API -TestId "TC-SAL-02" -Category "Salary" -Description "Get salary history for employee 1" `
+    -Method GET -Url "$BASE/employees/1/salary-history" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-SAL-03" -Category "Salary" -Description "Preview salary structure" `
+    -Method POST -Url "$BASE/payroll/preview" `
+    -Token $adminToken `
+    -Body '{"grossSalary":50000,"calculationType":"CTC","mode":"Auto"}' `
+    -ExpectedStatus @(200,400)
+
+
+# ============================================================
+# 19. ATTENDANCE CALENDAR TESTING
+# ============================================================
+Write-Host "`n=== 19. ATTENDANCE CALENDAR TESTING ==="
+
+Test-API -TestId "TC-CAL-01" -Category "Calendar" -Description "Get monthly calendar Aug 2026" `
+    -Method GET -Url "$BASE/attendance-calendar/2026/8" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-CAL-02" -Category "Calendar" -Description "Get calendar status Aug 2026" `
+    -Method GET -Url "$BASE/attendance-calendar/2026/8/status" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-CAL-03" -Category "Calendar" -Description "Get employee monthly attendance" `
+    -Method GET -Url "$BASE/attendance-calendar/employee/2026/8?employeeId=1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-CAL-04" -Category "Calendar" -Description "Get employee monthly attendance report" `
+    -Method GET -Url "$BASE/attendance-calendar/employee/2026/8/report?employeeId=1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-CAL-05" -Category "Validation" -Description "Get calendar with invalid month" `
+    -Method GET -Url "$BASE/attendance-calendar/2026/13" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,400,500)
+
+Test-API -TestId "TC-CAL-06" -Category "Edge Case" -Description "Get calendar for future year" `
+    -Method GET -Url "$BASE/attendance-calendar/2030/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 20. REPORTS/DASHBOARD TESTING
+# ============================================================
+Write-Host "`n=== 20. REPORTS/DASHBOARD TESTING ==="
+
+Test-API -TestId "TC-RPT-01" -Category "Reports" -Description "Get admin dashboard metrics" `
+    -Method GET -Url "$BASE/reports/admin-dashboard" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-02" -Category "Reports" -Description "Get employee dashboard metrics" `
+    -Method GET -Url "$BASE/reports/employee-dashboard/1" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-03" -Category "Reports" -Description "Get daily production report" `
+    -Method GET -Url "$BASE/reports/daily-production?date=2026-08-19" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-04" -Category "Reports" -Description "Get monthly production report" `
+    -Method GET -Url "$BASE/reports/monthly-production?month=8&year=2026" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-05" -Category "Reports" -Description "Get work distribution report" `
+    -Method GET -Url "$BASE/reports/work-distribution?month=8&year=2026" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-06" -Category "Reports" -Description "Get admin notifications" `
+    -Method GET -Url "$BASE/reports/admin-notifications" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-07" -Category "Reports" -Description "Export daily production Excel" `
+    -Method GET -Url "$BASE/reports/export-daily-production?date=2026-08-19" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-08" -Category "Reports" -Description "Get employee daily detail" `
+    -Method GET -Url "$BASE/reports/daily-detail/1?date=2026-08-19" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-RPT-09" -Category "Reports" -Description "Get attendance permissions" `
+    -Method GET -Url "$BASE/reports/attendance-permissions?date=2026-08-19" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 21. SESSIONS TESTING
+# ============================================================
+Write-Host "`n=== 21. SESSIONS TESTING ==="
+
+Test-API -TestId "TC-SES-01" -Category "Sessions" -Description "Session heartbeat" `
+    -Method POST -Url "$BASE/sessions/heartbeat" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-SES-02" -Category "Sessions" -Description "Get current server state" `
+    -Method GET -Url "$BASE/sessions/current-state" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-SES-03" -Category "AuthZ" -Description "Session heartbeat without token" `
+    -Method POST -Url "$BASE/sessions/heartbeat" `
+    -ExpectedStatus @(401)
+
+
+# ============================================================
+# 22. SETTINGS TESTING
+# ============================================================
+Write-Host "`n=== 22. SETTINGS TESTING ==="
+
+Test-API -TestId "TC-SET-01" -Category "Settings" -Description "Get all system settings" `
+    -Method GET -Url "$BASE/settings" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 23. TIMELINE TESTING
+# ============================================================
+Write-Host "`n=== 23. TIMELINE TESTING ==="
+
+Test-API -TestId "TC-TL-01" -Category "Timeline" -Description "Get timeline for employee 1" `
+    -Method GET -Url "$BASE/timeline/1?date=2026-08-19" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-TL-02" -Category "Timeline" -Description "Get timeline for non-existent employee" `
+    -Method GET -Url "$BASE/timeline/99999?date=2026-08-19" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 24. IDLE TIME TESTING
+# ============================================================
+Write-Host "`n=== 24. IDLE TIME TESTING ==="
+
+Test-API -TestId "TC-IDLE-01" -Category "IdleTime" -Description "Log idle time" `
+    -Method POST -Url "$BASE/idletime/log" `
+    -Token $adminToken `
+    -Body '{"startTime":"2026-08-19T10:00:00Z","endTime":"2026-08-19T10:05:00Z","reason":"AFK"}' `
+    -ExpectedStatus @(200,400,500)
+
+
+# ============================================================
+# 25. CELEBRATIONS TESTING
+# ============================================================
+Write-Host "`n=== 25. CELEBRATIONS TESTING ==="
+
+Test-API -TestId "TC-CEL-01" -Category "Celebrations" -Description "Get today celebrations" `
+    -Method GET -Url "$BASE/celebration/today" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 26. MONTHLY EMPLOYEE REPORT TESTING
+# ============================================================
+Write-Host "`n=== 26. MONTHLY EMPLOYEE REPORT TESTING ==="
+
+Test-API -TestId "TC-MER-01" -Category "Reports" -Description "Get monthly employee report" `
+    -Method GET -Url "$BASE/monthlyemployeereport?month=7&year=2026" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# 27. ATTENDANCE TESTING
+# ============================================================
+Write-Host "`n=== 27. ATTENDANCE TESTING ==="
+
+Test-API -TestId "TC-ATT-01" -Category "Attendance" -Description "Get attendance for employee 1 today" `
+    -Method GET -Url "$BASE/attendance/1?date=2026-08-20" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+Test-API -TestId "TC-ATT-02" -Category "Attendance" -Description "Get attendance for non-existent employee" `
+    -Method GET -Url "$BASE/attendance/99999?date=2026-08-20" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,404)
+
+
+# ============================================================
+# 28. PARAMETER TAMPERING & SECURITY TESTS
+# ============================================================
+Write-Host "`n=== 28. SECURITY TESTING ==="
+
+# TC-SEC-01: XSS in department name
+Test-API -TestId "TC-SEC-01" -Category "Security" -Description "XSS in department name" `
+    -Method POST -Url "$BASE/departments" `
+    -Token $adminToken `
+    -Body '{"name":"<script>alert(document.cookie)</script>"}' `
+    -ExpectedStatus @(200,201,400)
+
+# TC-SEC-02: SQL Injection in query parameter
+Test-API -TestId "TC-SEC-02" -Category "Security" -Description "SQL Injection in page parameter" `
+    -Method GET -Url "$BASE/employees?page=1;DROP TABLE Employees&pageSize=10" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,400,500)
+
+# TC-SEC-03: Boundary - very large page number
+Test-API -TestId "TC-SEC-03" -Category "Edge Case" -Description "Very large page number" `
+    -Method GET -Url "$BASE/employees?page=999999999&pageSize=10" `
+    -Token $adminToken `
+    -ExpectedStatus @(200)
+
+# TC-SEC-04: Negative page size
+Test-API -TestId "TC-SEC-04" -Category "Edge Case" -Description "Negative page size" `
+    -Method GET -Url "$BASE/employees?page=1&pageSize=-5" `
+    -Token $adminToken `
+    -ExpectedStatus @(200,400)
+
+# TC-SEC-05: Sensitive data exposure - check appsettings visibility
+Test-API -TestId "TC-SEC-05" -Category "Security" -Description "Access swagger docs" `
+    -Method GET -Url "http://localhost:5000/swagger/v1/swagger.json" `
+    -ExpectedStatus @(200)
+
+
+# ============================================================
+# RESULTS SUMMARY
+# ============================================================
+Write-Host "`n`n=============================================="
+Write-Host "TEST RESULTS SUMMARY"
+Write-Host "=============================================="
+
+$total = $results.Count
+$passed = ($results | Where-Object { $_.Pass -eq $true }).Count
+$failed = ($results | Where-Object { $_.Pass -ne $true }).Count
+
+Write-Host "Total Test Cases: $total"
+Write-Host "Passed: $passed"
+Write-Host "Failed: $failed"
+Write-Host ""
+
+if ($failed -gt 0) {
+    Write-Host "FAILED TESTS:"
+    Write-Host "-------------"
+    $results | Where-Object { $_.Pass -ne $true } | ForEach-Object {
+        Write-Host "  [$($_.TestId)] $($_.Description) - HTTP $($_.StatusCode) (Expected: $($_.ExpectedStatus))"
+        Write-Host "    Response: $($_.ResponsePreview)"
+        Write-Host ""
+    }
+}
+
+# Export to CSV for analysis
+$csvPath = "C:\Users\santh\.gemini\antigravity-ide\brain\b5ea4b83-3934-4dfb-811d-704a19c24ff1\scratch\test_results.csv"
+$results | Export-Csv -Path $csvPath -NoTypeInformation
+Write-Host "`nResults exported to: $csvPath"
+
+# Category breakdown
+Write-Host "`nBY CATEGORY:"
+$results | Group-Object Category | ForEach-Object {
+    $catTotal = $_.Count
+    $catPassed = ($_.Group | Where-Object { $_.Pass -eq $true }).Count
+    $catFailed = $catTotal - $catPassed
+    Write-Host "  $($_.Name): $catPassed/$catTotal passed, $catFailed failed"
+}

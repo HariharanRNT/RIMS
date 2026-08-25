@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
 import { X, Clock, Coffee, Briefcase, PhoneCall } from 'lucide-react';
-import { formatTimeIST, formatDurationToHoursMinutes } from '../../../utils/dateUtils';
+import { formatTimeIST, formatDurationToHoursMinutes, formatDurationString } from '../../../utils/dateUtils';
 
 
 
@@ -80,14 +80,28 @@ interface EmployeeDailyDetail {
 
 interface Props {
   employeeId: number | null;
-  date: string;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  initialTab?: 'tasks' | 'breaks' | 'support' | 'idles' | 'timeline';
   onClose: () => void;
 }
 
-export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, onClose }) => {
+export const EmployeeDailyDetailModal: React.FC<Props> = ({
+  employeeId,
+  date,
+  startDate,
+  endDate,
+  initialTab = 'tasks',
+  onClose,
+}) => {
   const [detail, setDetail] = useState<EmployeeDailyDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'breaks' | 'support' | 'idles' | 'timeline'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'breaks' | 'support' | 'idles' | 'timeline'>(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     if (!employeeId) return;
@@ -95,7 +109,13 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const res = await apiClient.get(`/reports/daily-detail/${employeeId}?date=${date}`);
+        let url = `/reports/daily-detail/${employeeId}?`;
+        if (startDate && endDate) {
+          url += `startDate=${startDate}&endDate=${endDate}`;
+        } else if (date) {
+          url += `date=${date}`;
+        }
+        const res = await apiClient.get(url);
         if (res.data.success) {
           setDetail(res.data.data);
         }
@@ -107,13 +127,50 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
     };
 
     fetchDetail();
-  }, [employeeId, date]);
+  }, [employeeId, date, startDate, endDate]);
 
   if (!employeeId) return null;
 
   const formatTime = (isoStr: string | null) => formatTimeIST(isoStr);
 
+  const resolveHeldTaskModule = (b: BreakDetail) => {
+    if (b.heldTaskModule && b.heldTaskModule !== 'None') {
+      return b.heldTaskModule;
+    }
 
+    if (!detail || !detail.tasks || detail.tasks.length === 0) {
+      return 'None';
+    }
+
+    const breakStartMs = new Date(b.startTime.endsWith('Z') ? b.startTime : b.startTime + 'Z').getTime();
+
+    // 1. Find a task that has a session starting before or at the break start
+    let bestTask: TaskDetail | null = null;
+    let latestSessionStart = -1;
+
+    for (const t of detail.tasks) {
+      if (t.sessions && t.sessions.length > 0) {
+        for (const s of t.sessions) {
+          const sStartMs = new Date(s.startTime.endsWith('Z') ? s.startTime : s.startTime + 'Z').getTime();
+          if (sStartMs <= breakStartMs && sStartMs > latestSessionStart) {
+            latestSessionStart = sStartMs;
+            bestTask = t;
+          }
+        }
+      }
+    }
+
+    if (bestTask && bestTask.moduleName) {
+      return bestTask.moduleName;
+    }
+
+    // 2. Fallback to the first task worked on that day
+    return detail.tasks[0]?.moduleName || 'None';
+  };
+
+  const displayDateStr = startDate && endDate
+    ? (startDate === endDate ? startDate : `${startDate} to ${endDate}`)
+    : (date || '');
 
   return (
     <div
@@ -123,7 +180,7 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
         left: 0,
         width: '100vw',
         height: '100vh',
-        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
         display: 'flex',
@@ -142,8 +199,9 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
           maxHeight: '90vh',
           overflowY: 'auto',
           padding: '1.75rem',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-          border: '1px solid rgba(255, 255, 255, 0.2)'
+          backgroundColor: '#ffffff',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          border: '1px solid var(--border-color)'
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -158,7 +216,7 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
               <h2 style={{ fontSize: '1.35rem', margin: 0 }}>{detail?.employeeName || 'Employee Details'}</h2>
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-              {detail?.departmentName} • Activity & Time Log for <strong>{date}</strong>
+              {detail?.departmentName} • Activity & Time Log for <strong>{displayDateStr}</strong>
             </p>
           </div>
           <button
@@ -283,13 +341,13 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
                   </thead>
                   <tbody>
                     {(!detail.idles || detail.idles.length === 0) ? (
-                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: '2rem' }}>No logout-login idle gaps logged on {date}.</td></tr>
+                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: '2rem' }}>No idle time logged on {date}.</td></tr>
                     ) : (
                       detail.idles.map((idle, i) => (
                         <tr key={i}>
                           <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>⏸️ {idle.type || 'Logout-Login Gap'}</td>
                           <td>{formatTime(idle.startTime)} ➔ {formatTime(idle.endTime)}</td>
-                          <td style={{ fontWeight: 700, color: 'var(--warning)' }}>{idle.duration}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--warning)' }}>{formatDurationString(idle.duration)}</td>
                         </tr>
                       ))
                     )}
@@ -331,16 +389,22 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
                         <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
                           Work Time Sessions (Start ➔ End):
                         </span>
-                        {task.sessions.map((s, idx) => (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.2rem 0', borderBottom: idx < task.sessions.length - 1 ? '1px dashed var(--border-color)' : 'none' }}>
-                            <span>
-                              🕒 {formatTime(s.startTime)} ➔ {s.endTime ? formatTime(s.endTime) : 'In Progress'}
-                            </span>
-                            <span style={{ fontWeight: 600, color: 'var(--success)' }}>
-                              Duration: {s.duration}
-                            </span>
-                          </div>
-                        ))}
+                        {(!task.sessions || task.sessions.length === 0) ? (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            No work time sessions logged for this task.
+                          </span>
+                        ) : (
+                          task.sessions.map((s, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.2rem 0', borderBottom: idx < task.sessions.length - 1 ? '1px dashed var(--border-color)' : 'none' }}>
+                              <span>
+                                🕒 {formatTime(s.startTime)} ➔ {s.endTime ? formatTime(s.endTime) : 'In Progress'}
+                              </span>
+                              <span style={{ fontWeight: 600, color: 'var(--success)' }}>
+                                Duration: {formatDurationString(s.duration)}
+                              </span>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   ))
@@ -370,8 +434,8 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
                           <td style={{ fontWeight: 600, color: 'var(--warning)' }}>☕ {b.breakTypeName}</td>
                           <td>{formatTime(b.startTime)}</td>
                           <td>{formatTime(b.endTime)}</td>
-                          <td style={{ fontWeight: 700 }}>{b.duration}</td>
-                          <td>{b.heldTaskModule || 'None'}</td>
+                          <td style={{ fontWeight: 700 }}>{formatDurationString(b.duration)}</td>
+                          <td>{resolveHeldTaskModule(b)}</td>
                         </tr>
                       ))
                     )}
@@ -404,7 +468,7 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
                           <td>{s.productName || '--'}</td>
                           <td>{s.clientName || '--'}</td>
                           <td>{formatTime(s.startTime)} - {formatTime(s.endTime)}</td>
-                          <td style={{ fontWeight: 700 }}>{s.duration}</td>
+                          <td style={{ fontWeight: 700 }}>{formatDurationString(s.duration)}</td>
                           <td style={{ fontSize: '0.85rem' }}>{s.remarks || '--'}</td>
                         </tr>
                       ))
@@ -428,7 +492,7 @@ export const EmployeeDailyDetailModal: React.FC<Props> = ({ employeeId, date, on
                       <div style={{ flex: 1, background: 'var(--bg-primary)', padding: '0.6rem 0.9rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.activityType}</span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.duration || ''}</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDurationString(item.duration) || ''}</span>
                         </div>
                         {item.remarks && (
                           <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>

@@ -39,6 +39,11 @@ public class BreaksController : ControllerBase
     [HttpGet("active/{employeeId}")]
     public async Task<IActionResult> GetActive(int employeeId)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetActiveBreakAsync(employeeId);
         return Ok(ApiResponse<BreakLogDto?>.SuccessResponse(result));
     }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
+import { useConfirm } from '../../../contexts/ConfirmContext';
 import { Link2, Trash2, Package, UserCheck } from 'lucide-react';
 
 interface Option {
@@ -78,8 +79,18 @@ export const ProductClientMappingPage: React.FC = () => {
     }
   };
 
+  const { confirm } = useConfirm();
+
   const handleRemoveMapping = async (id: number) => {
-    if (window.confirm('Are you sure you want to remove this mapping?')) {
+    const isConfirmed = await confirm({
+      title: 'Remove Product-Client Mapping',
+      message: 'Are you sure you want to remove this mapping? Employees will no longer be able to select this product for this client.',
+      confirmText: 'Remove Mapping',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
       try {
         await apiClient.delete(`/mappings/${id}`);
         fetchData();

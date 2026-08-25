@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Task;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
@@ -16,11 +17,13 @@ public class TaskService : ITaskService
 {
     private readonly RiimsDbContext _context;
     private readonly IEmailService _emailService;
+    private readonly IIdleTimeService _idleTimeService;
 
-    public TaskService(RiimsDbContext context, IEmailService emailService)
+    public TaskService(RiimsDbContext context, IEmailService emailService, IIdleTimeService idleTimeService)
     {
         _context = context;
         _emailService = emailService;
+        _idleTimeService = idleTimeService;
     }
 
     private async Task EnsureNoActiveBreakOrSupportAsync(int employeeId, string actionName)
@@ -57,6 +60,10 @@ public class TaskService : ITaskService
                 openTimeLog.EndTime = now;
             }
 
+            var holdRemarksText = !string.IsNullOrWhiteSpace(request.HoldRemarks)
+                ? request.HoldRemarks.Trim()
+                : "Auto-held by starting new task";
+
             _context.ActivityTimelines.Add(new ActivityTimeline
             {
                 EmployeeId = employeeId,
@@ -66,7 +73,7 @@ public class TaskService : ITaskService
                 StartTime = openTimeLog?.StartTime ?? now,
                 EndTime = now,
                 Status = "OnHold",
-                Remarks = "Auto-held by starting new task"
+                Remarks = holdRemarksText
             });
 
             var performer = await _context.Employees.FindAsync(employeeId);
@@ -78,7 +85,7 @@ public class TaskService : ITaskService
                 PerformedByEmployeeId = employeeId,
                 PerformedByName = performer?.Name ?? "Employee",
                 PerformedByRole = "Employee",
-                Remarks = "Auto-held by starting a new task"
+                Remarks = holdRemarksText
             });
         }
 
@@ -127,7 +134,11 @@ public class TaskService : ITaskService
             ModuleName = request.ModuleName.Trim(),
             Description = request.Description.Trim(),
             Status = TaskStatusEnum.Running,
-            Priority = TaskPriority.Medium,
+            Priority = request.Priority,
+            PlannedStart = request.PlannedStart,
+            DueDate = request.DueDate,
+            PlannedDurationMinutes = request.PlannedDurationMinutes,
+            Instructions = string.IsNullOrWhiteSpace(request.Instructions) ? null : request.Instructions.Trim(),
             AssignedByEmployeeId = null,
             AssignerType = TaskAssignerType.Employee
         };
@@ -142,6 +153,10 @@ public class TaskService : ITaskService
             StartTime = now
         };
         _context.TaskTimeLogs.Add(timeLog);
+
+        var startRemarksText = !string.IsNullOrWhiteSpace(request.Remarks)
+            ? request.Remarks.Trim()
+            : $"Started self-task: {task.ModuleName}";
 
         // 6. Log timeline audit events
         _context.TaskTimelineEvents.Add(new TaskTimelineEvent
@@ -163,7 +178,7 @@ public class TaskService : ITaskService
             PerformedByEmployeeId = employeeId,
             PerformedByName = emp?.Name ?? "Employee",
             PerformedByRole = "Employee",
-            Remarks = $"Started self-task: {task.ModuleName}"
+            Remarks = startRemarksText
         });
 
         _context.ActivityTimelines.Add(new ActivityTimeline
@@ -174,9 +189,10 @@ public class TaskService : ITaskService
             RefId = task.Id,
             StartTime = now,
             Status = "Running",
-            Remarks = $"Started task: {task.ModuleName}"
+            Remarks = startRemarksText
         });
 
+        await _idleTimeService.OnActivityStartingAsync(employeeId, now, "Task");
         await _context.SaveChangesAsync();
 
         return (await GetByIdAsync(task.Id))!;
@@ -384,7 +400,7 @@ public class TaskService : ITaskService
         return (await GetByIdAsync(task.Id))!;
     }
 
-    public async Task<TaskDto> StartAssignedTaskAsync(int taskId, int employeeId)
+    public async Task<TaskDto> StartAssignedTaskAsync(int taskId, int employeeId, StartAssignedTaskRequest? request = null)
     {
         await EnsureNoActiveBreakOrSupportAsync(employeeId, "start assigned task");
 
@@ -411,6 +427,10 @@ public class TaskService : ITaskService
 
             if (openTimeLog != null) openTimeLog.EndTime = now;
 
+            var holdRemarksText = !string.IsNullOrWhiteSpace(request?.HoldRemarks)
+                ? request.HoldRemarks.Trim()
+                : "Auto-held by starting assigned task";
+
             var performer = await _context.Employees.FindAsync(employeeId);
             _context.TaskTimelineEvents.Add(new TaskTimelineEvent
             {
@@ -420,7 +440,19 @@ public class TaskService : ITaskService
                 PerformedByEmployeeId = employeeId,
                 PerformedByName = performer?.Name ?? "Employee",
                 PerformedByRole = "Employee",
-                Remarks = "Auto-held by starting assigned task"
+                Remarks = holdRemarksText
+            });
+
+            _context.ActivityTimelines.Add(new ActivityTimeline
+            {
+                EmployeeId = employeeId,
+                ActivityType = "Task",
+                RefTable = "Tasks",
+                RefId = currentRunningTask.Id,
+                StartTime = openTimeLog?.StartTime ?? now,
+                EndTime = now,
+                Status = "OnHold",
+                Remarks = holdRemarksText
             });
         }
 
@@ -433,6 +465,10 @@ public class TaskService : ITaskService
             StartTime = now
         });
 
+        var startRemarksText = !string.IsNullOrWhiteSpace(request?.Remarks)
+            ? request.Remarks.Trim()
+            : $"Started assigned task: {task.ModuleName}";
+
         var emp = await _context.Employees.FindAsync(employeeId);
         _context.TaskTimelineEvents.Add(new TaskTimelineEvent
         {
@@ -442,7 +478,7 @@ public class TaskService : ITaskService
             PerformedByEmployeeId = employeeId,
             PerformedByName = emp?.Name ?? "Employee",
             PerformedByRole = "Employee",
-            Remarks = $"Started assigned task: {task.ModuleName}"
+            Remarks = startRemarksText
         });
 
         _context.ActivityTimelines.Add(new ActivityTimeline
@@ -453,15 +489,16 @@ public class TaskService : ITaskService
             RefId = task.Id,
             StartTime = now,
             Status = "Running",
-            Remarks = $"Started assigned task: {task.ModuleName}"
+            Remarks = startRemarksText
         });
 
+        await _idleTimeService.OnActivityStartingAsync(employeeId, now, "Task");
         await _context.SaveChangesAsync();
 
         return (await GetByIdAsync(task.Id))!;
     }
 
-    public async Task HoldTaskAsync(int taskId, int employeeId)
+    public async Task HoldTaskAsync(int taskId, int employeeId, TaskActionRequest? request = null)
     {
         var task = await _context.WorkTasks
             .FirstOrDefaultAsync(t => t.Id == taskId && t.EmployeeId == employeeId);
@@ -483,6 +520,10 @@ public class TaskService : ITaskService
             openTimeLog.EndTime = now;
         }
 
+        var holdRemarksText = !string.IsNullOrWhiteSpace(request?.Remarks)
+            ? request.Remarks.Trim()
+            : "Task put on hold";
+
         var emp = await _context.Employees.FindAsync(employeeId);
         _context.TaskTimelineEvents.Add(new TaskTimelineEvent
         {
@@ -492,7 +533,7 @@ public class TaskService : ITaskService
             PerformedByEmployeeId = employeeId,
             PerformedByName = emp?.Name ?? "Employee",
             PerformedByRole = "Employee",
-            Remarks = "Task put on hold"
+            Remarks = holdRemarksText
         });
 
         _context.ActivityTimelines.Add(new ActivityTimeline
@@ -504,13 +545,14 @@ public class TaskService : ITaskService
             StartTime = openTimeLog?.StartTime ?? now,
             EndTime = now,
             Status = "OnHold",
-            Remarks = "Task put on hold"
+            Remarks = holdRemarksText
         });
 
         await _context.SaveChangesAsync();
+        await _idleTimeService.OnActivityEndingAsync(employeeId, now, "Task");
     }
 
-    public async Task ResumeTaskAsync(int taskId, int employeeId)
+    public async Task ResumeTaskAsync(int taskId, int employeeId, TaskActionRequest? request = null)
     {
         await EnsureNoActiveBreakOrSupportAsync(employeeId, "resume a task");
         var task = await _context.WorkTasks
@@ -534,6 +576,34 @@ public class TaskService : ITaskService
             var openLog = await _context.TaskTimeLogs
                 .FirstOrDefaultAsync(tl => tl.TaskId == otherRunning.Id && tl.EndTime == null);
             if (openLog != null) openLog.EndTime = now;
+
+            var autoHoldRemarks = !string.IsNullOrWhiteSpace(request?.HoldRemarks)
+                ? request.HoldRemarks.Trim()
+                : "Auto-held by resuming another task";
+
+            var performer = await _context.Employees.FindAsync(employeeId);
+            _context.TaskTimelineEvents.Add(new TaskTimelineEvent
+            {
+                WorkTaskId = otherRunning.Id,
+                EventType = "Held",
+                Timestamp = now,
+                PerformedByEmployeeId = employeeId,
+                PerformedByName = performer?.Name ?? "Employee",
+                PerformedByRole = "Employee",
+                Remarks = autoHoldRemarks
+            });
+
+            _context.ActivityTimelines.Add(new ActivityTimeline
+            {
+                EmployeeId = employeeId,
+                ActivityType = "Task",
+                RefTable = "Tasks",
+                RefId = otherRunning.Id,
+                StartTime = openLog?.StartTime ?? now,
+                EndTime = now,
+                Status = "OnHold",
+                Remarks = autoHoldRemarks
+            });
         }
 
         task.Status = TaskStatusEnum.Running;
@@ -544,6 +614,10 @@ public class TaskService : ITaskService
             StartTime = now
         });
 
+        var resumeRemarksText = !string.IsNullOrWhiteSpace(request?.Remarks)
+            ? request.Remarks.Trim()
+            : "Task resumed";
+
         var emp = await _context.Employees.FindAsync(employeeId);
         _context.TaskTimelineEvents.Add(new TaskTimelineEvent
         {
@@ -553,7 +627,7 @@ public class TaskService : ITaskService
             PerformedByEmployeeId = employeeId,
             PerformedByName = emp?.Name ?? "Employee",
             PerformedByRole = "Employee",
-            Remarks = "Task resumed"
+            Remarks = resumeRemarksText
         });
 
         _context.ActivityTimelines.Add(new ActivityTimeline
@@ -564,13 +638,14 @@ public class TaskService : ITaskService
             RefId = task.Id,
             StartTime = now,
             Status = "Resumed",
-            Remarks = "Task resumed"
+            Remarks = resumeRemarksText
         });
 
+        await _idleTimeService.OnActivityStartingAsync(employeeId, now, "Task");
         await _context.SaveChangesAsync();
     }
 
-    public async Task CompleteTaskAsync(int taskId, int employeeId)
+    public async Task CompleteTaskAsync(int taskId, int employeeId, TaskActionRequest? request = null)
     {
         await EnsureNoActiveBreakOrSupportAsync(employeeId, "complete a task");
         var task = await _context.WorkTasks
@@ -590,6 +665,10 @@ public class TaskService : ITaskService
             openTimeLog.EndTime = now;
         }
 
+        var completeRemarksText = !string.IsNullOrWhiteSpace(request?.Remarks)
+            ? request.Remarks.Trim()
+            : "Task completed";
+
         var emp = await _context.Employees.FindAsync(employeeId);
         _context.TaskTimelineEvents.Add(new TaskTimelineEvent
         {
@@ -599,7 +678,7 @@ public class TaskService : ITaskService
             PerformedByEmployeeId = employeeId,
             PerformedByName = emp?.Name ?? "Employee",
             PerformedByRole = "Employee",
-            Remarks = "Task completed"
+            Remarks = completeRemarksText
         });
 
         _context.ActivityTimelines.Add(new ActivityTimeline
@@ -611,10 +690,11 @@ public class TaskService : ITaskService
             StartTime = openTimeLog?.StartTime ?? now,
             EndTime = now,
             Status = "Completed",
-            Remarks = "Task completed"
+            Remarks = completeRemarksText
         });
 
         await _context.SaveChangesAsync();
+        await _idleTimeService.OnActivityEndingAsync(employeeId, now, "Task");
     }
 
     public async Task<ActiveTaskDto?> GetActiveTaskAsync(int employeeId)
@@ -725,15 +805,16 @@ public class TaskService : ITaskService
         }).ToList();
     }
 
-    public async Task<List<TaskDto>> GetMyTeamTasksAsync(int currentUserId)
+    public async Task<PagedResult<TaskDto>> GetMyTeamTasksAsync(int currentUserId, TeamTaskQueryDto query)
     {
-        var currentEmp = await _context.Employees.FirstOrDefaultAsync(e => e.Id == currentUserId);
+        var currentEmp = await _context.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == currentUserId);
         var isAdmin = currentEmp != null && (currentEmp.EmployeeCode == "EMP-001" || currentEmp.DesignationId == 1);
 
         List<int> teamEmployeeIds;
         if (isAdmin)
         {
             teamEmployeeIds = await _context.Employees
+                .AsNoTracking()
                 .Where(e => e.Id != currentUserId && e.IsActive)
                 .Select(e => e.Id)
                 .ToListAsync();
@@ -741,23 +822,135 @@ public class TaskService : ITaskService
         else
         {
             teamEmployeeIds = await _context.Employees
+                .AsNoTracking()
                 .Where(e => e.ReportingPersonId == currentUserId && e.IsActive)
                 .Select(e => e.Id)
                 .ToListAsync();
         }
 
-        var tasks = await _context.WorkTasks
+        var baseQuery = _context.WorkTasks
+            .AsNoTracking()
             .Include(t => t.Employee).ThenInclude(e => e.Department)
             .Include(t => t.AssignedByEmployee)
             .Include(t => t.Product)
             .Include(t => t.Client)
             .Include(t => t.TimeLogs)
             .Include(t => t.TimelineEvents)
-            .Where(t => teamEmployeeIds.Contains(t.EmployeeId) || t.AssignedByEmployeeId == currentUserId)
-            .OrderByDescending(t => t.CreatedAt)
+            .Where(t => teamEmployeeIds.Contains(t.EmployeeId) || t.AssignedByEmployeeId == currentUserId);
+
+        // Security check on requested EmployeeId filter
+        if (query.EmployeeId.HasValue)
+        {
+            if (teamEmployeeIds.Contains(query.EmployeeId.Value) || query.EmployeeId.Value == currentUserId)
+            {
+                baseQuery = baseQuery.Where(t => t.EmployeeId == query.EmployeeId.Value);
+            }
+            else
+            {
+                // Unauthorized employee filter request: return empty result set safely
+                return new PagedResult<TaskDto>
+                {
+                    Items = new List<TaskDto>(),
+                    TotalCount = 0,
+                    Page = query.Page,
+                    PageSize = query.PageSize
+                };
+            }
+        }
+
+        // Status Filter
+        if (!string.IsNullOrWhiteSpace(query.Status))
+        {
+            if (Enum.TryParse<TaskStatusEnum>(query.Status, true, out var statusEnum))
+            {
+                baseQuery = baseQuery.Where(t => t.Status == statusEnum);
+            }
+        }
+
+        // Priority Filter
+        if (query.Priority.HasValue)
+        {
+            baseQuery = baseQuery.Where(t => t.Priority == query.Priority.Value);
+        }
+
+        // Date Range Filter
+        if (query.FromDate.HasValue)
+        {
+            baseQuery = baseQuery.Where(t => t.CreatedAt >= query.FromDate.Value.Date);
+        }
+        if (query.ToDate.HasValue)
+        {
+            var endOfDay = query.ToDate.Value.Date.AddDays(1).AddTicks(-1);
+            baseQuery = baseQuery.Where(t => t.CreatedAt <= endOfDay);
+        }
+
+        // Search Filter
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim().ToLower();
+            baseQuery = baseQuery.Where(t =>
+                EF.Functions.Like(t.ModuleName, $"%{search}%") ||
+                EF.Functions.Like(t.Description, $"%{search}%") ||
+                (t.Product != null && EF.Functions.Like(t.Product.Name, $"%{search}%")) ||
+                (t.CustomProductName != null && EF.Functions.Like(t.CustomProductName, $"%{search}%")) ||
+                (t.Client != null && EF.Functions.Like(t.Client.CompanyName, $"%{search}%")) ||
+                (t.CustomClientName != null && EF.Functions.Like(t.CustomClientName, $"%{search}%")) ||
+                (t.Employee != null && EF.Functions.Like(t.Employee.Name, $"%{search}%")));
+        }
+
+        // Smart View Filter
+        if (!string.IsNullOrWhiteSpace(query.SmartView))
+        {
+            var now = DateTime.UtcNow;
+            switch (query.SmartView.ToLower().Trim())
+            {
+                case "overdue":
+                    baseQuery = baseQuery.Where(t => t.DueDate.HasValue && t.DueDate.Value < now && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
+                    break;
+                case "due-today":
+                    baseQuery = baseQuery.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date == now.Date && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
+                    break;
+                case "high-priority":
+                    baseQuery = baseQuery.Where(t => t.Priority == TaskPriority.High || t.Priority == TaskPriority.Urgent);
+                    break;
+            }
+        }
+
+        // Sorting
+        var isAsc = string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase);
+        switch (query.SortBy?.Trim().ToLower())
+        {
+            case "duedate":
+                baseQuery = isAsc ? baseQuery.OrderBy(t => t.DueDate) : baseQuery.OrderByDescending(t => t.DueDate);
+                break;
+            case "priority":
+                baseQuery = isAsc ? baseQuery.OrderBy(t => t.Priority) : baseQuery.OrderByDescending(t => t.Priority);
+                break;
+            case "status":
+                baseQuery = isAsc ? baseQuery.OrderBy(t => t.Status) : baseQuery.OrderByDescending(t => t.Status);
+                break;
+            case "employeename":
+                baseQuery = isAsc ? baseQuery.OrderBy(t => t.Employee.Name) : baseQuery.OrderByDescending(t => t.Employee.Name);
+                break;
+            case "createdat":
+            default:
+                baseQuery = isAsc ? baseQuery.OrderBy(t => t.CreatedAt) : baseQuery.OrderByDescending(t => t.CreatedAt);
+                break;
+        }
+
+        var totalCount = await baseQuery.CountAsync();
+        var items = await baseQuery
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync();
 
-        return tasks.Select(MapToDto).ToList();
+        return new PagedResult<TaskDto>
+        {
+            Items = items.Select(MapToDto).ToList(),
+            TotalCount = totalCount,
+            Page = query.Page,
+            PageSize = query.PageSize
+        };
     }
 
     public async Task<List<TaskDto>> GetAdminTasksAsync(int? employeeId = null, int? departmentId = null, int? managerId = null, string? status = null, DateTime? from = null, DateTime? to = null, bool? isOverdue = null)
@@ -824,21 +1017,37 @@ public class TaskService : ITaskService
 
         // Rule #6:
         // Admin: can reassign any task.
-        // Reporting Person: can reassign only within their reporting hierarchy.
+        // Reporting Person: can reassign only within their reporting hierarchy or to themselves.
         if (currentUserRole != "Admin")
         {
-            if (task.Employee.ReportingPersonId != currentUserId || newEmployee.ReportingPersonId != currentUserId)
+            var isCurrentOwnerAllowed = task.Employee?.ReportingPersonId == currentUserId 
+                || task.EmployeeId == currentUserId 
+                || task.AssignedByEmployeeId == currentUserId;
+
+            var isNewAssigneeAllowed = newEmployee.ReportingPersonId == currentUserId 
+                || newEmployee.Id == currentUserId;
+
+            if (!isCurrentOwnerAllowed || !isNewAssigneeAllowed)
             {
-                throw new UnauthorizedAccessException("You are only authorized to reassign tasks between employees who report directly to you.");
+                throw new UnauthorizedAccessException("You are only authorized to reassign tasks within your reporting hierarchy or to yourself.");
             }
         }
 
         var oldEmployeeName = task.Employee?.Name ?? $"ID {task.EmployeeId}";
         task.EmployeeId = request.NewEmployeeId;
+        task.Employee = newEmployee;
         task.Status = TaskStatusEnum.Assigned;
 
+        // If task was running, close active time log
+        var openLog = await _context.TaskTimeLogs
+            .FirstOrDefaultAsync(tl => tl.TaskId == taskId && tl.EndTime == null);
+        if (openLog != null)
+        {
+            openLog.EndTime = DateTime.UtcNow;
+        }
+
         var now = DateTime.UtcNow;
-        _context.TaskTimelineEvents.Add(new TaskTimelineEvent
+        var timelineEvent = new TaskTimelineEvent
         {
             WorkTaskId = task.Id,
             EventType = "Reassigned",
@@ -847,10 +1056,11 @@ public class TaskService : ITaskService
             PerformedByName = assignerName,
             PerformedByRole = currentUserRole,
             Remarks = $"Reassigned from {oldEmployeeName} to {newEmployee.Name}. {request.Remarks?.Trim()}"
-        });
+        };
+        _context.TaskTimelineEvents.Add(timelineEvent);
 
         await _context.SaveChangesAsync();
-        return (await GetByIdAsync(task.Id))!;
+        return (await GetByIdAsync(task.Id)) ?? MapToDto(task);
     }
 
     public async Task CancelTaskAsync(int taskId, int currentUserId, string currentUserRole, CancelTaskRequest request)
@@ -933,6 +1143,7 @@ public class TaskService : ITaskService
     private async Task<TaskDto?> GetByIdAsync(int id)
     {
         var task = await _context.WorkTasks
+            .AsNoTracking()
             .Include(t => t.Employee).ThenInclude(e => e.Department)
             .Include(t => t.AssignedByEmployee)
             .Include(t => t.Product)
@@ -946,8 +1157,9 @@ public class TaskService : ITaskService
 
     private static TaskDto MapToDto(WorkTask t)
     {
-        var totalSeconds = (int)t.TimeLogs
-            .Sum(tl => ((tl.EndTime ?? DateTime.UtcNow) - tl.StartTime).TotalSeconds);
+        var totalSeconds = t.TimeLogs != null
+            ? (int)t.TimeLogs.Sum(tl => ((tl.EndTime ?? DateTime.UtcNow) - tl.StartTime).TotalSeconds)
+            : 0;
 
         var ts = TimeSpan.FromSeconds(totalSeconds);
         var duration = $"{((int)ts.TotalHours):D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
@@ -981,7 +1193,7 @@ public class TaskService : ITaskService
             Duration = duration,
             TotalProductiveSeconds = Math.Max(0, totalSeconds),
             IsOverdue = isOverdue,
-            TimelineEvents = t.TimelineEvents.Select(e => new TaskTimelineEventDto
+            TimelineEvents = (t.TimelineEvents ?? Enumerable.Empty<TaskTimelineEvent>()).Select(e => new TaskTimelineEventDto
             {
                 Id = e.Id,
                 WorkTaskId = e.WorkTaskId,

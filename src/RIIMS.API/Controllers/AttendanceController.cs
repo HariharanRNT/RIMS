@@ -41,6 +41,11 @@ public class AttendanceController : ControllerBase
     [HttpGet("{employeeId}")]
     public async Task<IActionResult> GetByDate(int employeeId, [FromQuery] DateTime? date)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var targetDate = date ?? DateTime.UtcNow.Date;
         var result = await _service.GetByDateAsync(employeeId, targetDate);
         if (result == null) return NotFound(ApiResponse.FailResponse("No attendance record found."));
@@ -49,15 +54,20 @@ public class AttendanceController : ControllerBase
 
     [HttpPost("{id}/mark-permission")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<IActionResult> MarkPermission(int id)
+    public async Task<IActionResult> MarkPermission(int id, [FromQuery] bool force = false)
     {
-        var result = await _service.MarkPermissionAsync(id);
-        return Ok(ApiResponse<AttendanceDto>.SuccessResponse(result, "Attendance marked as Permission successfully."));
+        var result = await _service.MarkPermissionAsync(id, force);
+        return Ok(ApiResponse<MarkPermissionResultDto>.SuccessResponse(result, "Permission processing completed."));
     }
 
     [HttpGet("permission-summary/{employeeId}")]
     public async Task<IActionResult> GetPermissionSummary(int employeeId, [FromQuery] int? month, [FromQuery] int? year)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var now = DateTime.UtcNow;
         var targetMonth = month ?? now.Month;
         var targetYear = year ?? now.Year;

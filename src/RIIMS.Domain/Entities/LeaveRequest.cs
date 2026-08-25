@@ -11,6 +11,8 @@ public class LeaveRequest : BaseEntity
     public DateTime ToDate { get; set; }
     public string Reason { get; set; } = string.Empty;
     public RequestStatus Status { get; set; } = RequestStatus.Pending;
+    public LeaveDuration LeaveDuration { get; set; } = LeaveDuration.FullDay;
+    public HalfDayType? HalfDayType { get; set; }
     public int? ApprovedBy { get; set; }
     public DateTime? ApprovedAt { get; set; }
 

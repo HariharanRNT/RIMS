@@ -9,7 +9,13 @@ public class CreateDepartmentRequestValidator : AbstractValidator<CreateDepartme
 {
     public CreateDepartmentRequestValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Department name is required.")
+            .MaximumLength(100).WithMessage("Department name cannot exceed 100 characters.")
+            .Must(name => !name.Contains("<") && !name.Contains(">"))
+            .WithMessage("Department name cannot contain HTML or script characters (< or >).")
+            .Matches(@"^[a-zA-Z0-9\s\-&.,/()'_#+]+$")
+            .WithMessage("Department name contains invalid characters.");
     }
 }
 
@@ -17,7 +23,13 @@ public class UpdateDepartmentRequestValidator : AbstractValidator<UpdateDepartme
 {
     public UpdateDepartmentRequestValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Department name is required.")
+            .MaximumLength(100).WithMessage("Department name cannot exceed 100 characters.")
+            .Must(name => !name.Contains("<") && !name.Contains(">"))
+            .WithMessage("Department name cannot contain HTML or script characters (< or >).")
+            .Matches(@"^[a-zA-Z0-9\s\-&.,/()'_#+]+$")
+            .WithMessage("Department name contains invalid characters.");
     }
 }
 
@@ -25,7 +37,13 @@ public class CreateDesignationRequestValidator : AbstractValidator<CreateDesigna
 {
     public CreateDesignationRequestValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Designation name is required.")
+            .MaximumLength(100).WithMessage("Designation name cannot exceed 100 characters.")
+            .Must(name => !name.Contains("<") && !name.Contains(">"))
+            .WithMessage("Designation name cannot contain HTML or script characters (< or >).")
+            .Matches(@"^[a-zA-Z0-9\s\-&.,/()'_#+]+$")
+            .WithMessage("Designation name contains invalid characters.");
     }
 }
 
@@ -33,7 +51,13 @@ public class UpdateDesignationRequestValidator : AbstractValidator<UpdateDesigna
 {
     public UpdateDesignationRequestValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Designation name is required.")
+            .MaximumLength(100).WithMessage("Designation name cannot exceed 100 characters.")
+            .Must(name => !name.Contains("<") && !name.Contains(">"))
+            .WithMessage("Designation name cannot contain HTML or script characters (< or >).")
+            .Matches(@"^[a-zA-Z0-9\s\-&.,/()'_#+]+$")
+            .WithMessage("Designation name contains invalid characters.");
     }
 }
 
@@ -41,7 +65,13 @@ public class CreateLookupRequestValidator : AbstractValidator<CreateLookupReques
 {
     public CreateLookupRequestValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(50);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Name is required.")
+            .MaximumLength(50).WithMessage("Name cannot exceed 50 characters.")
+            .Must(name => !name.Contains("<") && !name.Contains(">"))
+            .WithMessage("Name cannot contain HTML or script characters (< or >).")
+            .Matches(@"^[a-zA-Z0-9\s\-&.,/()'_#+]+$")
+            .WithMessage("Name contains invalid characters.");
     }
 }
 
@@ -49,6 +79,12 @@ public class UpdateLookupRequestValidator : AbstractValidator<UpdateLookupReques
 {
     public UpdateLookupRequestValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(50);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Name is required.")
+            .MaximumLength(50).WithMessage("Name cannot exceed 50 characters.")
+            .Must(name => !name.Contains("<") && !name.Contains(">"))
+            .WithMessage("Name cannot contain HTML or script characters (< or >).")
+            .Matches(@"^[a-zA-Z0-9\s\-&.,/()'_#+]+$")
+            .WithMessage("Name contains invalid characters.");
     }
 }

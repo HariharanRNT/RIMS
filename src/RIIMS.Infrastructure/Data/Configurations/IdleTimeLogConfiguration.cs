@@ -12,8 +12,14 @@ public class IdleTimeLogConfiguration : IEntityTypeConfiguration<IdleTimeLog>
 
         builder.HasKey(i => i.Id);
 
+        builder.Property(i => i.EndTime)
+            .IsRequired(false);
+
         builder.Property(i => i.Type)
             .IsRequired()
+            .HasMaxLength(50);
+
+        builder.Property(i => i.Source)
             .HasMaxLength(50);
 
         builder.HasOne(i => i.Employee)

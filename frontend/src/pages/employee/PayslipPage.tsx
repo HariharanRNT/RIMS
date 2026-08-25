@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
-import { CreditCard, Printer, Calendar } from 'lucide-react';
+import { CreditCard, Printer, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
 import rntFullLogo from '../../assets/RNTFulllogo.png';
 
 interface Payslip {
@@ -55,6 +55,14 @@ interface Payslip {
   createdAt: string;
 }
 
+interface PayPeriodOption {
+  year: number;
+  month: number;
+  monthName: string;
+  payslip?: Payslip;
+  isGenerated: boolean;
+}
+
 export const PayslipPage: React.FC = () => {
   const { user } = useAuth();
   const employeeId = user?.employeeId || 0;
@@ -62,13 +70,32 @@ export const PayslipPage: React.FC = () => {
   const [history, setHistory] = useState<Payslip[]>([]);
   const [selectedPayslip, setSelectedPayslip] = useState<Payslip | null>(null);
   const [loading, setLoading] = useState(true);
+  const [employeeDoj, setEmployeeDoj] = useState<string>('');
+  const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
 
   const fetchPayslips = async () => {
     try {
-      const res = await apiClient.get(`/payroll/my-payslips/${employeeId}`);
-      if (res.data.success && res.data.data.length > 0) {
-        setHistory(res.data.data);
-        setSelectedPayslip(res.data.data[0]);
+      const [payslipsRes, profileRes] = await Promise.allSettled([
+        apiClient.get(`/payroll/my-payslips/${employeeId}`),
+        apiClient.get('/employees/profile'),
+      ]);
+
+      if (profileRes.status === 'fulfilled' && profileRes.value.data?.success) {
+        setEmployeeDoj(profileRes.value.data.data.dateOfJoining || '');
+      }
+
+      if (payslipsRes.status === 'fulfilled' && payslipsRes.value.data?.success) {
+        const list = Array.isArray(payslipsRes.value.data.data)
+          ? payslipsRes.value.data.data
+          : (payslipsRes.value.data.data?.items || []);
+
+        if (list.length > 0) {
+          setHistory(list);
+          setSelectedPayslip(list[0]);
+          if (list[0].dateOfJoining) {
+            setEmployeeDoj((prev) => prev || list[0].dateOfJoining);
+          }
+        }
       }
     } catch {
       // Ignore
@@ -98,6 +125,78 @@ export const PayslipPage: React.FC = () => {
     const monthNum = (d.getMonth() + 1).toString().padStart(2, '0');
     const year = d.getFullYear();
     return `${day}/${monthNum}/${year}`;
+  };
+
+  const generatePayPeriods = (
+    dojDateStr?: string,
+    existingPayslips: Payslip[] = []
+  ): PayPeriodOption[] => {
+    const options: PayPeriodOption[] = [];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+
+    let startYear = currentYear;
+    let startMonth = currentMonth;
+
+    let dojSource = dojDateStr;
+    if (!dojSource && existingPayslips.length > 0 && existingPayslips[0].dateOfJoining) {
+      dojSource = existingPayslips[0].dateOfJoining;
+    }
+
+    if (dojSource) {
+      const doj = new Date(dojSource);
+      if (!isNaN(doj.getTime())) {
+        startYear = doj.getFullYear();
+        startMonth = doj.getMonth() + 1;
+      }
+    }
+
+    const payslipMap = new Map<string, Payslip>();
+    existingPayslips.forEach((p) => {
+      payslipMap.set(`${p.year}-${p.month}`, p);
+    });
+
+    let y = currentYear;
+    let m = currentMonth;
+
+    while (y > startYear || (y === startYear && m >= startMonth)) {
+      const payslip = payslipMap.get(`${y}-${m}`);
+      options.push({
+        year: y,
+        month: m,
+        monthName: monthFullNames[m],
+        payslip,
+        isGenerated: !!payslip,
+      });
+
+      m--;
+      if (m < 1) {
+        m = 12;
+        y--;
+      }
+    }
+
+    return options;
+  };
+
+  const payPeriodOptions = generatePayPeriods(employeeDoj, history);
+
+  const groupedByYear = payPeriodOptions.reduce((acc, opt) => {
+    if (!acc[opt.year]) acc[opt.year] = [];
+    acc[opt.year].push(opt);
+    return acc;
+  }, {} as Record<number, PayPeriodOption[]>);
+
+  const optionYears = Object.keys(groupedByYear)
+    .map(Number)
+    .sort((a, b) => b - a);
+
+  const toggleYear = (year: number) => {
+    setExpandedYears((prev) => ({
+      ...prev,
+      [year]: prev[year] === false ? true : false,
+    }));
   };
 
 
@@ -148,27 +247,120 @@ export const PayslipPage: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '1.5rem' }}>
           {/* History Selection Sidebar */}
-          <div className="ui-card hide-on-print" style={{ padding: '1rem', height: 'fit-content' }}>
-            <h4 style={{ marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Select Pay Period</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {history.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedPayslip(p)}
-                  className={`btn ${selectedPayslip?.id === p.id ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{
-                    justifyContent: 'flex-start',
-                    padding: '0.6rem 0.8rem',
-                    fontSize: '0.85rem',
-                    background: selectedPayslip?.id === p.id ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)' : 'rgba(255,255,255,0.07)'
-                  }}
-                >
-                  <Calendar size={14} />
-                  <span>{monthFullNames[p.month]} {p.year}</span>
-                </button>
-              ))}
+          <div className="ui-card hide-on-print" style={{ padding: '1.25rem', height: 'fit-content' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Select Pay Period</h4>
+              <span style={{ fontSize: '0.7rem', background: '#fff4e6', color: '#E8873C', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                {history.length} Generated
+              </span>
+            </div>
+
+            {/* Scrollable Container with Max Height */}
+            <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {optionYears.map((year) => {
+                const isExpanded = expandedYears[year] !== false; // Expanded by default
+                const yearOptions = groupedByYear[year];
+                const generatedInYear = yearOptions.filter((o) => o.isGenerated).length;
+
+                return (
+                  <div key={year} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {/* Year Header */}
+                    <button
+                      type="button"
+                      onClick={() => toggleYear(year)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: '#f9fafb',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '6px',
+                        padding: '0.4rem 0.6rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        color: '#111827',
+                        cursor: 'pointer',
+                        transition: 'background 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        {isExpanded ? <ChevronDown size={14} style={{ color: '#E8873C' }} /> : <ChevronRight size={14} style={{ color: '#9ca3af' }} />}
+                        <span>{year}</span>
+                      </div>
+                      <span style={{ fontSize: '0.685rem', color: '#6b7280', fontWeight: 500 }}>
+                        {generatedInYear} / {yearOptions.length}
+                      </span>
+                    </button>
+
+                    {/* Months List */}
+                    {isExpanded && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', paddingLeft: '0.25rem' }}>
+                        {yearOptions.map((opt) => {
+                          const isSelected = selectedPayslip?.year === opt.year && selectedPayslip?.month === opt.month;
+
+                          if (opt.isGenerated && opt.payslip) {
+                            return (
+                              <button
+                                key={`${opt.year}-${opt.month}`}
+                                type="button"
+                                onClick={() => setSelectedPayslip(opt.payslip!)}
+                                className={`btn ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
+                                style={{
+                                  justifyContent: 'space-between',
+                                  padding: '0.55rem 0.75rem',
+                                  fontSize: '0.825rem',
+                                  background: isSelected
+                                    ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)'
+                                    : '#ffffff',
+                                  borderColor: isSelected ? '#E8873C' : '#e5e7eb',
+                                  color: isSelected ? '#FFFFFF' : '#374151',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <Calendar size={14} style={{ color: isSelected ? '#FFFFFF' : '#E8873C' }} />
+                                  <span>{opt.monthName}</span>
+                                </div>
+                              </button>
+                            );
+                          }
+
+                          // Un-generated Month (Grayed Out Disabled State)
+                          return (
+                            <div
+                              key={`${opt.year}-${opt.month}`}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '0.5rem 0.75rem',
+                                fontSize: '0.8rem',
+                                borderRadius: '6px',
+                                background: '#f9fafb',
+                                border: '1px dashed #e5e7eb',
+                                color: '#9ca3af',
+                                cursor: 'not-allowed',
+                                userSelect: 'none',
+                              }}
+                              title="Payslip not yet generated for this month"
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Calendar size={14} style={{ opacity: 0.5 }} />
+                                <span>{opt.monthName}</span>
+                              </div>
+                              <span style={{ fontSize: '0.675rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                                Not generated
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -179,17 +371,15 @@ export const PayslipPage: React.FC = () => {
 
             return (
               <div className="payslip-print-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                {/* Outer Glass Frame */}
+                {/* Outer Frame */}
                 <div style={{
                   width: '100%',
                   maxWidth: '820px',
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
                   borderRadius: '16px',
                   padding: '1.5rem',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
                   boxSizing: 'border-box',
                   margin: '0 auto'
                 }}>
@@ -419,7 +609,7 @@ export const PayslipPage: React.FC = () => {
                       gap: '6px'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.04em' }}>NET PAYABLE AMOUNT (A - B)</span>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.04em' }}>NET PAYABLE AMOUNT</span>
                         <span style={{ fontSize: '18px', fontWeight: 900, color: '#0284C7' }}>₹{selectedPayslip.netPay.toLocaleString()}</span>
                       </div>
                       <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569', fontStyle: 'italic' }}>

@@ -764,9 +764,9 @@ export const TaskAllocationPage: React.FC = () => {
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '0.8rem',
                 fontWeight: 600,
-                background: showAllTasks ? 'var(--primary-tint)' : 'rgba(255, 255, 255, 0.06)',
+                background: showAllTasks ? 'var(--primary-tint)' : '#ffffff',
                 color: showAllTasks ? 'var(--primary)' : 'var(--text-secondary)',
-                border: showAllTasks ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.12)',
+                border: showAllTasks ? '1px solid var(--primary)' : '1px solid #e5e7eb',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -820,8 +820,9 @@ export const TaskAllocationPage: React.FC = () => {
           justifyContent: 'space-between',
           padding: '0.75rem 1.25rem',
           borderRadius: 'var(--radius-md)',
-          background: 'rgba(255, 255, 255, 0.04)',
+          background: '#ffffff',
           border: '1px solid var(--border-color)',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
           marginBottom: '1rem',
           flexWrap: 'wrap',
           gap: '0.75rem'
@@ -833,7 +834,7 @@ export const TaskAllocationPage: React.FC = () => {
               width: '32px',
               height: '32px',
               borderRadius: '8px',
-              background: 'rgba(232, 135, 60, 0.15)',
+              background: '#fff4e6',
               color: 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
@@ -866,7 +867,7 @@ export const TaskAllocationPage: React.FC = () => {
                   fontSize: '0.75rem',
                   padding: '0.2rem 0.6rem',
                   borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.08)',
+                  background: '#f3f4f6',
                   color: 'var(--text-secondary)',
                   fontWeight: 600
                 }}
@@ -892,15 +893,15 @@ export const TaskAllocationPage: React.FC = () => {
         <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
           <thead>
             <tr>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Task / Module</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Assigned To</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Product & Client</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Assigned By</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Priority</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Schedule & Planned</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Status</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Actual Time</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem', textAlign: 'right' }}>Actions</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Task / Module</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Assigned To</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Product & Client</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Assigned By</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Priority</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Schedule & Planned</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Status</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Actual Time</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1066,34 +1067,32 @@ export const TaskAllocationPage: React.FC = () => {
               maxHeight: '90vh',
               overflowY: 'auto',
               padding: '2rem',
-              background: 'rgba(255, 255, 255, 0.08)',
-              backdropFilter: 'blur(24px) saturate(150%)',
-              WebkitBackdropFilter: 'blur(24px) saturate(150%)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
               borderRadius: '20px',
-              boxShadow: '0 8px 40px rgba(0, 0, 0, 0.35)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#F5F5F5' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
                   Assign Work Task
                 </h3>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#6b7280' }}>
                   Create and allocate a new work task for any employee.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAssignModal(false)}
-                style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', padding: '0.25rem' }}
+                style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '0.25rem' }}
               >
                 <XCircle size={20} />
               </button>
             </div>
 
             {assignError && (
-              <div style={{ background: 'rgba(240,96,96,0.12)', color: '#FF7B7B', border: '1px solid rgba(240,96,96,0.25)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
+              <div style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
                 ⚠️ {assignError}
               </div>
             )}
@@ -1101,7 +1100,7 @@ export const TaskAllocationPage: React.FC = () => {
             <form onSubmit={handleConfirmAssignTask} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
               {/* SECTION 1: ASSIGNMENT DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
                 <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   1. Assignment Details
                 </div>
@@ -1149,9 +1148,9 @@ export const TaskAllocationPage: React.FC = () => {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="Type new product name..."
                         value={customProductName}
                         onChange={(e) => setCustomProductName(e.target.value)}
-                        placeholder="Enter custom product name..."
                         required
                       />
                     ) : (
@@ -1202,9 +1201,9 @@ export const TaskAllocationPage: React.FC = () => {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="Type new client name..."
                         value={customClientName}
                         onChange={(e) => setCustomClientName(e.target.value)}
-                        placeholder="Enter custom client company name..."
                         required
                       />
                     ) : (
@@ -1239,7 +1238,7 @@ export const TaskAllocationPage: React.FC = () => {
               </div>
 
               {/* SECTION 2: TASK DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
                 <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   2. Task Details
                 </div>
@@ -1251,7 +1250,7 @@ export const TaskAllocationPage: React.FC = () => {
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: moduleName.length >= 100 ? '#EF4444' : moduleName.length >= 90 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                        color: moduleName.length >= 100 ? '#ef4444' : moduleName.length >= 90 ? '#E8873C' : '#9ca3af',
                         fontWeight: moduleName.length >= 90 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -1277,7 +1276,7 @@ export const TaskAllocationPage: React.FC = () => {
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: description.length >= 500 ? '#EF4444' : description.length >= 450 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                        color: description.length >= 500 ? '#ef4444' : description.length >= 450 ? '#E8873C' : '#9ca3af',
                         fontWeight: description.length >= 450 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -1350,7 +1349,7 @@ export const TaskAllocationPage: React.FC = () => {
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Hours:
                       </span>
                       <input
@@ -1365,7 +1364,7 @@ export const TaskAllocationPage: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Minutes:
                       </span>
                       <GlassSelect
@@ -1389,7 +1388,7 @@ export const TaskAllocationPage: React.FC = () => {
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: instructions.length >= 300 ? '#EF4444' : instructions.length >= 270 ? '#E8873C' : 'rgba(255, 255, 255, 0.5)',
+                        color: instructions.length >= 300 ? '#ef4444' : instructions.length >= 270 ? '#E8873C' : '#9ca3af',
                         fontWeight: instructions.length >= 270 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -1409,15 +1408,15 @@ export const TaskAllocationPage: React.FC = () => {
               </div>
 
               {/* ACTION BUTTONS */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid #f0f0f0', paddingTop: '1.25rem' }}>
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(false)}
                   style={{
                     padding: '0.65rem 1.35rem',
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    color: 'rgba(255, 255, 255, 0.8)',
-                    border: '1px solid rgba(255, 255, 255, 0.16)',
+                    background: '#ffffff',
+                    color: '#374151',
+                    border: '1px solid #e5e7eb',
                     borderRadius: '10px',
                     fontSize: '0.875rem',
                     fontWeight: 600,
@@ -1436,7 +1435,7 @@ export const TaskAllocationPage: React.FC = () => {
                     justifyContent: 'center',
                     gap: '0.5rem',
                     padding: '0.65rem 1.85rem',
-                    background: 'linear-gradient(135deg, #E8873C 0%, #F59E0B 100%)',
+                    background: '#E8873C',
                     color: '#FFFFFF',
                     border: 'none',
                     borderRadius: '10px',
@@ -1444,8 +1443,7 @@ export const TaskAllocationPage: React.FC = () => {
                     fontWeight: 700,
                     cursor: submittingAssign ? 'not-allowed' : 'pointer',
                     opacity: submittingAssign ? 0.65 : 1,
-                    boxShadow: '0 4px 16px rgba(232, 135, 60, 0.4)',
-                    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                    transition: 'transform 0.15s ease, opacity 0.15s ease',
                   }}
                 >
                   <span>{submittingAssign ? 'Assigning Work Task...' : 'Assign Work Task'}</span>

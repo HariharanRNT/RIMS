@@ -31,6 +31,11 @@ public class PermissionsController : ControllerBase
     [HttpGet("my-requests/{employeeId}")]
     public async Task<IActionResult> GetMyRequests(int employeeId)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetEmployeePermissionsAsync(employeeId);
         return Ok(ApiResponse<List<PermissionRequestDto>>.SuccessResponse(result));
     }

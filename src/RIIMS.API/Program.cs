@@ -95,13 +95,19 @@ builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<ISalaryStructureService, SalaryStructureService>();
 builder.Services.AddScoped<IMonthlyEmployeeReportService, MonthlyEmployeeReportService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IIdleTimeService, IdleTimeService>();
+builder.Services.AddScoped<ICelebrationNotificationService, CelebrationNotificationService>();
 builder.Services.AddHostedService<RIIMS.Jobs.WorkdayEodCleanupJob>();
+builder.Services.AddHostedService<RIIMS.Jobs.CelebrationJob>();
 
 // 6. Validation
 builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
 
 // 7. Controllers & API Specs
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<RIIMS.API.Filters.FluentValidationFilter>();
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -126,11 +132,14 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // 8. CORS Policy
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
+    ?? new[] { "http://localhost:5173", "http://localhost:3000", "http://localhost:5000" };
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -168,21 +177,6 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// 2. Force CORS Preflight Handling for OPTIONS requests
-app.Use(async (context, next) =>
-{
-    context.Response.Headers["Access-Control-Allow-Origin"] = "*";
-    context.Response.Headers["Access-Control-Allow-Headers"] = "*";
-    context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
-    if (HttpMethods.IsOptions(context.Request.Method))
-    {
-        context.Response.StatusCode = StatusCodes.Status200OK;
-        await context.Response.CompleteAsync();
-        return;
-    }
-    await next();
-});
-
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 // Enable Swagger in all environments (including IIS)
@@ -197,5 +191,12 @@ app.UseAuthorization();
 app.UseMiddleware<SessionValidationMiddleware>();
 
 app.MapControllers();
+
+// Automatically apply pending EF Core database migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<RIIMS.Infrastructure.Data.RiimsDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 app.Run();

@@ -97,8 +97,8 @@ export const PermissionRequestPage: React.FC = () => {
 
       {error && (
         <div style={{
-          backgroundColor: 'rgba(240,96,96,0.12)',
-          border: '1px solid #FECACA',
+          backgroundColor: '#fef2f2',
+          border: '1px solid #fecaca',
           color: 'var(--danger)',
           padding: '0.75rem 1rem',
           borderRadius: 'var(--radius-sm)',

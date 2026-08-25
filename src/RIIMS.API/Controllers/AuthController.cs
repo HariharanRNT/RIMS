@@ -40,4 +40,29 @@ public class AuthController : ControllerBase
         await _authService.ChangePasswordAsync(userId, request);
         return Ok(ApiResponse.SuccessResponse("Password changed successfully."));
     }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        await _authService.ForgotPasswordAsync(request, ipAddress);
+
+        // Always return generic success message to prevent account enumeration
+        return Ok(ApiResponse.SuccessResponse("If an account exists with this email, a reset link has been sent."));
+    }
+
+    [HttpGet("validate-reset-token")]
+    public async Task<IActionResult> ValidateResetToken([FromQuery] string token)
+    {
+        var isValid = await _authService.ValidateResetTokenAsync(token);
+        return Ok(ApiResponse<bool>.SuccessResponse(isValid));
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithTokenRequest request)
+    {
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        await _authService.ResetPasswordWithTokenAsync(request, ipAddress);
+        return Ok(ApiResponse.SuccessResponse("Your password has been reset successfully."));
+    }
 }

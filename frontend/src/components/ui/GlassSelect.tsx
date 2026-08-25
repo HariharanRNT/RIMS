@@ -120,23 +120,21 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
           padding: '0.55rem 0.85rem',
           fontSize: '0.8125rem',
           fontFamily: 'inherit',
-          background: 'rgba(255, 255, 255, 0.08)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
+          background: '#ffffff',
           border: error
             ? '1px solid var(--danger)'
             : isOpen
             ? '1px solid #E8873C'
-            : '1px solid rgba(255, 255, 255, 0.16)',
+            : '1px solid #e5e7eb',
           borderRadius: 'var(--radius-sm)',
-          color: selectedOption ? (selectedOption.isAction ? '#E8873C' : '#F5F5F5') : 'rgba(255, 255, 255, 0.4)',
+          color: selectedOption ? (selectedOption.isAction ? '#E8873C' : '#111827') : '#9ca3af',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.55 : 1,
           outline: 'none',
-          boxShadow: isOpen ? '0 0 12px rgba(232, 135, 60, 0.3)' : 'none',
+          boxShadow: isOpen ? '0 0 0 3px rgba(232, 135, 60, 0.15)' : '0 1px 2px rgba(0, 0, 0, 0.04)',
           transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
         }}
       >
@@ -146,7 +144,7 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
         <ChevronDown
           size={16}
           style={{
-            color: isOpen ? '#E8873C' : 'rgba(255, 255, 255, 0.6)',
+            color: isOpen ? '#E8873C' : '#6b7280',
             transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.2s ease, color 0.15s ease',
             flexShrink: 0,
@@ -166,12 +164,10 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
               left: `${coords.left}px`,
               width: `${coords.width}px`,
               zIndex: 99999,
-              background: 'rgba(20, 30, 28, 0.95)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
               borderRadius: '12px',
-              boxShadow: '0 12px 36px rgba(0, 0, 0, 0.5)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
               maxHeight: '280px',
               display: 'flex',
               flexDirection: 'column',
@@ -180,7 +176,7 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
             }}
           >
             {searchable && (
-              <div style={{ padding: '0.35rem 0.5rem 0.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <div style={{ padding: '0.35rem 0.5rem 0.5rem', borderBottom: '1px solid #f0f0f0' }}>
                 <input
                   type="text"
                   placeholder="Type to filter..."
@@ -191,10 +187,10 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
                     width: '100%',
                     padding: '0.4rem 0.6rem',
                     fontSize: '0.785rem',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    background: '#f9fafb',
+                    border: '1px solid #e5e7eb',
                     borderRadius: '6px',
-                    color: '#FFFFFF',
+                    color: '#111827',
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
@@ -204,7 +200,7 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
 
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {filteredOptions.length === 0 ? (
-                <div style={{ padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                <div style={{ padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#9ca3af' }}>
                   No matching options
                 </div>
               ) : (
@@ -222,10 +218,10 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
                           ? '#E8873C'
                           : isSelected
                           ? '#E8873C'
-                          : 'rgba(255, 255, 255, 0.85)',
-                        backgroundColor: isSelected ? 'rgba(232, 135, 60, 0.15)' : 'transparent',
+                          : '#374151',
+                        backgroundColor: isSelected ? '#fff4e6' : 'transparent',
                         borderLeft: isSelected ? '3px solid #E8873C' : '3px solid transparent',
-                        borderTop: opt.dividerAbove ? '1px solid rgba(255, 255, 255, 0.10)' : 'none',
+                        borderTop: opt.dividerAbove ? '1px solid #f0f0f0' : 'none',
                         marginTop: opt.dividerAbove ? '0.35rem' : 0,
                         paddingTop: opt.dividerAbove ? '0.65rem' : '0.65rem',
                         cursor: 'pointer',
@@ -237,8 +233,8 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
                       }}
                       onMouseEnter={(e) => {
                         if (!isSelected) {
-                          e.currentTarget.style.backgroundColor = 'rgba(232, 135, 60, 0.12)';
-                          e.currentTarget.style.color = isAction ? '#F5A15D' : '#FFFFFF';
+                          e.currentTarget.style.backgroundColor = '#f3f4f6';
+                          e.currentTarget.style.color = isAction ? '#d4782f' : '#111827';
                         }
                       }}
                       onMouseLeave={(e) => {
@@ -246,7 +242,7 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
                           e.currentTarget.style.backgroundColor = 'transparent';
                           e.currentTarget.style.color = isAction
                             ? '#E8873C'
-                            : 'rgba(255, 255, 255, 0.85)';
+                            : '#374151';
                         }
                       }}
                     >

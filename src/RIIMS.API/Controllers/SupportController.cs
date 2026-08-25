@@ -60,9 +60,22 @@ public class SupportController : ControllerBase
         return Ok(ApiResponse.SuccessResponse("Demo follow-up marked as completed."));
     }
 
+    [HttpPost("demo-followups/complete-all")]
+    public async Task<IActionResult> CompleteAllDemoFollowUps()
+    {
+        var employeeId = GetEmployeeId();
+        await _service.CompleteAllDemoFollowUpsAsync(employeeId);
+        return Ok(ApiResponse.SuccessResponse("All demo follow-ups marked as completed."));
+    }
+
     [HttpGet("active/{employeeId}")]
     public async Task<IActionResult> GetActive(int employeeId)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetActiveSupportAsync(employeeId);
         return Ok(ApiResponse<SupportLogDto?>.SuccessResponse(result));
     }

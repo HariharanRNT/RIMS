@@ -7,8 +7,8 @@ public class EmployeeMonthlyAttendanceReportDto
     public int Month { get; set; }
     public int TotalCalendarDays { get; set; }
     public int WorkingDays { get; set; }
-    public int PresentDays { get; set; }
-    public int ApprovedLeaveDays { get; set; }
+    public decimal PresentDays { get; set; }
+    public decimal ApprovedLeaveDays { get; set; }
     public int WeekendDays { get; set; }
     public int HolidayDays { get; set; }
     public int MonthlyAllowedLeave { get; set; }

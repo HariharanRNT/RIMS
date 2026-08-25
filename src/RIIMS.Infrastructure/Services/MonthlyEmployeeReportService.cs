@@ -1,5 +1,6 @@
 using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
+using RIIMS.Application.Common;
 using RIIMS.Application.DTOs.Payroll;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
@@ -38,7 +39,17 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
         _calendarService = calendarService;
     }
 
-    public async Task<List<MonthlyEmployeePayrollReportDto>> GetMonthlyReportAsync(int year, int month)
+    public async Task<PagedResult<MonthlyEmployeePayrollReportDto>> GetMonthlyReportAsync(
+        int year,
+        int month,
+        int page = 1,
+        int pageSize = 25,
+        string? search = null,
+        int? departmentId = null,
+        int? designationId = null,
+        string? lop = null,
+        string? salary = null,
+        int? employeeId = null)
     {
         var activeEmployees = await _context.Employees
             .AsNoTracking()
@@ -111,6 +122,7 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
             decimal lopAmount;
             decimal totalDeduction;
             decimal finalSalary;
+            decimal presentDays;
             int permissionCount = livePermissionCount;
             int lateLoginCount = liveLateLoginCount;
 
@@ -128,6 +140,9 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
                 lopAmount = existingPayslip.LopDeduction;
                 totalDeduction = existingPayslip.TotalDeduction;
                 finalSalary = existingPayslip.NetPay;
+                presentDays = firstLogsByDate.Count;
+                permissionCount = existingPayslip.PermissionsUsed;
+                lateLoginCount = existingPayslip.GraceViolations;
             }
             else
             {
@@ -236,6 +251,11 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
 
                 monthlySalary = basicPay + hra + conveyance + medical + allowances + arrears;
 
+                var approvedPermissions = await _context.PermissionRequests
+                    .AsNoTracking()
+                    .Where(p => p.EmployeeId == emp.Id && p.Status == RequestStatus.Approved && p.RequestDate >= startDateUtc && p.RequestDate <= endDateUtc)
+                    .ToListAsync();
+
                 var lopResult = LeaveLopCalculator.Calculate(
                     emp.Id,
                     year,
@@ -245,7 +265,9 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
                     monthlySalary,
                     calendarEntries,
                     approvedLeaves,
-                    attendanceLogs);
+                    attendanceLogs,
+                    approvedPermissions,
+                    settings);
 
                 dailySalary = lopResult.DailySalary;
                 monthlyAllowedLeave = settings.MonthlyAllowedLeave;
@@ -257,9 +279,10 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
                 lopAmount = lopResult.TotalLOPAmount;
                 totalDeduction = Math.Round(lopAmount + esi + pf + parkingCharges + tds, 2);
                 finalSalary = Math.Max(0, monthlySalary - totalDeduction);
+                presentDays = lopResult.PresentDays;
+                permissionCount = lopResult.PermissionCount;
+                lateLoginCount = lopResult.TotalLateCount;
             }
-
-            decimal presentDays = Math.Max(0, totalWorkingDays - approvedLeaveDays - leaveLopDays);
 
             reportList.Add(new MonthlyEmployeePayrollReportDto
             {
@@ -292,12 +315,79 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
             });
         }
 
-        return reportList;
+        var queryable = reportList.AsQueryable();
+
+        if (employeeId.HasValue)
+        {
+            queryable = queryable.Where(x => x.EmployeeId == employeeId.Value);
+        }
+
+        if (departmentId.HasValue)
+        {
+            var dept = await _context.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == departmentId.Value);
+            if (dept != null)
+            {
+                queryable = queryable.Where(x => string.Equals(x.Department, dept.Name, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        if (designationId.HasValue)
+        {
+            var desig = await _context.Designations.AsNoTracking().FirstOrDefaultAsync(d => d.Id == designationId.Value);
+            if (desig != null)
+            {
+                queryable = queryable.Where(x => string.Equals(x.Designation, desig.Name, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            queryable = queryable.Where(x =>
+                x.EmployeeName.ToLower().Contains(s) ||
+                x.EmployeeCode.ToLower().Contains(s) ||
+                (x.Department != null && x.Department.ToLower().Contains(s)) ||
+                (x.Designation != null && x.Designation.ToLower().Contains(s)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(lop))
+        {
+            if (lop.Equals("hasLop", StringComparison.OrdinalIgnoreCase))
+                queryable = queryable.Where(x => x.TotalLOPDays > 0);
+            else if (lop.Equals("noLop", StringComparison.OrdinalIgnoreCase))
+                queryable = queryable.Where(x => x.TotalLOPDays == 0);
+        }
+
+        if (!string.IsNullOrWhiteSpace(salary))
+        {
+            if (salary.Equals("finalized", StringComparison.OrdinalIgnoreCase))
+                queryable = queryable.Where(x => x.PayrollStatus == "Finalized");
+            else if (salary.Equals("pending", StringComparison.OrdinalIgnoreCase))
+                queryable = queryable.Where(x => x.PayrollStatus != "Finalized");
+        }
+
+        var filteredList = queryable.ToList();
+        var totalCount = filteredList.Count;
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize <= 0 ? 25 : (pageSize > 100 ? 100 : pageSize);
+        var pagedItems = filteredList
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToList();
+
+        return new PagedResult<MonthlyEmployeePayrollReportDto>
+        {
+            Items = pagedItems,
+            TotalCount = totalCount,
+            Page = safePage,
+            PageSize = safePageSize
+        };
     }
 
     public async Task<byte[]> GenerateExcelReportAsync(int year, int month)
     {
-        var items = await GetMonthlyReportAsync(year, month);
+        var pagedResult = await GetMonthlyReportAsync(year, month, page: 1, pageSize: int.MaxValue);
+        var items = pagedResult.Items;
         string monthName = new DateTime(year, month, 1).ToString("MMMM");
 
         using var workbook = new XLWorkbook();

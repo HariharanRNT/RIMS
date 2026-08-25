@@ -1,12 +1,14 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ConfirmProvider } from './contexts/ConfirmContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { EmployeeLayout } from './components/layout/EmployeeLayout';
 
 import { LoginPage } from './pages/auth/LoginPage';
 import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 
 import { AdminDashboardPage } from './pages/admin/DashboardPage';
 import { DepartmentListPage } from './pages/admin/departments/DepartmentListPage';
@@ -19,9 +21,12 @@ import { ClientListPage } from './pages/admin/clients/ClientListPage';
 import { ProductClientMappingPage } from './pages/admin/mappings/ProductClientMappingPage';
 import { ApprovalsPage } from './pages/admin/approvals/ApprovalsPage';
 import { PayrollProcessingPage } from './pages/admin/payroll/PayrollProcessingPage';
+import { EmployeeSalaryStructurePage } from './pages/admin/payroll/EmployeeSalaryStructurePage';
 import { MonthlyEmployeePayrollReportPage } from './pages/admin/payroll/MonthlyEmployeePayrollReportPage';
 import { ReportsPage } from './pages/admin/reports/ReportsPage';
 import { MonthlyCalendarPage } from './pages/admin/attendance/MonthlyCalendarPage';
+import { AttendancePermissionsPage } from './pages/admin/attendance/AttendancePermissionsPage';
+import { AdminNotificationsPage } from './pages/admin/notifications/AdminNotificationsPage';
 
 import { EmployeeDashboardPage } from './pages/employee/DashboardPage';
 import { WorkTaskPage } from './pages/employee/WorkTaskPage';
@@ -36,10 +41,12 @@ import { TaskAllocationPage } from './pages/admin/tasks/TaskAllocationPage';
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <ConfirmProvider>
+        <BrowserRouter>
+          <Routes>
           {/* Public / Auth */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route
             path="/change-password"
             element={
@@ -61,8 +68,10 @@ export const App: React.FC = () => {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="attendance-permissions" element={<AttendancePermissionsPage />} />
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="payroll" element={<PayrollProcessingPage />} />
+            <Route path="salary-structure" element={<EmployeeSalaryStructurePage />} />
             <Route path="payroll/monthly-report" element={<MonthlyEmployeePayrollReportPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="tasks" element={<TaskAllocationPage />} />
@@ -75,6 +84,7 @@ export const App: React.FC = () => {
             <Route path="lookups" element={<LookupListPage />} />
             <Route path="settings" element={<SystemSettingsPage />} />
             <Route path="attendance-calendar" element={<MonthlyCalendarPage />} />
+            <Route path="notifications" element={<AdminNotificationsPage />} />
           </Route>
 
           {/* Employee Routes */}
@@ -100,6 +110,7 @@ export const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
+      </ConfirmProvider>
     </AuthProvider>
   );
 };

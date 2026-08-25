@@ -269,17 +269,38 @@ public class LeaveLopCalculatorTests
         // Test Case 12: Two unpermissioned late logins => Existing half-day LOP = 0.5
         int empId = 1;
         var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
         var logs = new List<AttendanceLog>
         {
-            new AttendanceLog { EmployeeId = empId, LoginTime = new DateTime(2026, 8, 3, 10, 30, 0, DateTimeKind.Utc), IsLate = true, IsPermission = false },
-            new AttendanceLog { EmployeeId = empId, LoginTime = new DateTime(2026, 8, 4, 10, 25, 0, DateTimeKind.Utc), IsLate = true, IsPermission = false }
+            new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 10, 30, 0), istZone), IsLate = true, IsPermission = false },
+            new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 4, 10, 25, 0), istZone), IsLate = true, IsPermission = false }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 40000m, calendar, new List<LeaveRequest>(), logs);
+
+        Assert.Equal(2, result.UnpermissionedLateCount);
+        Assert.Equal(0.5m, result.LateLoginLOPDays);
+        Assert.Equal(0.5m, result.TotalLOPDays);
+    }
+
+    [Fact]
+    public void TestCase15_UnusedAllowedLeaveOffsetsLateLoginLop()
+    {
+        // Test Case 15: If Allowed Leave = 1, Leaves Taken = 0, unused allowed leave absorbs Late Login LOP
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 10, 30, 0), istZone), IsLate = true, IsPermission = false },
+            new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 4, 10, 25, 0), istZone), IsLate = true, IsPermission = false }
         };
 
         var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), logs);
 
         Assert.Equal(2, result.UnpermissionedLateCount);
-        Assert.Equal(0.5m, result.LateLoginLOPDays);
-        Assert.Equal(0.5m, result.TotalLOPDays);
+        Assert.Equal(0.0m, result.LateLoginLOPDays);
+        Assert.Equal(0.0m, result.TotalLOPDays);
     }
 
     [Fact]
@@ -288,13 +309,18 @@ public class LeaveLopCalculatorTests
         // Test Case 13: Late login marked as Permission => Late login LOP removed
         int empId = 1;
         var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+        var perms = new List<PermissionRequest>
+        {
+            new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 3), Status = RequestStatus.Approved }
+        };
         var logs = new List<AttendanceLog>
         {
-            new AttendanceLog { EmployeeId = empId, LoginTime = new DateTime(2026, 8, 3, 10, 30, 0, DateTimeKind.Utc), IsLate = true, IsPermission = true }, // Permission!
-            new AttendanceLog { EmployeeId = empId, LoginTime = new DateTime(2026, 8, 4, 10, 25, 0, DateTimeKind.Utc), IsLate = true, IsPermission = false }
+            new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 10, 30, 0), istZone), IsLate = true, IsPermission = true }, // Permission!
+            new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 4, 10, 25, 0), istZone), IsLate = true, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), logs, perms);
 
         Assert.Equal(1, result.UnpermissionedLateCount);
         Assert.Equal(0.0m, result.LateLoginLOPDays);
@@ -337,5 +363,418 @@ public class LeaveLopCalculatorTests
         Assert.Equal(0m, resEmp2.ActualLeaveDays);
         Assert.Equal(0m, resEmp2.LeaveLOPDays);
         Assert.Equal(0m, resEmp2.TotalLOPAmount);
+    }
+
+    [Fact]
+    public void TestCase16_FirstHalfLeave_SecondHalfLogin2PM_NotLate_Present05_Leave05()
+    {
+        // Test Case 16: First-Half Leave + Login at 02:00 PM (14:00) => Not Late, Present = 0.5, Leave = 0.5, LOP = 0
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var leaves = new List<LeaveRequest>
+        {
+            new LeaveRequest
+            {
+                Id = 1,
+                EmployeeId = empId,
+                FromDate = new DateTime(2026, 8, 3),
+                ToDate = new DateTime(2026, 8, 3),
+                LeaveDuration = LeaveDuration.HalfDay,
+                HalfDayType = HalfDayType.FirstHalf,
+                Status = RequestStatus.Approved,
+                Reason = "Morning doctor appointment",
+                LeaveType = new LeaveType { Id = 1, Name = "Casual Leave" }
+            }
+        };
+
+        // 2:00 PM IST is 08:30 AM UTC
+        var loginUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 14, 0, 0), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog { EmployeeId = empId, LoginTime = loginUtc, IsLate = false, IsPermission = false }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, logs);
+
+        var aug3Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 3));
+
+        Assert.Equal(0.5m, result.ActualLeaveDays);
+        Assert.False(aug3Detail.IsLate);
+        Assert.Equal(0.5m, aug3Detail.PresentDaysCount);
+        Assert.Equal(0.5m, aug3Detail.LeaveDaysCount);
+        Assert.Equal("Second Half Present", aug3Detail.Status);
+        Assert.Equal(0m, result.TotalLOPDays);
+        Assert.Equal(0m, result.TotalLOPAmount);
+    }
+
+    [Fact]
+    public void TestCase17_SecondHalfLeave_FirstHalfLogin10AM_NotLate_Present05_Leave05()
+    {
+        // Test Case 17: Second-Half Leave + Login at 10:00 AM => Not Late, Present = 0.5, Leave = 0.5, LOP = 0
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var leaves = new List<LeaveRequest>
+        {
+            new LeaveRequest
+            {
+                Id = 1,
+                EmployeeId = empId,
+                FromDate = new DateTime(2026, 8, 3),
+                ToDate = new DateTime(2026, 8, 3),
+                LeaveDuration = LeaveDuration.HalfDay,
+                HalfDayType = HalfDayType.SecondHalf,
+                Status = RequestStatus.Approved,
+                Reason = "Afternoon personal work",
+                LeaveType = new LeaveType { Id = 1, Name = "Casual Leave" }
+            }
+        };
+
+        var loginUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 10, 0, 0), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog { EmployeeId = empId, LoginTime = loginUtc, IsLate = false, IsPermission = false }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, logs);
+
+        var aug3Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 3));
+
+        Assert.Equal(0.5m, result.ActualLeaveDays);
+        Assert.False(aug3Detail.IsLate);
+        Assert.Equal(0.5m, aug3Detail.PresentDaysCount);
+        Assert.Equal(0.5m, aug3Detail.LeaveDaysCount);
+        Assert.Equal("First Half Present", aug3Detail.Status);
+        Assert.Equal(0m, result.TotalLOPDays);
+    }
+
+    [Fact]
+    public void TestCase18_NoLeave_Login1130AM_TriggersHalfDayAttendance()
+    {
+        // Test Case 18: No Leave + Login at 11:30 AM (exceeds permission cutoff 11:00 AM) => HalfDay Attendance (0.5 Present, 0.5 Absent/LOP)
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+
+        var loginUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 11, 30, 0), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog { EmployeeId = empId, LoginTime = loginUtc, IsLate = false, IsPermission = false }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs);
+
+        var aug3Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 3));
+
+        Assert.True(aug3Detail.IsHalfDayAttendance);
+        Assert.Equal(0.5m, aug3Detail.PresentDaysCount);
+        Assert.Equal(0.5m, aug3Detail.LeaveDaysCount);
+        Assert.Equal("HalfDay Attendance", aug3Detail.Status);
+    }
+
+    [Fact]
+    public void TestCase19_PartialAllowedLeaveOffset_AbsorbsLateLoginLop()
+    {
+        // Test Case 19: Allowed Leave = 1.0, First-Half Leave = 0.5 => Remaining Allowed = 0.5
+        // 2 unpermissioned late logins = 0.5 Late Login LOP => Offset by 0.5 remaining allowed leave => Final LOP = 0
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var leaves = new List<LeaveRequest>
+        {
+            new LeaveRequest
+            {
+                Id = 1,
+                EmployeeId = empId,
+                FromDate = new DateTime(2026, 8, 3),
+                ToDate = new DateTime(2026, 8, 3),
+                LeaveDuration = LeaveDuration.HalfDay,
+                HalfDayType = HalfDayType.FirstHalf,
+                Status = RequestStatus.Approved,
+                Reason = "Half day leave",
+                LeaveType = new LeaveType { Id = 1, Name = "Casual Leave" }
+            }
+        };
+
+        var aug3Login = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 14, 0, 0), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+        var aug4Late = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 4, 10, 30, 0), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+        var aug5Late = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 5, 10, 30, 0), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog { EmployeeId = empId, LoginTime = aug3Login, IsLate = false, IsPermission = false },
+            new AttendanceLog { EmployeeId = empId, LoginTime = aug4Late, IsLate = true, IsPermission = false },
+            new AttendanceLog { EmployeeId = empId, LoginTime = aug5Late, IsLate = true, IsPermission = false }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, logs);
+
+        Assert.Equal(0.5m, result.ActualLeaveDays);
+        Assert.Equal(2, result.UnpermissionedLateCount);
+        Assert.Equal(0.0m, result.LateLoginLOPDays); // 0.5 Late Login LOP absorbed by 0.5 remaining allowed leave!
+        Assert.Equal(0.0m, result.TotalLOPDays);
+        Assert.Equal(0.0m, result.TotalLOPAmount);
+    }
+
+    [Fact]
+    public void Scenario1_Hariharan_EightLate_OneAttendancePermission_ZeroPermissionRequests()
+    {
+        // Scenario 1: 8 Late, 1 AttendanceLogs Permission, 0 PermissionRequests => Permission = 1, Unpermissioned = 7, Raw LOP = 1.5 Days
+        int empId = 3;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        // 8 distinct late working days: Aug 10, 11, 12, 13, 14, 17, 19, 20
+        var dates = new[] { 10, 11, 12, 13, 14, 17, 19, 20 };
+        var logs = new List<AttendanceLog>();
+        foreach (var d in dates)
+        {
+            logs.Add(new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, d, 10, 30, 0), istZone),
+                IsLate = true,
+                IsPermission = (d == 11) // Only Aug 11 has admin-marked permission
+            });
+        }
+
+        // Allowed leave = 0 (or all used up) so no offset
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+
+        Assert.Equal(8, result.TotalLateCount);
+        Assert.Equal(1, result.PermissionCount);
+        Assert.Equal(7, result.UnpermissionedLateCount);
+        Assert.Equal(1.5m, result.RawLateLoginLOPDays);
+        Assert.Equal(1.5m, result.LateLoginLOPDays);
+        Assert.Equal(1.5m, result.TotalLOPDays);
+    }
+
+    [Fact]
+    public void Scenario2_Arun_EightLate_ZeroAttendancePermission_TwoApprovedPermissionRequests()
+    {
+        // Scenario 2: 8 Late, 0 AttendanceLogs Permission, 2 Approved PermissionRequests => Permission = 2, Unpermissioned = 6
+        int empId = 11;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var dates = new[] { 10, 11, 12, 13, 14, 17, 19, 20 };
+        var logs = new List<AttendanceLog>();
+        foreach (var d in dates)
+        {
+            logs.Add(new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, d, 10, 30, 0), istZone),
+                IsLate = true,
+                IsPermission = false
+            });
+        }
+
+        // 2 approved permission requests on Aug 10 and Aug 14
+        var perms = new List<PermissionRequest>
+        {
+            new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 10), Status = RequestStatus.Approved },
+            new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 14), Status = RequestStatus.Approved }
+        };
+
+        // 1 Allowed Leave offset
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+
+        Assert.Equal(8, result.TotalLateCount);
+        Assert.Equal(2, result.PermissionCount);
+        Assert.Equal(6, result.UnpermissionedLateCount);
+        Assert.Equal(1.5m, result.RawLateLoginLOPDays);
+        Assert.Equal(1.0m, result.AllowedLeaveOffset);
+        Assert.Equal(0.5m, result.LateLoginLOPDays);
+        Assert.Equal(0.5m, result.TotalLOPDays);
+    }
+
+    [Fact]
+    public void Scenario3_SameDate_AttendanceLogPermission_And_ApprovedPermissionRequest_NoDoubleCount()
+    {
+        // Scenario 3: Same date exists in both sources => Counted as 1 permission (NOT 2)
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var dates = new[] { 10, 11, 12, 13, 14, 17, 19, 20 };
+        var logs = new List<AttendanceLog>();
+        foreach (var d in dates)
+        {
+            logs.Add(new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, d, 10, 30, 0), istZone),
+                IsLate = true,
+                IsPermission = (d == 10) // Aug 10 is marked in attendance log
+            });
+        }
+
+        // Aug 10 ALSO has an approved permission request
+        var perms = new List<PermissionRequest>
+        {
+            new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 10), Status = RequestStatus.Approved }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+
+        Assert.Equal(8, result.TotalLateCount);
+        Assert.Equal(1, result.PermissionCount); // Must be 1, NOT 2!
+        Assert.Equal(7, result.UnpermissionedLateCount);
+        Assert.Equal(1.5m, result.LateLoginLOPDays);
+    }
+
+    [Fact]
+    public void Scenario4_PermissionOnDifferentDate_DoesNotExcuseLateLogin()
+    {
+        // Scenario 4: Late on Aug 10. Permission on Aug 15 (which is non-late / weekend/holiday/absent). Aug 15 permission must NOT excuse Aug 10 late login.
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 10, 10, 30, 0), istZone),
+                IsLate = true,
+                IsPermission = false
+            }
+        };
+
+        // Permission request on Aug 15 (Saturday / no late)
+        var perms = new List<PermissionRequest>
+        {
+            new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 15), Status = RequestStatus.Approved }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+
+        Assert.Equal(1, result.TotalLateCount);
+        Assert.Equal(1, result.PermissionCount); // Aug 15 was permitted
+        Assert.Equal(1, result.UnpermissionedLateCount); // Aug 10 late remains unpermissioned!
+    }
+
+    [Fact]
+    public void Scenario5_EightLate_ZeroPermissions()
+    {
+        // Scenario 5: 8 Late, 0 Permissions => Permission = 0, Unpermissioned Late = 8, Raw LOP = 2.0 Days
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var dates = new[] { 10, 11, 12, 13, 14, 17, 19, 20 };
+        var logs = new List<AttendanceLog>();
+        foreach (var d in dates)
+        {
+            logs.Add(new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, d, 10, 30, 0), istZone),
+                IsLate = true,
+                IsPermission = false
+            });
+        }
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+
+        Assert.Equal(8, result.TotalLateCount);
+        Assert.Equal(0, result.PermissionCount);
+        Assert.Equal(8, result.UnpermissionedLateCount);
+        Assert.Equal(2.0m, result.RawLateLoginLOPDays);
+        Assert.Equal(2.0m, result.LateLoginLOPDays);
+    }
+
+    [Fact]
+    public void Test_Arun_Login1111AM_IsHalfDayAttendance_Present05_Leave05()
+    {
+        // Arun login at 11:11 AM without approved permission -> HalfDay Attendance (0.5 Present, 0.5 Leave)
+        int empId = 11;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 21, 11, 11, 0), istZone),
+                IsLate = true,
+                IsPermission = false
+            }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+
+        var aug21Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 21));
+
+        Assert.Equal("HalfDay Attendance", aug21Detail.Status);
+        Assert.True(aug21Detail.IsHalfDayAttendance);
+        Assert.Equal(0.5m, aug21Detail.PresentDaysCount);
+        Assert.Equal(0.5m, aug21Detail.LeaveDaysCount);
+        Assert.Equal(0.5m, result.ActualLeaveDays);
+    }
+
+    [Fact]
+    public void Test_Login1100AM_IsNormalLate_Present10_Leave00()
+    {
+        // Login exactly at 11:00 AM -> Late within permission window (1.0 Present, 0 Leave)
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 21, 11, 0, 0), istZone),
+                IsLate = true,
+                IsPermission = false
+            }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+
+        var aug21Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 21));
+
+        Assert.Equal("Late", aug21Detail.Status);
+        Assert.False(aug21Detail.IsHalfDayAttendance);
+        Assert.Equal(1.0m, aug21Detail.PresentDaysCount);
+        Assert.Equal(0.0m, aug21Detail.LeaveDaysCount);
+        Assert.Equal(0.0m, result.ActualLeaveDays);
+    }
+
+    [Fact]
+    public void Test_LoginAfter11AM_WithApprovedPermission_IsCoveredByPermission_Present10_Leave00()
+    {
+        // Login at 11:15 AM WITH approved permission request -> Permission (1.0 Present, 0 Leave)
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 21, 11, 15, 0), istZone),
+                IsLate = true,
+                IsPermission = true
+            }
+        };
+
+        var perms = new List<PermissionRequest>
+        {
+            new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 21), Status = RequestStatus.Approved }
+        };
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+
+        var aug21Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 21));
+
+        Assert.Equal("Permission", aug21Detail.Status);
+        Assert.False(aug21Detail.IsHalfDayAttendance);
+        Assert.Equal(1.0m, aug21Detail.PresentDaysCount);
+        Assert.Equal(0.0m, aug21Detail.LeaveDaysCount);
+        Assert.Equal(0.0m, result.ActualLeaveDays);
     }
 }

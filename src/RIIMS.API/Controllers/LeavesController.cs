@@ -31,6 +31,11 @@ public class LeavesController : ControllerBase
     [HttpGet("my-requests/{employeeId}")]
     public async Task<IActionResult> GetMyRequests(int employeeId)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetEmployeeLeavesAsync(employeeId);
         return Ok(ApiResponse<List<LeaveRequestDto>>.SuccessResponse(result));
     }

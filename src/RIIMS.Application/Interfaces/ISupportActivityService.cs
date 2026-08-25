@@ -10,4 +10,5 @@ public interface ISupportActivityService
     Task<DemoFollowUpDto> CompleteDemoAsync(int employeeId, CompleteDemoRequest request);
     Task<List<DemoFollowUpDto>> GetMyPendingDemoFollowUpsAsync(int employeeId);
     Task CompleteDemoFollowUpAsync(int followUpId, int employeeId);
+    Task CompleteAllDemoFollowUpsAsync(int employeeId);
 }

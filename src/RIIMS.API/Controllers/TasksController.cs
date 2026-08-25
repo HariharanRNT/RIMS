@@ -41,40 +41,45 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost("{id}/start-assigned")]
-    public async Task<IActionResult> StartAssigned(int id)
+    public async Task<IActionResult> StartAssigned(int id, [FromBody] StartAssignedTaskRequest? request = null)
     {
         var employeeId = GetEmployeeId();
-        var result = await _service.StartAssignedTaskAsync(id, employeeId);
+        var result = await _service.StartAssignedTaskAsync(id, employeeId, request);
         return Ok(ApiResponse<TaskDto>.SuccessResponse(result, "Assigned task started."));
     }
 
     [HttpPost("{id}/hold")]
-    public async Task<IActionResult> Hold(int id)
+    public async Task<IActionResult> Hold(int id, [FromBody] TaskActionRequest? request = null)
     {
         var employeeId = GetEmployeeId();
-        await _service.HoldTaskAsync(id, employeeId);
+        await _service.HoldTaskAsync(id, employeeId, request);
         return Ok(ApiResponse.SuccessResponse("Task put on hold."));
     }
 
     [HttpPost("{id}/resume")]
-    public async Task<IActionResult> Resume(int id)
+    public async Task<IActionResult> Resume(int id, [FromBody] TaskActionRequest? request = null)
     {
         var employeeId = GetEmployeeId();
-        await _service.ResumeTaskAsync(id, employeeId);
+        await _service.ResumeTaskAsync(id, employeeId, request);
         return Ok(ApiResponse.SuccessResponse("Task resumed."));
     }
 
     [HttpPost("{id}/complete")]
-    public async Task<IActionResult> Complete(int id)
+    public async Task<IActionResult> Complete(int id, [FromBody] TaskActionRequest? request = null)
     {
         var employeeId = GetEmployeeId();
-        await _service.CompleteTaskAsync(id, employeeId);
+        await _service.CompleteTaskAsync(id, employeeId, request);
         return Ok(ApiResponse.SuccessResponse("Task completed."));
     }
 
     [HttpGet("active/{employeeId}")]
     public async Task<IActionResult> GetActive(int employeeId)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetActiveTaskAsync(employeeId);
         return Ok(ApiResponse<ActiveTaskDto?>.SuccessResponse(result));
     }
@@ -82,6 +87,11 @@ public class TasksController : ControllerBase
     [HttpGet("history/{employeeId}")]
     public async Task<IActionResult> GetHistory(int employeeId, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetTaskHistoryAsync(employeeId, from, to);
         return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
     }
@@ -89,6 +99,11 @@ public class TasksController : ControllerBase
     [HttpGet("assigned/{employeeId}")]
     public async Task<IActionResult> GetAssignedTasks(int employeeId)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetAssignedTasksForEmployeeAsync(employeeId);
         return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
     }
@@ -102,11 +117,11 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("team-tasks")]
-    public async Task<IActionResult> GetMyTeamTasks()
+    public async Task<IActionResult> GetMyTeamTasks([FromQuery] TeamTaskQueryDto query)
     {
         var currentUserId = GetEmployeeId();
-        var result = await _service.GetMyTeamTasksAsync(currentUserId);
-        return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
+        var result = await _service.GetMyTeamTasksAsync(currentUserId, query);
+        return Ok(ApiResponse<PagedResult<TaskDto>>.SuccessResponse(result));
     }
 
     [HttpGet("admin-all")]

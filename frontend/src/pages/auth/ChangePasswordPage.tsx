@@ -60,28 +60,27 @@ export const ChangePasswordPage: React.FC = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: '#f5f7fa',
+      padding: '1.5rem',
     }}>
-      <div className="glass-card" style={{
+      <div className="ui-card" style={{
         width: '100%',
         maxWidth: '450px',
         padding: '2.5rem',
-        background: 'rgba(255,255,255,0.08)',
-        backdropFilter: 'blur(24px) saturate(150%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(150%)',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{
             display: 'inline-flex',
             padding: '1rem',
             borderRadius: '50%',
-            background: 'rgba(232, 135, 60, 0.15)',
+            background: '#fff4e6',
             color: '#E8873C',
             marginBottom: '1rem'
           }}>
             <KeyRound size={32} />
           </div>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: '#F5F5F5' }}>Change Password</h2>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: '#111827', fontWeight: 800 }}>Change Password</h2>
+          <p style={{ color: '#6b7280', fontSize: '0.85rem' }}>
             {user?.mustChangePassword
               ? 'You must change your temporary password before continuing.'
               : 'Update your account password below.'}
@@ -90,9 +89,9 @@ export const ChangePasswordPage: React.FC = () => {
 
         {error && (
           <div style={{
-            background: 'rgba(240, 96, 96, 0.12)',
-            border: '1px solid rgba(240, 96, 96, 0.30)',
-            color: '#FF7B7B',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#dc2626',
             padding: '0.75rem 1rem',
             borderRadius: 'var(--radius-sm)',
             marginBottom: '1.5rem',
@@ -108,9 +107,9 @@ export const ChangePasswordPage: React.FC = () => {
 
         {success && (
           <div style={{
-            background: 'rgba(61, 214, 140, 0.12)',
-            border: '1px solid rgba(61, 214, 140, 0.30)',
-            color: '#5EE0A0',
+            background: '#ecfdf5',
+            border: '1px solid #a7f3d0',
+            color: '#059669',
             padding: '0.75rem 1rem',
             borderRadius: 'var(--radius-sm)',
             marginBottom: '1.5rem',

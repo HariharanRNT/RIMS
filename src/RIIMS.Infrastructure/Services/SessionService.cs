@@ -181,16 +181,20 @@ public class SessionService : ISessionService
         foreach (var session in activeSessions)
         {
             // Determine exact AllowedEndTime for session
+            var officeEndTs = settings.OfficeEndTime;
+            var workDateTimeIst = session.WorkDate.ToDateTime(TimeOnly.FromTimeSpan(officeEndTs));
+            var currentConfiguredCutoffUtc = TimeZoneInfo.ConvertTimeToUtc(workDateTimeIst, IstTimeZone);
+
             DateTime workdayCutoffUtc;
             if (session.AllowedEndTime.HasValue)
             {
-                workdayCutoffUtc = session.AllowedEndTime.Value;
+                workdayCutoffUtc = currentConfiguredCutoffUtc > session.AllowedEndTime.Value
+                    ? currentConfiguredCutoffUtc
+                    : session.AllowedEndTime.Value;
             }
             else
             {
-                var officeEndTs = settings.OfficeEndTime;
-                var workDateTimeIst = session.WorkDate.ToDateTime(TimeOnly.FromTimeSpan(officeEndTs));
-                workdayCutoffUtc = TimeZoneInfo.ConvertTimeToUtc(workDateTimeIst, IstTimeZone);
+                workdayCutoffUtc = currentConfiguredCutoffUtc;
             }
 
             // Perform cutoff only if current time has reached AllowedEndTime OR session is from a past WorkDate
@@ -280,6 +284,18 @@ public class SessionService : ISessionService
             if (openAttendance != null)
             {
                 openAttendance.LogoutTime = workdayCutoffUtc > openAttendance.LoginTime ? workdayCutoffUtc : openAttendance.LoginTime;
+            }
+
+            // 5. Cap open IdleTimeLogs EXACTLY at AllowedEndTime (workdayCutoffUtc)
+            var openIdleLogs = await _context.IdleTimeLogs
+                .Where(i => i.EmployeeId == empId && i.EndTime == null)
+                .ToListAsync();
+
+            foreach (var idle in openIdleLogs)
+            {
+                idle.EndTime = workdayCutoffUtc > idle.StartTime ? workdayCutoffUtc : idle.StartTime;
+                idle.DurationSeconds = (long)Math.Max(0, (idle.EndTime.Value - idle.StartTime).TotalSeconds);
+                idle.DurationMinutes = (int)Math.Max(0, Math.Round(idle.DurationSeconds / 60.0));
             }
 
             // Deactivate session

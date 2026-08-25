@@ -7,9 +7,12 @@ public class IdleTimeLog : BaseEntity
     public int EmployeeId { get; set; }
     public DateOnly WorkDate { get; set; }
     public DateTime StartTime { get; set; }
-    public DateTime EndTime { get; set; }
+    public DateTime? EndTime { get; set; }
     public int DurationMinutes { get; set; }
-    public string Type { get; set; } = "LogoutLoginGap";
+    public long DurationSeconds { get; set; }
+    public string Type { get; set; } = "NoActivity";
+    public string? Source { get; set; }
+    public string? Remarks { get; set; }
 
     // Navigation
     public Employee Employee { get; set; } = null!;

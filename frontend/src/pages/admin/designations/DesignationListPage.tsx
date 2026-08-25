@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
+import { useConfirm } from '../../../contexts/ConfirmContext';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 interface Designation {
@@ -64,13 +65,29 @@ export const DesignationListPage: React.FC = () => {
     }
   };
 
+  const { confirm, showAlert } = useConfirm();
+
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to deactivate this designation?')) {
+    const isConfirmed = await confirm({
+      title: 'Deactivate Designation',
+      message: 'Are you sure you want to deactivate this designation? If any employees are assigned to it, deletion will be blocked.',
+      confirmText: 'Deactivate',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
       try {
         await apiClient.delete(`/designations/${id}`);
         fetchDesignations();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Failed to delete designation');
+        const errorMsg = err.response?.data?.message || 'Failed to delete designation';
+        await showAlert({
+          title: 'Cannot Delete Designation',
+          message: errorMsg,
+          type: 'danger',
+          confirmText: 'Understood'
+        });
       }
     }
   };

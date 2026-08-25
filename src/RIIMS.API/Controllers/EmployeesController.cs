@@ -48,6 +48,11 @@ public class EmployeesController : ControllerBase
     [Authorize(Roles = "Admin,Employee")]
     public async Task<IActionResult> GetById(int id)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != id)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetByIdAsync(id);
         if (result == null) return NotFound(ApiResponse.FailResponse("Employee not found."));
         return Ok(ApiResponse<EmployeeDto>.SuccessResponse(result));
@@ -101,6 +106,11 @@ public class EmployeesController : ControllerBase
     [Authorize(Roles = "Admin,Employee")]
     public async Task<IActionResult> GetWorkDetails(int id)
     {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != id)
+        {
+            return Forbid();
+        }
+
         var result = await _service.GetWorkDetailAsync(id);
         if (result == null) return NotFound(ApiResponse.FailResponse("Work details not found."));
         return Ok(ApiResponse<EmployeeWorkDetailDto>.SuccessResponse(result));

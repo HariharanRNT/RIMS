@@ -20,13 +20,16 @@ import {
   FileSpreadsheet,
   ChevronLeft,
   ChevronRight,
-  User
+  ShieldCheck,
+  Calculator
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
   const { role, user, logout } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
+
+  const profilePath = role === 'Admin' ? '/admin/profile' : '/profile';
 
   const handleLogout = async () => {
     await logout();
@@ -38,7 +41,7 @@ export const Sidebar: React.FC = () => {
       title: 'OVERVIEW',
       items: [
         { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/admin/profile', label: 'My Profile', icon: User },
+        { to: '/admin/attendance-permissions', label: 'Attendance & Permissions', icon: ShieldCheck },
         { to: '/admin/approvals', label: 'Approval Queue', icon: CheckCircle },
       ]
     },
@@ -56,6 +59,7 @@ export const Sidebar: React.FC = () => {
       title: 'FINANCE & REPORTS',
       items: [
         { to: '/admin/payroll', label: 'Payroll & LOP', icon: CreditCard },
+        { to: '/admin/salary-structure', label: 'Salary Structure', icon: Calculator },
         { to: '/admin/payroll/monthly-report', label: 'Monthly Employee Report', icon: FileSpreadsheet },
         { to: '/admin/reports', label: 'Production Reports', icon: FileText },
       ]
@@ -77,7 +81,6 @@ export const Sidebar: React.FC = () => {
       title: 'MY WORKSPACE',
       items: [
         { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/profile', label: 'My Profile', icon: User },
         { to: '/calendar', label: 'Attendance Calendar', icon: CalendarDays },
         { to: '/work-task', label: 'Work Task Engine', icon: Briefcase },
       ]
@@ -114,16 +117,13 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside style={{
-      width: collapsed ? '72px' : '256px',
-      transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-      background: 'rgba(255,255,255,0.05)',
-      backdropFilter: 'blur(20px) saturate(140%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(140%)',
-      borderRight: '1px solid rgba(255,255,255,0.12)',
+      width: collapsed ? '72px' : '248px',
+      minWidth: collapsed ? '72px' : '248px',
+      transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
+      background: 'var(--bg-alt)',
+      borderRight: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
-      padding: collapsed ? '1rem 0.5rem' : '1rem 0.75rem',
-      flexShrink: 0,
       height: '100vh',
       position: 'sticky',
       top: 0,
@@ -131,64 +131,59 @@ export const Sidebar: React.FC = () => {
     }}>
       {/* Brand Header */}
       <div style={{
-        padding: collapsed ? '0.5rem 0 1rem' : '0.5rem 0.5rem 1rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: collapsed ? 'center' : 'space-between',
-        borderBottom: '1px solid rgba(255,255,255,0.10)',
-        marginBottom: '1rem'
+        padding: collapsed ? '18px 10px' : '20px 18px 16px 18px',
+        borderBottom: '1px solid var(--border-soft)',
+        gap: '10px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
-            width: '36px',
-            height: '36px',
+            width: '34px',
+            height: '34px',
             borderRadius: '8px',
-            background: 'rgba(255,255,255,0.10)',
+            background: 'var(--panel)',
+            border: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
             padding: '2px',
-            border: '1px solid rgba(255,255,255,0.12)',
             flexShrink: 0
           }}>
             <img src={rntLogo} alt="RNT Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
 
           {!collapsed && (
-            <div>
-              <h2 style={{
-                fontSize: '1rem',
-                fontWeight: 700,
-                color: '#F5F5F5',
-                letterSpacing: '-0.01em',
-                lineHeight: 1.15
-              }}>
-                RIMS V2
-              </h2>
-              <span style={{
-                fontSize: '0.625rem',
-                color: '#E8873C',
+            <div style={{ lineHeight: 1.15 }}>
+              <div style={{ fontWeight: 700, fontSize: '14.5px', letterSpacing: '-0.01em', color: 'var(--text)' }}>
+                RIMS
+              </div>
+              <div style={{
+                fontSize: '10px',
                 fontWeight: 600,
                 letterSpacing: '0.04em',
-                textTransform: 'uppercase'
+                color: 'var(--text-faint)',
+                textTransform: 'uppercase',
+                marginTop: '3px'
               }}>
-                {role ? `${role.charAt(0).toUpperCase()}${role.slice(1).toLowerCase()} portal` : 'Portal'}
-              </span>
+                {role ? `${role.toUpperCase()} PORTAL` : 'PORTAL'}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Collapse Toggle — glass circle */}
+        {/* Collapse Toggle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
           style={{
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: '50%',
-            color: 'rgba(255,255,255,0.5)',
-            width: '26px',
-            height: '26px',
+            background: 'var(--panel)',
+            border: '1px solid var(--border)',
+            borderRadius: '6px',
+            color: 'var(--text-dim)',
+            width: '24px',
+            height: '24px',
             padding: 0,
             cursor: 'pointer',
             display: 'flex',
@@ -196,23 +191,24 @@ export const Sidebar: React.FC = () => {
             justifyContent: 'center',
             transition: 'all 0.15s ease'
           }}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
         </button>
       </div>
 
       {/* Grouped Navigation */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1, overflowY: 'auto', paddingBottom: '0.5rem' }}>
+      <nav style={{ padding: collapsed ? '14px 8px' : '16px 12px', flex: 1, overflowY: 'auto' }}>
         {groups.map((group, groupIdx) => (
-          <div key={groupIdx}>
+          <div key={groupIdx} style={{ marginBottom: '18px' }}>
             {!collapsed && (
               <div style={{
-                fontSize: '0.625rem',
+                fontSize: '11px',
                 fontWeight: 600,
-                color: 'rgba(255,255,255,0.35)',
-                letterSpacing: '0.06em',
-                padding: '0 0.5rem 0.35rem',
-                textTransform: 'uppercase'
+                letterSpacing: '0.04em',
+                color: 'var(--text-faint)',
+                textTransform: 'uppercase',
+                padding: '0 10px 8px 10px'
               }}>
                 {group.title}
               </div>
@@ -229,23 +225,33 @@ export const Sidebar: React.FC = () => {
                       position: 'relative',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.7rem',
-                      padding: collapsed ? '0.6rem 0' : '0.55rem 0.75rem',
+                      gap: '10px',
+                      padding: collapsed ? '8px 0' : '8px 10px',
                       justifyContent: collapsed ? 'center' : 'flex-start',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: '0.8125rem',
+                      borderRadius: '7px',
+                      fontSize: '13.5px',
                       fontWeight: isActive ? 600 : 500,
-                      color: isActive ? '#E8873C' : 'rgba(255,255,255,0.6)',
-                      background: isActive ? 'rgba(232,135,60,0.12)' : 'transparent',
-                      borderLeft: isActive && !collapsed ? '3px solid #E8873C' : '3px solid transparent',
-                      boxShadow: isActive ? '0 0 12px rgba(232,135,60,0.15)' : 'none',
-                      transition: 'all 0.12s ease',
+                      color: isActive ? 'var(--green)' : 'var(--text-dim)',
+                      background: isActive ? 'var(--green-dim)' : 'transparent',
                       textDecoration: 'none',
+                      transition: 'all 0.12s ease',
                     })}
                   >
                     {({ isActive }) => (
                       <>
-                        <Icon size={17} style={{ color: isActive ? '#E8873C' : 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
+                        {isActive && !collapsed && (
+                          <span style={{
+                            position: 'absolute',
+                            left: '-12px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: '3px',
+                            height: '16px',
+                            borderRadius: '2px',
+                            background: 'var(--green)'
+                          }} />
+                        )}
+                        <Icon size={15} style={{ color: isActive ? 'var(--green)' : 'var(--text-faint)', flexShrink: 0 }} />
                         {!collapsed && <span>{link.label}</span>}
                       </>
                     )}
@@ -259,83 +265,112 @@ export const Sidebar: React.FC = () => {
 
       {/* User Profile & Logout */}
       <div style={{
-        marginTop: 'auto',
-        paddingTop: '0.75rem',
-        borderTop: '1px solid rgba(255,255,255,0.10)'
+        borderTop: '1px solid var(--border-soft)',
+        padding: collapsed ? '12px 8px' : '14px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
       }}>
         {!collapsed ? (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '0.55rem 0.7rem'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', overflow: 'hidden' }}>
+          <div
+            onClick={() => navigate(profilePath)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              cursor: 'pointer'
+            }}
+            title="Click to view My Profile"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
               <div style={{
-                width: '30px',
-                height: '30px',
-                borderRadius: '6px',
-                background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
-                color: '#FFFFFF',
-                fontWeight: 600,
-                fontSize: '0.7rem',
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--amber)',
                 flexShrink: 0
               }}>
                 {getInitials(user?.employeeName)}
               </div>
-              <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: '#F5F5F5', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+              <div style={{ lineHeight: 1.2, overflow: 'hidden' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                   {formatDisplayName(user?.employeeName, user?.role)}
                 </div>
-                <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)' }}>
-                  EMP #{user?.employeeId || '001'}
+                <div style={{ fontSize: '11px', color: 'var(--text-faint)', fontWeight: 500, marginTop: '2px' }}>
+                  EMP #{user?.employeeId || '1'}
                 </div>
               </div>
             </div>
 
             <button
-              onClick={handleLogout}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLogout();
+              }}
               style={{
+                marginLeft: 'auto',
                 background: 'transparent',
                 border: 'none',
-                color: '#FF7B7B',
+                color: 'var(--text-faint)',
+                fontSize: '14px',
                 cursor: 'pointer',
-                padding: '0.25rem',
-                borderRadius: 'var(--radius-xs)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '4px'
+              }}
+              title="Logout"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', width: '100%' }}>
+            <button
+              onClick={() => navigate(profilePath)}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--border)',
+                color: 'var(--amber)',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
+              title="View My Profile"
+            >
+              {getInitials(user?.employeeName)}
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-faint)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '4px'
+              }}
               title="Logout"
             >
-              <LogOut size={15} />
+              <LogOut size={14} />
             </button>
           </div>
-        ) : (
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%',
-              background: 'rgba(240, 96, 96, 0.10)',
-              border: '1px solid rgba(240, 96, 96, 0.20)',
-              color: '#FF7B7B',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.55rem 0',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Logout"
-          >
-            <LogOut size={17} />
-          </button>
         )}
       </div>
     </aside>

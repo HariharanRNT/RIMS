@@ -1,16 +1,21 @@
+using Microsoft.EntityFrameworkCore;
 using RIIMS.Application.DTOs.Product;
+using RIIMS.Application.Exceptions;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
+using RIIMS.Infrastructure.Data;
 
 namespace RIIMS.Infrastructure.Services;
 
 public class ProductService : IProductService
 {
     private readonly IRepository<Product> _repository;
+    private readonly RiimsDbContext _context;
 
-    public ProductService(IRepository<Product> repository)
+    public ProductService(IRepository<Product> repository, RiimsDbContext context)
     {
         _repository = repository;
+        _context = context;
     }
 
     public async Task<List<ProductDto>> GetAllAsync()
@@ -92,6 +97,19 @@ public class ProductService : IProductService
 
     public async Task DeleteAsync(int id)
     {
+        var product = await _repository.GetByIdAsync(id);
+        if (product == null)
+            throw new KeyNotFoundException($"Product with ID {id} not found.");
+
+        var mappingCount = await _context.ProductClientMappings.CountAsync(m => m.ProductId == id);
+        var taskCount = await _context.WorkTasks.CountAsync(t => t.ProductId == id);
+        var logCount = await _context.SupportActivityLogs.CountAsync(s => s.ProductId == id);
+
+        if (mappingCount > 0 || taskCount > 0 || logCount > 0)
+        {
+            throw new ConflictException("Cannot delete this product — it is currently referenced by client mappings, tasks, or activity logs. Please remove those associations first.");
+        }
+
         await _repository.SoftDeleteAsync(id);
     }
 }

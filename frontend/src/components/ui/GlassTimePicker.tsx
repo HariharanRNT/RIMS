@@ -153,23 +153,21 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
           padding: '0.55rem 0.85rem',
           fontSize: '0.8125rem',
           fontFamily: 'inherit',
-          background: 'rgba(255, 255, 255, 0.08)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
+          background: '#ffffff',
           border: error
             ? '1px solid var(--danger)'
             : isOpen
             ? '1px solid #E8873C'
-            : '1px solid rgba(255, 255, 255, 0.16)',
+            : '1px solid #e5e7eb',
           borderRadius: 'var(--radius-sm)',
-          color: value ? '#F5F5F5' : 'rgba(255, 255, 255, 0.4)',
+          color: value ? '#111827' : '#9ca3af',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.55 : 1,
           outline: 'none',
-          boxShadow: isOpen ? '0 0 12px rgba(232, 135, 60, 0.3)' : 'none',
+          boxShadow: isOpen ? '0 0 0 3px rgba(232, 135, 60, 0.15)' : '0 1px 2px rgba(0, 0, 0, 0.04)',
           transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
         }}
       >
@@ -177,13 +175,13 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
         <Clock
           size={16}
           style={{
-            color: isOpen ? '#E8873C' : 'rgba(255, 255, 255, 0.6)',
+            color: isOpen ? '#E8873C' : '#6b7280',
             transition: 'color 0.15s ease',
           }}
         />
       </button>
 
-      {/* Custom Portal Glass Time Picker Overlay */}
+      {/* Custom Portal Time Picker Overlay */}
       {isOpen && !disabled &&
         createPortal(
           <div
@@ -194,28 +192,26 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
               left: `${coords.left}px`,
               zIndex: 99999,
               width: '260px',
-              background: 'rgba(20, 30, 28, 0.95)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
               borderRadius: '16px',
-              boxShadow: '0 12px 36px rgba(0, 0, 0, 0.5)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
               padding: '0.85rem',
               userSelect: 'none',
               animation: 'fadeIn 0.15s ease-out',
             }}
           >
             {/* Header label */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.4rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Select Time
               </span>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
                 style={{
-                  background: 'rgba(232, 135, 60, 0.15)',
-                  border: '1px solid rgba(232, 135, 60, 0.3)',
+                  background: '#fff4e6',
+                  border: '1px solid #fed7aa',
                   color: '#E8873C',
                   fontSize: '0.725rem',
                   fontWeight: 600,
@@ -232,7 +228,7 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', height: '180px' }}>
               {/* Column 1: Hours */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', overflowY: 'auto', paddingRight: '2px' }}>
-                <span style={{ fontSize: '0.675rem', color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: '0.2rem' }}>
+                <span style={{ fontSize: '0.675rem', color: '#9ca3af', textAlign: 'center', marginBottom: '0.2rem' }}>
                   HOUR
                 </span>
                 {hoursList.map((h) => {
@@ -247,18 +243,24 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
                         fontSize: '0.8rem',
                         fontWeight: isSelected ? 600 : 400,
                         borderRadius: '6px',
-                        border: isSelected ? '1px solid rgba(232, 135, 60, 0.6)' : '1px solid transparent',
-                        backgroundColor: isSelected ? 'rgba(232, 135, 60, 0.20)' : 'transparent',
-                        color: isSelected ? '#E8873C' : 'rgba(255, 255, 255, 0.75)',
+                        border: isSelected ? '1px solid #E8873C' : '1px solid transparent',
+                        backgroundColor: isSelected ? '#fff4e6' : 'transparent',
+                        color: isSelected ? '#E8873C' : '#374151',
                         cursor: 'pointer',
                         textAlign: 'center',
                         transition: 'all 0.12s ease',
                       }}
                       onMouseEnter={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.10)';
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor = '#f3f4f6';
+                          e.currentTarget.style.color = '#111827';
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.color = '#374151';
+                        }
                       }}
                     >
                       {h}
@@ -268,8 +270,8 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
               </div>
 
               {/* Column 2: Minutes */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', overflowY: 'auto', paddingRight: '2px', borderLeft: '1px solid rgba(255, 255, 255, 0.08)', paddingLeft: '0.3rem' }}>
-                <span style={{ fontSize: '0.675rem', color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: '0.2rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', overflowY: 'auto', paddingRight: '2px', borderLeft: '1px solid #f0f0f0', paddingLeft: '0.3rem' }}>
+                <span style={{ fontSize: '0.675rem', color: '#9ca3af', textAlign: 'center', marginBottom: '0.2rem' }}>
                   MIN
                 </span>
                 {minutesList.map((m) => {
@@ -284,18 +286,24 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
                         fontSize: '0.8rem',
                         fontWeight: isSelected ? 600 : 400,
                         borderRadius: '6px',
-                        border: isSelected ? '1px solid rgba(232, 135, 60, 0.6)' : '1px solid transparent',
-                        backgroundColor: isSelected ? 'rgba(232, 135, 60, 0.20)' : 'transparent',
-                        color: isSelected ? '#E8873C' : 'rgba(255, 255, 255, 0.75)',
+                        border: isSelected ? '1px solid #E8873C' : '1px solid transparent',
+                        backgroundColor: isSelected ? '#fff4e6' : 'transparent',
+                        color: isSelected ? '#E8873C' : '#374151',
                         cursor: 'pointer',
                         textAlign: 'center',
                         transition: 'all 0.12s ease',
                       }}
                       onMouseEnter={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.10)';
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor = '#f3f4f6';
+                          e.currentTarget.style.color = '#111827';
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.color = '#374151';
+                        }
                       }}
                     >
                       {m}
@@ -305,8 +313,8 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
               </div>
 
               {/* Column 3: AM / PM */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', borderLeft: '1px solid rgba(255, 255, 255, 0.08)', paddingLeft: '0.3rem' }}>
-                <span style={{ fontSize: '0.675rem', color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: '0.2rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', borderLeft: '1px solid #f0f0f0', paddingLeft: '0.3rem' }}>
+                <span style={{ fontSize: '0.675rem', color: '#9ca3af', textAlign: 'center', marginBottom: '0.2rem' }}>
                   PERIOD
                 </span>
                 {['AM', 'PM'].map((p) => {
@@ -321,18 +329,24 @@ export const GlassTimePicker: React.FC<GlassTimePickerProps> = ({
                         fontSize: '0.8rem',
                         fontWeight: isSelected ? 600 : 500,
                         borderRadius: '6px',
-                        border: isSelected ? '1px solid rgba(232, 135, 60, 0.6)' : '1px solid transparent',
-                        backgroundColor: isSelected ? 'rgba(232, 135, 60, 0.20)' : 'rgba(255, 255, 255, 0.04)',
-                        color: isSelected ? '#E8873C' : 'rgba(255, 255, 255, 0.75)',
+                        border: isSelected ? '1px solid #E8873C' : '1px solid transparent',
+                        backgroundColor: isSelected ? '#fff4e6' : '#f9fafb',
+                        color: isSelected ? '#E8873C' : '#374151',
                         cursor: 'pointer',
                         textAlign: 'center',
                         transition: 'all 0.12s ease',
                       }}
                       onMouseEnter={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.10)';
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor = '#f3f4f6';
+                          e.currentTarget.style.color = '#111827';
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor = '#f9fafb';
+                          e.currentTarget.style.color = '#374151';
+                        }
                       }}
                     >
                       {p}

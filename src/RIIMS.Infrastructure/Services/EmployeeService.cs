@@ -33,6 +33,8 @@ public class EmployeeService : IEmployeeService
     public async Task<PagedResult<EmployeeListDto>> GetAllAsync(int page, int pageSize, int? departmentId = null, string? search = null)
     {
         var query = _context.Employees
+            .IgnoreQueryFilters()
+            .Where(e => e.IsActive)
             .Include(e => e.Department)
             .Include(e => e.Designation)
             .AsQueryable();
@@ -54,8 +56,8 @@ public class EmployeeService : IEmployeeService
                 EmployeeCode = e.EmployeeCode,
                 Name = e.Name,
                 Email = e.Email,
-                DepartmentName = e.Department.Name,
-                DesignationName = e.Designation.Name,
+                DepartmentName = e.Department != null ? e.Department.Name : "Unassigned",
+                DesignationName = e.Designation != null ? e.Designation.Name : "Unassigned",
                 IsActive = e.IsActive
             })
             .ToListAsync();
@@ -72,6 +74,8 @@ public class EmployeeService : IEmployeeService
     public async Task<EmployeeDto?> GetByIdAsync(int id)
     {
         var e = await _context.Employees
+            .IgnoreQueryFilters()
+            .Where(emp => emp.IsActive)
             .Include(emp => emp.Department)
             .Include(emp => emp.Designation)
             .Include(emp => emp.ReportingPerson)
@@ -101,6 +105,11 @@ public class EmployeeService : IEmployeeService
             ReportingPersonName = e.ReportingPerson?.Name,
             DateOfJoining = e.DateOfJoining,
             CompanyName = e.CompanyName,
+            Gender = e.Gender,
+            DateOfBirth = e.DateOfBirth,
+            CompanyAnniversaryDate = e.CompanyAnniversaryDate,
+            MaritalStatus = e.MaritalStatus,
+            MarriageDate = e.MarriageDate,
             PfNumber = e.PfNumber,
             PanNumber = e.PanNumber,
             EsiNumber = e.EsiNumber,
@@ -174,6 +183,11 @@ public class EmployeeService : IEmployeeService
             ReportingPersonId = request.ReportingPersonId,
             DateOfJoining = request.DateOfJoining.Date,
             CompanyName = !string.IsNullOrWhiteSpace(request.CompanyName) ? request.CompanyName.Trim() : null,
+            Gender = !string.IsNullOrWhiteSpace(request.Gender) ? request.Gender.Trim() : null,
+            DateOfBirth = request.DateOfBirth?.Date,
+            CompanyAnniversaryDate = request.CompanyAnniversaryDate?.Date,
+            MaritalStatus = !string.IsNullOrWhiteSpace(request.MaritalStatus) ? request.MaritalStatus.Trim() : null,
+            MarriageDate = request.MarriageDate?.Date,
             PfNumber = !string.IsNullOrWhiteSpace(request.PfNumber) ? request.PfNumber.Trim() : null,
             PanNumber = !string.IsNullOrWhiteSpace(request.PanNumber) ? request.PanNumber.Trim() : null,
             EsiNumber = !string.IsNullOrWhiteSpace(request.EsiNumber) ? request.EsiNumber.Trim() : null,
@@ -297,6 +311,11 @@ public class EmployeeService : IEmployeeService
         employee.ReportingPersonId = request.ReportingPersonId;
         employee.DateOfJoining = request.DateOfJoining.Date;
         employee.CompanyName = !string.IsNullOrWhiteSpace(request.CompanyName) ? request.CompanyName.Trim() : null;
+        employee.Gender = !string.IsNullOrWhiteSpace(request.Gender) ? request.Gender.Trim() : null;
+        employee.DateOfBirth = request.DateOfBirth?.Date;
+        employee.CompanyAnniversaryDate = request.CompanyAnniversaryDate?.Date;
+        employee.MaritalStatus = !string.IsNullOrWhiteSpace(request.MaritalStatus) ? request.MaritalStatus.Trim() : null;
+        employee.MarriageDate = string.Equals(request.MaritalStatus, "Married", StringComparison.OrdinalIgnoreCase) ? request.MarriageDate?.Date : null;
         employee.PfNumber = !string.IsNullOrWhiteSpace(request.PfNumber) ? request.PfNumber.Trim() : null;
         employee.PanNumber = !string.IsNullOrWhiteSpace(request.PanNumber) ? request.PanNumber.Trim() : null;
         employee.EsiNumber = !string.IsNullOrWhiteSpace(request.EsiNumber) ? request.EsiNumber.Trim() : null;

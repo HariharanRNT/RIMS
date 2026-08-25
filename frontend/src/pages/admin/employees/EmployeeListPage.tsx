@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import apiClient from '../../../api/client';
+import { useConfirm } from '../../../contexts/ConfirmContext';
 import { EmployeeFormModal } from './EmployeeFormModal';
 import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
 
@@ -67,6 +68,8 @@ export const EmployeeListPage: React.FC = () => {
     fetchEmployees();
   }, [page, selectedDept, search]);
 
+  const { confirm } = useConfirm();
+
   const handleOpenCreate = () => {
     setEditingId(null);
     setShowModal(true);
@@ -78,7 +81,15 @@ export const EmployeeListPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to deactivate this employee?')) {
+    const isConfirmed = await confirm({
+      title: 'Deactivate Employee',
+      message: 'Are you sure you want to deactivate this employee? They will lose access to system features.',
+      confirmText: 'Deactivate',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
       try {
         await apiClient.delete(`/employees/${id}`);
         fetchEmployees();

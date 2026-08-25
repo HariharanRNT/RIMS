@@ -15,6 +15,9 @@ interface LeaveRequestItem {
   leaveTypeName: string;
   fromDate: string;
   toDate: string;
+  leaveDuration?: number; // 1 = FullDay, 2 = HalfDay
+  halfDayType?: number;   // 1 = FirstHalf, 2 = SecondHalf
+  leaveDays?: number;
   reason: string;
   status: string;
   approverName?: string;
@@ -30,6 +33,8 @@ export const LeaveRequestPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const [leaveTypeId, setLeaveTypeId] = useState<number | ''>('');
+  const [leaveDuration, setLeaveDuration] = useState<number>(1); // 1 = Full Day, 2 = Half Day
+  const [halfDayType, setHalfDayType] = useState<number | ''>(1);  // 1 = First Half, 2 = Second Half
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [reason, setReason] = useState('');
@@ -64,6 +69,7 @@ export const LeaveRequestPage: React.FC = () => {
 
   // Calculate dynamic duration in days
   const calculatedDuration = React.useMemo(() => {
+    if (leaveDuration === 2) return 0.5;
     if (!fromDate || !toDate) return 0;
     const start = new Date(fromDate);
     const end = new Date(toDate);
@@ -71,28 +77,25 @@ export const LeaveRequestPage: React.FC = () => {
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return diffDays;
-  }, [fromDate, toDate]);
-
-  const calculateRowDays = (fromStr: string, toStr: string) => {
-    const start = new Date(fromStr);
-    const end = new Date(toStr);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  };
+  }, [fromDate, toDate, leaveDuration]);
 
   const todayStr = React.useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveTypeId || !fromDate || !toDate || !reason) return;
+    const effectiveToDate = leaveDuration === 2 ? fromDate : toDate;
+    if (!leaveTypeId || !fromDate || !effectiveToDate || !reason) return;
+    if (leaveDuration === 2 && !halfDayType) {
+      setError('Please select Half-Day Type (First Half or Second Half).');
+      return;
+    }
 
     if (fromDate < todayStr) {
       setError('Leave request cannot be backdated to past dates. Please select today or a future date.');
       return;
     }
 
-    if (fromDate > toDate) {
+    if (fromDate > effectiveToDate) {
       setError('To Date must be on or after From Date.');
       return;
     }
@@ -105,7 +108,9 @@ export const LeaveRequestPage: React.FC = () => {
       const res = await apiClient.post('/leaves/submit', {
         leaveTypeId: Number(leaveTypeId),
         fromDate,
-        toDate,
+        toDate: effectiveToDate,
+        leaveDuration: Number(leaveDuration),
+        halfDayType: leaveDuration === 2 ? Number(halfDayType) : null,
         reason,
       });
 
@@ -114,6 +119,8 @@ export const LeaveRequestPage: React.FC = () => {
         setLeaveTypeId(leaveTypes.length > 0 ? leaveTypes[0].id : '');
         setFromDate('');
         setToDate('');
+        setLeaveDuration(1);
+        setHalfDayType(1);
         setReason('');
         fetchData();
       }
@@ -137,8 +144,8 @@ export const LeaveRequestPage: React.FC = () => {
 
       {error && (
         <div style={{
-          backgroundColor: 'rgba(240,96,96,0.12)',
-          border: '1px solid #FECACA',
+          backgroundColor: '#fef2f2',
+          border: '1px solid #fecaca',
           color: 'var(--danger)',
           padding: '0.75rem 1rem',
           borderRadius: 'var(--radius-sm)',
@@ -196,28 +203,62 @@ export const LeaveRequestPage: React.FC = () => {
               placeholder="Select Leave Type"
             />
 
+            <GlassSelect
+              label="Leave Duration"
+              required
+              options={[
+                { value: 1, label: 'Full Day' },
+                { value: 2, label: 'Half Day' },
+              ]}
+              value={leaveDuration}
+              onChange={(val) => {
+                const dur = Number(val);
+                setLeaveDuration(dur);
+                if (dur === 2 && fromDate) {
+                  setToDate(fromDate);
+                }
+              }}
+              placeholder="Select Duration"
+            />
+
+            {leaveDuration === 2 && (
+              <GlassSelect
+                label="Half-Day Type"
+                required
+                options={[
+                  { value: 1, label: 'First Half (Morning Shift)' },
+                  { value: 2, label: 'Second Half (Afternoon Shift)' },
+                ]}
+                value={halfDayType}
+                onChange={(val) => setHalfDayType(val ? Number(val) : '')}
+                placeholder="Select Half-Day Type"
+              />
+            )}
+
             <GlassDatePicker
               label="From Date"
               required
               value={fromDate}
               onChange={(val) => {
                 setFromDate(val);
-                if (toDate && val > toDate) {
-                  setToDate('');
+                if (leaveDuration === 2 || (toDate && val > toDate)) {
+                  setToDate(val);
                 }
               }}
               minDate={todayStr}
               placeholder="Select From Date"
             />
 
-            <GlassDatePicker
-              label="To Date"
-              required
-              value={toDate}
-              onChange={(val) => setToDate(val)}
-              minDate={fromDate || todayStr}
-              placeholder="Select To Date"
-            />
+            {leaveDuration === 1 && (
+              <GlassDatePicker
+                label="To Date"
+                required
+                value={toDate}
+                onChange={(val) => setToDate(val)}
+                minDate={fromDate || todayStr}
+                placeholder="Select To Date"
+              />
+            )}
           </div>
 
           <div className="form-group" style={{ marginBottom: '1.25rem' }}>
@@ -236,7 +277,7 @@ export const LeaveRequestPage: React.FC = () => {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={!leaveTypeId || !fromDate || !toDate || !reason || submitting}
+            disabled={!leaveTypeId || !fromDate || (leaveDuration === 1 && !toDate) || (leaveDuration === 2 && !halfDayType) || !reason || submitting}
           >
             <Send size={16} />
             <span>{submitting ? 'Submitting...' : 'Submit Leave Request'}</span>
@@ -268,14 +309,24 @@ export const LeaveRequestPage: React.FC = () => {
               <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No leave requests submitted yet.</td></tr>
             ) : (
               history.map((l) => {
-                const numDays = calculateRowDays(l.fromDate, l.toDate);
+                const isHalf = l.leaveDuration === 2;
+                const numDays = l.leaveDays ?? (isHalf ? 0.5 : 1);
+                const halfTypeLabel = l.halfDayType === 1 ? 'First Half' : l.halfDayType === 2 ? 'Second Half' : 'Half Day';
                 return (
                   <tr key={l.id}>
                     <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>#{l.id}</td>
                     <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>{l.leaveTypeName}</td>
                     <td>{new Date(l.fromDate).toLocaleDateString()}</td>
                     <td>{new Date(l.toDate).toLocaleDateString()}</td>
-                    <td style={{ fontWeight: 600 }}>{numDays} {numDays === 1 ? 'day' : 'days'}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      {isHalf ? (
+                        <span className="badge badge-info" style={{ fontSize: '0.785rem' }}>
+                          0.5 Day ({halfTypeLabel})
+                        </span>
+                      ) : (
+                        <span>{numDays} {numDays === 1 ? 'day' : 'days'}</span>
+                      )}
+                    </td>
                     <td style={{ color: 'var(--text-secondary)', maxWidth: '240px' }}>{l.reason}</td>
                     <td>
                       <span className={`badge ${

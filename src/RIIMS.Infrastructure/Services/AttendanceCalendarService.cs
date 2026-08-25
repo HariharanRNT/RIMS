@@ -334,6 +334,11 @@ public class AttendanceCalendarService : IAttendanceCalendarService
 
         decimal monthlySalary = activeSalaryStructure?.MonthlyCTC ?? 0m;
 
+        var approvedPermissions = await _context.PermissionRequests
+            .AsNoTracking()
+            .Where(p => p.EmployeeId == employeeId && p.Status == RequestStatus.Approved && p.RequestDate >= startDateUtc && p.RequestDate <= endDateUtc)
+            .ToListAsync();
+
         var lopResult = LeaveLopCalculator.Calculate(
             employeeId,
             year,
@@ -343,7 +348,9 @@ public class AttendanceCalendarService : IAttendanceCalendarService
             monthlySalary,
             calendarEntries,
             approvedLeaves,
-            logs);
+            logs,
+            approvedPermissions,
+            settings);
 
         var dailySummaries = lopResult.DailyDetails.Select(d => new EmployeeDailyAttendanceSummaryDto
         {

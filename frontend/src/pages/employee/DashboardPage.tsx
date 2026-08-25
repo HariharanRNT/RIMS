@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
-import { AlertTriangle, CalendarDays, CreditCard, Play, Clock, CheckCircle2, Coffee, Activity, PhoneCall, Briefcase, Calendar } from 'lucide-react';
+import { CelebrationBanner } from '../../components/dashboard/CelebrationBanner';
+import { AlertTriangle, CalendarDays, CreditCard, Play, Clock, CheckCircle2, Coffee, PhoneCall, Briefcase, Calendar, Eye, Download } from 'lucide-react';
 import { formatTimeIST, formatDurationToHoursMinutes } from '../../utils/dateUtils';
+import { GlassDatePicker } from '../../components/ui/GlassDatePicker';
+import { EmployeeDailyDetailModal } from '../admin/reports/EmployeeDailyDetailModal';
 
 interface EmployeeMetrics {
   employeeId: number;
@@ -16,6 +19,8 @@ interface EmployeeMetrics {
   todayNonProductiveHours?: number;
   hasGraceViolationToday: boolean;
   minutesLateToday: number;
+  todayStatus?: string;
+  isHalfDayToday?: boolean;
   activeTask?: {
     taskId: number;
     productName: string;
@@ -34,77 +39,26 @@ interface EmployeeMetrics {
   }[];
 }
 
-interface TaskSession {
-  startTime: string;
-  endTime: string | null;
-  duration: string;
-}
-
-interface TaskDetail {
-  taskId: number;
-  moduleName: string;
-  description: string;
-  productName: string;
-  clientName: string;
-  status: string;
-  sessions: TaskSession[];
-  totalTaskHours: number;
-}
-
-interface BreakDetail {
-  breakTypeName: string;
-  heldTaskModule: string | null;
-  startTime: string;
-  endTime: string | null;
-  duration: string;
-}
-
-interface SupportDetail {
-  activityTypeName: string;
-  productName: string | null;
-  clientName: string | null;
-  remarks: string | null;
-  startTime: string;
-  endTime: string | null;
-  duration: string;
-}
-
-interface TimelineItem {
-  id: number;
-  activityType: string;
-  startTime: string;
-  endTime: string | null;
-  status: string;
-  remarks: string | null;
-  duration: string | null;
-}
-
-interface DailyIdleDetail {
-  startTime: string;
-  endTime: string;
-  duration: string;
-  type: string;
-}
-
-interface EmployeeDailyDetail {
+interface DailyItem {
   employeeId: number;
+  attendanceLogId?: number | null;
   employeeCode: string;
   employeeName: string;
   departmentName: string;
-  date: string;
+  date?: string;
   loginTime: string | null;
   logoutTime: string | null;
   status: string;
   productiveHours: number;
+  workTaskCount?: number;
+  workTaskHours?: number;
+  breakCount?: number;
   breakHours: number;
+  callCount?: number;
+  callHours?: number;
   idleHours?: number;
-  nonProductiveHours?: number;
+  tasksCompleted: number;
   minutesLate: number;
-  tasks: TaskDetail[];
-  breaks: BreakDetail[];
-  supportActivities: SupportDetail[];
-  idles?: DailyIdleDetail[];
-  timeline: TimelineItem[];
 }
 
 export const EmployeeDashboardPage: React.FC = () => {
@@ -112,7 +66,8 @@ export const EmployeeDashboardPage: React.FC = () => {
   const employeeId = user?.employeeId || 0;
   const navigate = useNavigate();
 
-  // Compute Yesterday's date string (default for historical report)
+  // Compute Date strings for historical report
+  const getTodayStr = () => new Date().toISOString().split('T')[0];
   const getYesterdayStr = () => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
@@ -122,11 +77,78 @@ export const EmployeeDashboardPage: React.FC = () => {
   const [metrics, setMetrics] = useState<EmployeeMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Historical Daily Report State (Starts from Yesterday)
-  const [selectedHistDate, setSelectedHistDate] = useState<string>(getYesterdayStr());
-  const [histDetail, setHistDetail] = useState<EmployeeDailyDetail | null>(null);
+  // Historical Daily Report State (Date Mode: Single Date vs Custom Range)
+  const [histDateMode, setHistDateMode] = useState<'single' | 'range'>('single');
+  const [histSingleDate, setHistSingleDate] = useState<string>(getYesterdayStr());
+  const [histStartDate, setHistStartDate] = useState<string>(getYesterdayStr());
+  const [histEndDate, setHistEndDate] = useState<string>(getTodayStr());
+
+  const [dailyData, setDailyData] = useState<DailyItem[]>([]);
   const [histLoading, setHistLoading] = useState(true);
-  const [histTab, setHistTab] = useState<'tasks' | 'breaks' | 'support' | 'idles' | 'timeline'>('tasks');
+
+  // Pagination State for Historical Performance Table
+  const [histCurrentPage, setHistCurrentPage] = useState<number>(1);
+  const [histPageSize, setHistPageSize] = useState<number>(10);
+
+  // Popup Modal State
+  const [modalEmployeeId, setModalEmployeeId] = useState<number | null>(null);
+  const [modalInitialTab, setModalInitialTab] = useState<'tasks' | 'breaks' | 'support' | 'idles' | 'timeline'>('tasks');
+  const [modalDate, setModalDate] = useState<string>('');
+
+  const openDetailModal = (tab: 'tasks' | 'breaks' | 'support' | 'idles' | 'timeline', targetDate: string) => {
+    setModalEmployeeId(employeeId);
+    setModalInitialTab(tab);
+    setModalDate(targetDate);
+  };
+
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      let url = `/reports/export-daily-production?`;
+      if (histDateMode === 'single') {
+        url += `date=${histSingleDate}`;
+      } else {
+        url += `startDate=${histStartDate}&endDate=${histEndDate}`;
+      }
+
+      const response = await apiClient.get(url, { responseType: 'blob' });
+
+      const contentDisposition = response.headers['content-disposition'];
+      let fileName = histDateMode === 'single'
+        ? `Performance_Report_${histSingleDate}.xlsx`
+        : `Performance_Report_${histStartDate}_to_${histEndDate}.xlsx`;
+
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) fileName = match[1];
+      }
+
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Failed to export Excel report:', err);
+      alert('Failed to export Excel report. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const formatHoursToHM = (hoursVal: number | undefined | null) => {
+    if (hoursVal === undefined || hoursVal === null || hoursVal <= 0 || isNaN(hoursVal)) return '00h 00m';
+    const totalMinutes = Math.round(hoursVal * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h.toString().padStart(2, '0')}h ${m.toString().padStart(2, '0')}m`;
+  };
 
   const fetchMetrics = async () => {
     try {
@@ -145,12 +167,18 @@ export const EmployeeDashboardPage: React.FC = () => {
     if (!employeeId) return;
     setHistLoading(true);
     try {
-      const res = await apiClient.get(`/reports/daily-detail/${employeeId}?date=${selectedHistDate}`);
+      let url = `/reports/daily-production?employeeId=${employeeId}&`;
+      if (histDateMode === 'single') {
+        url += `date=${histSingleDate}`;
+      } else {
+        url += `startDate=${histStartDate}&endDate=${histEndDate}`;
+      }
+      const res = await apiClient.get(url);
       if (res.data.success) {
-        setHistDetail(res.data.data);
+        setDailyData(res.data.data);
       }
     } catch (err) {
-      console.error('Failed to fetch historical daily detail:', err);
+      console.error('Failed to fetch historical daily production:', err);
     } finally {
       setHistLoading(false);
     }
@@ -163,10 +191,10 @@ export const EmployeeDashboardPage: React.FC = () => {
   }, [employeeId]);
 
   useEffect(() => {
-    if (employeeId && selectedHistDate) {
+    if (employeeId) {
       fetchHistDetail();
     }
-  }, [employeeId, selectedHistDate]);
+  }, [employeeId, histDateMode, histSingleDate, histStartDate, histEndDate]);
 
   return (
     <div>
@@ -179,6 +207,9 @@ export const EmployeeDashboardPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* 🎉 Today's Employee Celebrations Banner */}
+      <CelebrationBanner />
 
       {loading ? (
         <div className="ui-card" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
@@ -202,7 +233,11 @@ export const EmployeeDashboardPage: React.FC = () => {
                 <h3 style={{ fontSize: '1.05rem', marginTop: '0.1rem', color: 'var(--text-main)' }}>
                   {metrics.todayLoginTime ? formatTimeIST(metrics.todayLoginTime) : 'Not Logged In'}
                 </h3>
-                {metrics.hasGraceViolationToday ? (
+                {metrics.isHalfDayToday || metrics.todayStatus === 'HalfDay Attendance' ? (
+                  <span style={{ fontSize: '0.7rem', color: '#d97706', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', marginTop: '0.1rem', fontWeight: 600 }}>
+                    <AlertTriangle size={12} /> Half Day (Late {metrics.minutesLateToday}m)
+                  </span>
+                ) : metrics.hasGraceViolationToday ? (
                   <span style={{ fontSize: '0.7rem', color: 'var(--danger-text)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', marginTop: '0.1rem', fontWeight: 600 }}>
                     <AlertTriangle size={12} /> Late ({metrics.minutesLateToday}m)
                   </span>
@@ -250,7 +285,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                 <h3 style={{ fontSize: '1.15rem', marginTop: '0.1rem', color: 'var(--text-main)', fontWeight: 700 }}>
                   {formatDurationToHoursMinutes(metrics.todayIdleHours || 0)}
                 </h3>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Logout-login gaps</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Portal Idle Logs</span>
               </div>
             </div>
 
@@ -330,293 +365,400 @@ export const EmployeeDashboardPage: React.FC = () => {
                 </p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <label style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Select date:</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  style={{ padding: '0.35rem 0.6rem', fontSize: '0.8125rem' }}
-                  value={selectedHistDate}
-                  onChange={(e) => setSelectedHistDate(e.target.value)}
-                />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <div>
+                  <label style={{ fontSize: '0.785rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                    Date Mode
+                  </label>
+                  <div style={{ display: 'inline-flex', background: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <button
+                      type="button"
+                      className={`btn ${histDateMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ padding: '0.25rem 0.65rem', fontSize: '0.8rem', border: 'none' }}
+                      onClick={() => setHistDateMode('single')}
+                    >
+                      Single Date
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${histDateMode === 'range' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ padding: '0.25rem 0.65rem', fontSize: '0.8rem', border: 'none' }}
+                      onClick={() => setHistDateMode('range')}
+                    >
+                      Custom Range
+                    </button>
+                  </div>
+                </div>
+
+                {histDateMode === 'single' ? (
+                  <div style={{ width: '165px' }}>
+                    <label style={{ fontSize: '0.785rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                      Select Date
+                    </label>
+                    <GlassDatePicker
+                      value={histSingleDate}
+                      onChange={(d) => setHistSingleDate(d)}
+                      maxDate={new Date()}
+                      placeholder="Select date"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ width: '165px' }}>
+                      <label style={{ fontSize: '0.785rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                        Start Date
+                      </label>
+                      <GlassDatePicker
+                        value={histStartDate}
+                        onChange={(d) => setHistStartDate(d)}
+                        maxDate={new Date()}
+                        placeholder="Start date"
+                      />
+                    </div>
+                    <div style={{ width: '165px' }}>
+                      <label style={{ fontSize: '0.785rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                        End Date
+                      </label>
+                      <GlassDatePicker
+                        value={histEndDate}
+                        onChange={(d) => setHistEndDate(d)}
+                        maxDate={new Date()}
+                        placeholder="End date"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div style={{ marginLeft: 'auto', alignSelf: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.45rem 0.95rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      cursor: exporting ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)'
+                    }}
+                    onClick={handleExportExcel}
+                    disabled={exporting}
+                  >
+                    <Download size={15} />
+                    <span>{exporting ? 'Exporting...' : 'Export to Excel'}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {histLoading ? (
               <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                Loading activity breakdown for {selectedHistDate}...
+                Loading activity breakdown...
               </div>
-            ) : !histDetail ? (
+            ) : dailyData.length === 0 ? (
               <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--danger-text)' }}>
-                No performance data recorded for {selectedHistDate}.
+                No performance data recorded for the selected date range.
               </div>
-            ) : (
-              <>
-                {/* Historical Summary Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Login / logout (IST)</span>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--success-text)' }}>
-                      In: {formatTimeIST(histDetail.loginTime)}
-                    </span>
-                    <br />
-                    <span style={{ fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
-                      Out: {formatTimeIST(histDetail.logoutTime)}
-                    </span>
-                  </div>
+            ) : (() => {
+              const totalItems = dailyData.length;
+              const totalPages = Math.ceil(totalItems / histPageSize) || 1;
+              const safeCurrentPage = Math.min(Math.max(histCurrentPage, 1), totalPages);
+              const startIndex = (safeCurrentPage - 1) * histPageSize;
+              const endIndex = startIndex + histPageSize;
+              const paginatedDailyData = dailyData.slice(startIndex, endIndex);
 
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Productive time</span>
-                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--success-text)' }}>
-                      {formatDurationToHoursMinutes(histDetail.productiveHours)}
-                    </span>
-                  </div>
-
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Break time</span>
-                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--warning-text)' }}>
-                      {formatDurationToHoursMinutes(histDetail.breakHours)}
-                    </span>
-                  </div>
-
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Idle time</span>
-                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--text-main)' }}>
-                      {formatDurationToHoursMinutes(histDetail.idleHours || 0)}
-                    </span>
-                  </div>
-
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>Non-productive time</span>
-                    <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--warning-text)' }}>
-                      {formatDurationToHoursMinutes(histDetail.nonProductiveHours || (histDetail.breakHours + (histDetail.idleHours || 0)))}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Historical Tabs */}
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
-                  <button
-                    className={`btn ${histTab === 'tasks' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
-                    onClick={() => setHistTab('tasks')}
-                  >
-                    <Briefcase size={15} />
-                    <span>Work Tasks ({histDetail.tasks.length})</span>
-                  </button>
-
-                  <button
-                    className={`btn ${histTab === 'breaks' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
-                    onClick={() => setHistTab('breaks')}
-                  >
-                    <Coffee size={15} />
-                    <span>Breaks ({histDetail.breaks.length})</span>
-                  </button>
-
-                  <button
-                    className={`btn ${histTab === 'support' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
-                    onClick={() => setHistTab('support')}
-                  >
-                    <PhoneCall size={15} />
-                    <span>Support Calls ({histDetail.supportActivities.length})</span>
-                  </button>
-
-                  <button
-                    className={`btn ${histTab === 'idles' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
-                    onClick={() => setHistTab('idles')}
-                  >
-                    <Clock size={15} />
-                    <span>Idle Gaps ({(histDetail.idles || []).length})</span>
-                  </button>
-
-                  <button
-                    className={`btn ${histTab === 'timeline' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
-                    onClick={() => setHistTab('timeline')}
-                  >
-                    <Activity size={15} />
-                    <span>Full Activity Stream ({histDetail.timeline.length})</span>
-                  </button>
-                </div>
-
-                {/* Sub Tab 3.5: Idle Gaps */}
-                {histTab === 'idles' && (
-                  <div className="table-container" style={{ padding: 0 }}>
-                    <table className="data-table">
+              return (
+                <div className="table-container" style={{ padding: 0, marginBottom: 0, background: '#ffffff', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="data-table" style={{ margin: 0, minWidth: '1050px' }}>
                       <thead>
                         <tr>
-                          <th>Gap Type</th>
-                          <th>Time Slot (Logout ➔ Login IST)</th>
-                          <th>Duration</th>
+                          <th>DATE</th>
+                          <th>EMPLOYEE</th>
+                          <th>LOGIN / LOGOUT</th>
+                          <th>STATUS</th>
+                          <th>WORK TASK</th>
+                          <th>BREAK</th>
+                          <th>CALL</th>
+                          <th>IDLE TIME</th>
+                          <th style={{ textAlign: 'center' }}>ACTIONS</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(!histDetail.idles || histDetail.idles.length === 0) ? (
-                          <tr><td colSpan={3} style={{ textAlign: 'center', padding: '2rem' }}>No logout-login idle gaps logged on {selectedHistDate}.</td></tr>
-                        ) : (
-                          histDetail.idles.map((idle, i) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>⏸️ {idle.type || 'Logout-Login Gap'}</td>
-                              <td>{formatTimeIST(idle.startTime)} ➔ {formatTimeIST(idle.endTime)}</td>
-                              <td style={{ fontWeight: 700, color: 'var(--warning-text)' }}>{idle.duration}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        {paginatedDailyData.map((item, idx) => {
+                          const itemDateStr = item.date ? item.date.split('T')[0] : (histDateMode === 'single' ? histSingleDate : histStartDate);
 
-                {/* Sub Tab 1: Tasks & Work Sessions */}
-                {histTab === 'tasks' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {histDetail.tasks.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-                        No work tasks recorded on {selectedHistDate}.
-                      </p>
-                    ) : (
-                      histDetail.tasks.map((task) => (
-                        <div key={task.taskId} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRadius: '10px', padding: '1rem', border: '1px solid var(--border-color)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                            <div>
-                              <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--accent-primary)' }}>{task.moduleName}</h4>
-                              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                {task.description}
-                              </p>
-                            </div>
-                            <span className={`badge ${task.status === 'Completed' ? 'badge-success' : 'badge-warning'}`}>
-                              {task.status}
-                            </span>
-                          </div>
-
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                            <span><strong>Product:</strong> {task.productName || 'N/A'}</span>
-                            <span><strong>Client:</strong> {task.clientName || 'N/A'}</span>
-                            <span><strong>Total Worked:</strong> {formatDurationToHoursMinutes(task.totalTaskHours)}</span>
-                          </div>
-
-                          {/* Sessions List */}
-                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.75rem', borderRadius: '8px' }}>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
-                              Session Timestamps (Start ➔ End IST):
-                            </span>
-                            {task.sessions.map((s, idx) => (
-                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.2rem 0', borderBottom: idx < task.sessions.length - 1 ? '1px dashed var(--border-color)' : 'none' }}>
-                                <span>
-                                  🕒 {formatTimeIST(s.startTime)} ➔ {s.endTime ? formatTimeIST(s.endTime) : 'In Progress'}
+                          return (
+                            <tr key={`${item.employeeId}-${itemDateStr}-${idx}`}>
+                              <td style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-primary)', whiteSpace: 'nowrap' }}>
+                                {itemDateStr}
+                              </td>
+                              <td>
+                                <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{item.employeeName}</div>
+                                <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
+                                  {item.employeeCode} • {item.departmentName}
+                                </div>
+                              </td>
+                              <td>
+                                <div style={{ fontSize: '0.825rem' }}>
+                                  <span style={{ color: item.loginTime ? 'var(--success)' : 'var(--text-muted)' }}>
+                                    In: {formatTimeIST(item.loginTime)}
+                                  </span>
+                                  <br />
+                                  <span style={{ color: item.logoutTime ? 'var(--text-muted)' : 'var(--warning)' }}>
+                                    Out: {formatTimeIST(item.logoutTime)}
+                                  </span>
+                                </div>
+                              </td>
+                              <td>
+                                <span className={`badge ${
+                                  item.status === 'Normal' || item.status === 'Present (Logged Out)' ? 'badge-success' :
+                                  item.status === 'Permission' ? 'badge-info' :
+                                  item.status === 'Late' ? 'badge-warning' :
+                                  item.status?.includes('Working') ? 'badge-success' : 'badge-secondary'
+                                }`}>
+                                  {item.status}
                                 </span>
-                                <span style={{ fontWeight: 600, color: 'var(--success)' }}>
-                                  Duration: {s.duration}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
+                              </td>
 
-                {/* Sub Tab 2: Break Logs */}
-                {histTab === 'breaks' && (
-                  <div className="table-container" style={{ padding: 0 }}>
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Break Type</th>
-                          <th>Start Time (IST)</th>
-                          <th>End Time (IST)</th>
-                          <th>Duration</th>
-                          <th>Held Task Module</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {histDetail.breaks.length === 0 ? (
-                          <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>No break logs on {selectedHistDate}.</td></tr>
-                        ) : (
-                          histDetail.breaks.map((b, i) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600, color: 'var(--warning)' }}>☕ {b.breakTypeName}</td>
-                              <td>{formatTimeIST(b.startTime)}</td>
-                              <td>{formatTimeIST(b.endTime)}</td>
-                              <td style={{ fontWeight: 700 }}>{b.duration}</td>
-                              <td>{b.heldTaskModule || 'None'}</td>
+                              {/* Work Task Column */}
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{
+                                    padding: '0.35rem 0.7rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    color: 'var(--accent-primary)',
+                                    borderColor: 'rgba(79, 70, 229, 0.25)',
+                                    background: 'rgba(79, 70, 229, 0.05)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    borderRadius: '6px'
+                                  }}
+                                  onClick={() => openDetailModal('tasks', itemDateStr)}
+                                  title="Click to view Work Tasks log"
+                                >
+                                  <Briefcase size={14} />
+                                  <span>{item.workTaskCount ?? 0}</span>
+                                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>({formatHoursToHM(item.workTaskHours)})</span>
+                                </button>
+                              </td>
+
+                              {/* Break Column */}
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{
+                                    padding: '0.35rem 0.7rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    color: 'var(--warning)',
+                                    borderColor: 'rgba(245, 158, 11, 0.25)',
+                                    background: 'rgba(245, 158, 11, 0.05)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    borderRadius: '6px'
+                                  }}
+                                  onClick={() => openDetailModal('breaks', itemDateStr)}
+                                  title="Click to view Breaks log"
+                                >
+                                  <Coffee size={14} />
+                                  <span>{item.breakCount ?? 0}</span>
+                                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>({formatHoursToHM(item.breakHours)})</span>
+                                </button>
+                              </td>
+
+                              {/* Call Column */}
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{
+                                    padding: '0.35rem 0.7rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    color: 'var(--info)',
+                                    borderColor: 'rgba(6, 182, 212, 0.25)',
+                                    background: 'rgba(6, 182, 212, 0.05)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    borderRadius: '6px'
+                                  }}
+                                  onClick={() => openDetailModal('support', itemDateStr)}
+                                  title="Click to view Support Calls log"
+                                >
+                                  <PhoneCall size={14} />
+                                  <span>{item.callCount ?? 0}</span>
+                                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>({formatHoursToHM(item.callHours)})</span>
+                                </button>
+                              </td>
+
+                              {/* Idle Time Column */}
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{
+                                    padding: '0.35rem 0.7rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    color: 'var(--text-main)',
+                                    borderColor: 'rgba(107, 114, 128, 0.25)',
+                                    background: 'rgba(107, 114, 128, 0.05)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    borderRadius: '6px'
+                                  }}
+                                  onClick={() => openDetailModal('idles', itemDateStr)}
+                                  title="Click to view Idle Gaps log"
+                                >
+                                  <Clock size={14} />
+                                  <span>{formatHoursToHM(item.idleHours || 0)}</span>
+                                </button>
+                              </td>
+
+                              {/* Actions Column */}
+                              <td style={{ textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                                  onClick={() => openDetailModal('tasks', itemDateStr)}
+                                >
+                                  <Eye size={13} />
+                                  <span>View Details</span>
+                                </button>
+                              </td>
                             </tr>
-                          ))
-                        )}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
-                )}
 
-                {/* Sub Tab 3: Support Calls */}
-                {histTab === 'support' && (
-                  <div className="table-container" style={{ padding: 0 }}>
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Activity</th>
-                          <th>Product</th>
-                          <th>Client</th>
-                          <th>Time Slot (IST)</th>
-                          <th>Duration</th>
-                          <th>Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {histDetail.supportActivities.length === 0 ? (
-                          <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>No support activity logged on {selectedHistDate}.</td></tr>
-                        ) : (
-                          histDetail.supportActivities.map((s, i) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600, color: 'var(--info)' }}>📞 {s.activityTypeName}</td>
-                              <td>{s.productName || '--'}</td>
-                              <td>{s.clientName || '--'}</td>
-                              <td>{formatTimeIST(s.startTime)} - {formatTimeIST(s.endTime)}</td>
-                              <td style={{ fontWeight: 700 }}>{s.duration}</td>
-                              <td style={{ fontSize: '0.85rem' }}>{s.remarks || '--'}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Sub Tab 4: Full Timeline Stream */}
-                {histTab === 'timeline' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingLeft: '0.5rem' }}>
-                    {histDetail.timeline.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>No activity stream recorded on {selectedHistDate}.</p>
-                    ) : (
-                      histDetail.timeline.map((item) => (
-                        <div key={item.id} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                          <div style={{ minWidth: '85px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-primary)', paddingTop: '0.2rem' }}>
-                            {formatTimeIST(item.startTime)}
-                          </div>
-                          <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', padding: '0.6rem 0.9rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.activityType}</span>
-                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.duration || ''}</span>
-                            </div>
-                            {item.remarks && (
-                              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                {item.remarks}
-                              </p>
-                            )}
-                          </div>
+                  {/* Pagination Controls */}
+                  {!histLoading && totalItems > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.85rem 1.25rem',
+                      borderTop: '1px solid var(--border-color)',
+                      background: '#fafafa',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span>Rows per page:</span>
+                          <select
+                            value={histPageSize}
+                            onChange={(e) => {
+                              setHistPageSize(Number(e.target.value));
+                              setHistCurrentPage(1);
+                            }}
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '6px',
+                              border: '1px solid var(--border-color)',
+                              background: '#ffffff',
+                              fontSize: '0.85rem',
+                              fontWeight: 600,
+                              color: 'var(--text-main)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                          </select>
                         </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+
+                        <span>
+                          Showing <strong>{startIndex + 1}</strong> - <strong>{Math.min(endIndex, totalItems)}</strong> of <strong>{totalItems}</strong> records
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                          disabled={safeCurrentPage === 1}
+                          onClick={() => setHistCurrentPage(1)}
+                          title="First Page"
+                        >
+                          «
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                          disabled={safeCurrentPage === 1}
+                          onClick={() => setHistCurrentPage(prev => Math.max(prev - 1, 1))}
+                          title="Previous Page"
+                        >
+                          ‹ Previous
+                        </button>
+
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, padding: '0 0.5rem', color: 'var(--text-main)' }}>
+                          Page {safeCurrentPage} of {totalPages}
+                        </span>
+
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                          disabled={safeCurrentPage >= totalPages}
+                          onClick={() => setHistCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                          title="Next Page"
+                        >
+                          Next ›
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                          disabled={safeCurrentPage >= totalPages}
+                          onClick={() => setHistCurrentPage(totalPages)}
+                          title="Last Page"
+                        >
+                          »
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </>
+      )}
+
+      {/* Activity & Time Log Popup Modal */}
+      {modalEmployeeId && (
+        <EmployeeDailyDetailModal
+          employeeId={modalEmployeeId}
+          date={modalDate || (histDateMode === 'single' ? histSingleDate : undefined)}
+          startDate={histDateMode === 'range' && !modalDate ? histStartDate : undefined}
+          endDate={histDateMode === 'range' && !modalDate ? histEndDate : undefined}
+          initialTab={modalInitialTab}
+          onClose={() => setModalEmployeeId(null)}
+        />
       )}
     </div>
   );

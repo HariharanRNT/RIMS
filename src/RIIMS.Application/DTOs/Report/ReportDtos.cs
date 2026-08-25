@@ -29,6 +29,8 @@ public class EmployeeDashboardMetricsDto
     public int TodayActivitiesCount { get; set; }
     public bool HasGraceViolationToday { get; set; }
     public int MinutesLateToday { get; set; }
+    public string? TodayStatus { get; set; }
+    public bool IsHalfDayToday { get; set; }
     public ActiveTaskDto? ActiveTask { get; set; }
     public List<ActivityTimelineDto> TodayActivities { get; set; } = new();
 }
@@ -76,11 +78,17 @@ public class DailyProductionItemDto
     public string EmployeeCode { get; set; } = string.Empty;
     public string EmployeeName { get; set; } = string.Empty;
     public string DepartmentName { get; set; } = string.Empty;
+    public DateTime Date { get; set; }
     public DateTime? LoginTime { get; set; }
     public DateTime? LogoutTime { get; set; }
     public string Status { get; set; } = "Offline";
     public double ProductiveHours { get; set; }
+    public int WorkTaskCount { get; set; }
+    public double WorkTaskHours { get; set; }
+    public int BreakCount { get; set; }
     public double BreakHours { get; set; }
+    public int CallCount { get; set; }
+    public double CallHours { get; set; }
     public double IdleHours { get; set; }
     public double NonProductiveHours { get; set; }
     public int TasksCompleted { get; set; }
@@ -93,6 +101,7 @@ public class DailyProductionItemDto
     public string GraceEndTime { get; set; } = "10:15 AM";
     public int LateCount { get; set; }
     public int PermissionCount { get; set; }
+    public decimal LeaveCount { get; set; }
     public decimal LopDays { get; set; }
 }
 
@@ -167,21 +176,27 @@ public class EmployeeDailyDetailDto
 
 public class AdminNotificationItemDto
 {
+    public string Key { get; set; } = string.Empty; // e.g. "LeaveRequest_12", "LateLogin_45"
     public int Id { get; set; }
+    public int EmployeeId { get; set; }
     public string Category { get; set; } = string.Empty; // "LateLogin", "LeaveRequest", "PermissionRequest"
     public string EmployeeName { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
     public string TargetUrl { get; set; } = string.Empty;
+    public bool IsRead { get; set; } = false;
+    public int? MinutesLate { get; set; }
 }
 
 public class AdminNotificationSummaryDto
 {
     public int TotalCount { get; set; }
+    public int UnreadCount { get; set; }
     public int LateLoginCount { get; set; }
     public int LeaveRequestCount { get; set; }
     public int PermissionRequestCount { get; set; }
+    public int CelebrationCount { get; set; }
     public List<AdminNotificationItemDto> Notifications { get; set; } = new();
 }
 

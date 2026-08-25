@@ -10,6 +10,7 @@ public class BreakTypeConfiguration : IEntityTypeConfiguration<BreakType>
     {
         builder.ToTable("BreakTypes");
         builder.Property(b => b.Name).HasMaxLength(50).IsRequired();
+        builder.Property(b => b.AllowedMinutes).IsRequired().HasDefaultValue(15);
         builder.HasIndex(b => b.Name).IsUnique().HasFilter("[IsActive] = 1");
     }
 }

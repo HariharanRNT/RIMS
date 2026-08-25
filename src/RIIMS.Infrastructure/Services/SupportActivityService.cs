@@ -11,10 +11,12 @@ namespace RIIMS.Infrastructure.Services;
 public class SupportActivityService : ISupportActivityService
 {
     private readonly RiimsDbContext _context;
+    private readonly IIdleTimeService _idleTimeService;
 
-    public SupportActivityService(RiimsDbContext context)
+    public SupportActivityService(RiimsDbContext context, IIdleTimeService idleTimeService)
     {
         _context = context;
+        _idleTimeService = idleTimeService;
     }
 
     public async Task<SupportLogDto> StartSupportAsync(int employeeId, StartSupportRequest request)
@@ -82,6 +84,8 @@ public class SupportActivityService : ISupportActivityService
             Remarks = "Started support activity"
         });
 
+        await _idleTimeService.OnActivityStartingAsync(employeeId, now, "SupportActivity");
+
         await _context.SaveChangesAsync();
 
         return (await GetByIdAsync(log.Id))!;
@@ -145,6 +149,7 @@ public class SupportActivityService : ISupportActivityService
             Remarks = request.Remarks.Trim()
         });
 
+        bool taskAutoResumed = false;
         // Auto-resume held task (Business Rule #3)
         if (log.HeldTaskId.HasValue)
         {
@@ -152,6 +157,7 @@ public class SupportActivityService : ISupportActivityService
             if (heldTask != null && heldTask.Status == TaskStatusEnum.OnHold)
             {
                 heldTask.Status = TaskStatusEnum.Running;
+                taskAutoResumed = true;
 
                 _context.TaskTimeLogs.Add(new TaskTimeLog
                 {
@@ -173,6 +179,12 @@ public class SupportActivityService : ISupportActivityService
         }
 
         await _context.SaveChangesAsync();
+
+        if (!taskAutoResumed)
+        {
+            await _idleTimeService.OnActivityEndingAsync(employeeId, now, "SupportActivity");
+        }
+
         return (await GetByIdAsync(supportLogId))!;
     }
 
@@ -327,6 +339,22 @@ public class SupportActivityService : ISupportActivityService
 
         item.Status = DemoFollowUpStatus.Completed;
         item.CompletedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task CompleteAllDemoFollowUpsAsync(int employeeId)
+    {
+        var items = await _context.DemoFollowUps
+            .Where(d => d.EmployeeId == employeeId && d.Status == DemoFollowUpStatus.Pending)
+            .ToListAsync();
+
+        var now = DateTime.UtcNow;
+        foreach (var item in items)
+        {
+            item.Status = DemoFollowUpStatus.Completed;
+            item.CompletedAt = now;
+        }
 
         await _context.SaveChangesAsync();
     }

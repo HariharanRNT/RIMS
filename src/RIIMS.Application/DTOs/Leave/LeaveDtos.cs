@@ -1,3 +1,5 @@
+using RIIMS.Domain.Enums;
+
 namespace RIIMS.Application.DTOs.Leave;
 
 public class CreateLeaveRequest
@@ -5,6 +7,8 @@ public class CreateLeaveRequest
     public int LeaveTypeId { get; set; }
     public DateTime FromDate { get; set; }
     public DateTime ToDate { get; set; }
+    public LeaveDuration LeaveDuration { get; set; } = LeaveDuration.FullDay;
+    public HalfDayType? HalfDayType { get; set; }
     public string Reason { get; set; } = string.Empty;
 }
 
@@ -19,6 +23,8 @@ public class LeaveRequestDto
     public string LeaveTypeName { get; set; } = string.Empty;
     public DateTime FromDate { get; set; }
     public DateTime ToDate { get; set; }
+    public LeaveDuration LeaveDuration { get; set; } = LeaveDuration.FullDay;
+    public HalfDayType? HalfDayType { get; set; }
     public decimal LeaveDays { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
