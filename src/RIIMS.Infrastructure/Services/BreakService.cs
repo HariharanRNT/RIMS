@@ -65,19 +65,6 @@ public class BreakService : IBreakService
                 Remarks = "Task paused for break"
             });
         }
-        else
-        {
-            // If no running task, check if the employee has an OnHold task from earlier today
-            var onHoldTask = await _context.WorkTasks
-                .Where(t => t.EmployeeId == employeeId && t.Status == TaskStatusEnum.OnHold)
-                .OrderByDescending(t => t.UpdatedAt)
-                .FirstOrDefaultAsync();
-
-            if (onHoldTask != null)
-            {
-                heldTaskId = onHoldTask.Id;
-            }
-        }
 
         // 3. Create BreakLog
         var breakLog = new BreakLog

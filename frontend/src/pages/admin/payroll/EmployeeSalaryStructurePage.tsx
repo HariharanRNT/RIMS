@@ -6,7 +6,9 @@ import {
   AlertCircle,
   History,
   Save,
-  CreditCard
+  CreditCard,
+  Loader2,
+  X
 } from 'lucide-react';
 
 interface EmployeeOption {
@@ -50,6 +52,11 @@ interface SalaryStructureResponseDto {
   totalEmployerContributions: number;
   estimatedNetPay: number;
   components: SalaryComponentDto[];
+}
+
+interface ToastNotification {
+  message: string;
+  type: 'success' | 'error';
 }
 
 export const EmployeeSalaryStructurePage: React.FC = () => {
@@ -111,6 +118,15 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [toast, setToast] = useState<ToastNotification | null>(null);
+
+  // Auto-dismiss toast notification after 3 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Fetch Employee Dropdown Items
   useEffect(() => {
@@ -612,13 +628,17 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
   const handleSaveSalaryStructure = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmployeeId) {
-      setErrorMsg('Please select an employee first.');
+      const msg = 'Please select an employee first.';
+      setErrorMsg(msg);
+      setToast({ message: msg, type: 'error' });
       return;
     }
 
     const ctcVal = Math.max(0, parseFloat(annualCTC) || 0);
     if (!annualCTC || ctcVal <= 0) {
-      setErrorMsg('Please enter a valid positive Annual CTC.');
+      const msg = 'Please enter a valid positive Annual CTC.';
+      setErrorMsg(msg);
+      setToast({ message: msg, type: 'error' });
       return;
     }
 
@@ -641,11 +661,15 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
       const res = await apiClient.post(`/employees/${selectedEmployeeId}/salary-structure`, payload);
 
       if (res.data.success) {
-        setSuccessMsg(`Salary structure saved successfully for ${selectedEmployee?.name || 'Employee'}.`);
+        const msg = `Salary structure updated successfully for ${selectedEmployee?.name || 'Employee'}.`;
+        setSuccessMsg(msg);
+        setToast({ message: msg, type: 'success' });
         fetchSalaryStructure(Number(selectedEmployeeId));
       }
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.message || 'Failed to save salary structure. Please try again.');
+      const msg = err.response?.data?.message || 'Failed to update salary structure. Please try again.';
+      setErrorMsg(msg);
+      setToast({ message: msg, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -667,10 +691,10 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
       </div>
 
       {/* Card 1: Employee Selection Bar */}
-      <div className="ui-card" style={{ padding: '1.25rem', background: '#ffffff', borderRadius: '14px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <div className="ui-card" style={{ padding: '1.25rem', borderRadius: '14px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.25rem', alignItems: 'center' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: '#111827', marginBottom: '0.35rem' }}>
+            <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
               Select Employee <span style={{ color: '#EF4444' }}>*</span>
             </label>
             <div style={{ position: 'relative' }}>
@@ -682,9 +706,9 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                   fontSize: '0.875rem',
                   borderRadius: '10px',
                   fontWeight: 600,
-                  color: '#111827',
-                  border: '1px solid #d1d5db',
-                  background: '#ffffff',
+                  color: 'var(--text-main)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--input)',
                 }}
                 value={selectedEmployeeId}
                 onChange={(e) => setSelectedEmployeeId(e.target.value ? Number(e.target.value) : '')}
@@ -704,8 +728,8 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
           {selectedEmployee ? (
             <div
               style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--border)',
                 borderRadius: '10px',
                 padding: '0.75rem 1rem',
                 display: 'flex',
@@ -715,19 +739,19 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
               }}
             >
               <div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827' }}>
-                  {selectedEmployee.name} <span style={{ fontSize: '0.8rem', color: '#E8873C', fontWeight: 600 }}>({selectedEmployee.employeeCode})</span>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                  {selectedEmployee.name} <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 600 }}>({selectedEmployee.employeeCode})</span>
                 </div>
-                <div style={{ fontSize: '0.775rem', color: '#64748b', marginTop: '0.15rem' }}>
+                <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
                   {selectedEmployee.departmentName || 'No Dept'} • {selectedEmployee.designationName || 'No Designation'}
                 </div>
               </div>
-              <span style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', borderRadius: '6px', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem', background: 'var(--success-bg)', color: 'var(--success-text)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px', fontWeight: 600 }}>
                 Active Profile
               </span>
             </div>
           ) : (
-            <div style={{ fontSize: '0.825rem', color: '#6b7280', fontStyle: 'italic' }}>
+            <div style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
               Select an employee to manage or create their salary structure.
             </div>
           )}
@@ -738,30 +762,30 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
       {selectedEmployeeId ? (
         <form onSubmit={handleSaveSalaryStructure} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {errorMsg && (
-            <div style={{ padding: '0.85rem 1.15rem', background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', borderRadius: '10px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ padding: '0.85rem 1.15rem', background: 'var(--danger-bg)', border: '1px solid rgba(239, 68, 68, 0.3)', color: 'var(--danger-text)', borderRadius: '10px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <AlertCircle size={18} />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div style={{ padding: '0.85rem 1.15rem', background: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46', borderRadius: '10px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ padding: '0.85rem 1.15rem', background: 'var(--success-bg)', border: '1px solid rgba(16, 185, 129, 0.3)', color: 'var(--success-text)', borderRadius: '10px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <CheckCircle size={18} />
               <span>{successMsg}</span>
             </div>
           )}
 
-          <div className="ui-card" style={{ padding: '1.5rem', background: '#ffffff', borderRadius: '14px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div className="ui-card" style={{ padding: '1.5rem', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {/* Header */}
-            <div style={{ padding: '0.75rem 1rem', background: '#fff4e6', border: '1px solid #ffe8d1', borderRadius: '10px', fontSize: '0.875rem', fontWeight: 700, color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <CreditCard size={18} style={{ color: '#E8873C' }} />
+            <div style={{ padding: '0.75rem 1rem', background: 'var(--primary-tint)', border: '1px solid rgba(232, 135, 60, 0.3)', borderRadius: '10px', fontSize: '0.875rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <CreditCard size={18} style={{ color: 'var(--primary)' }} />
               <span>Payroll & Salary Details</span>
             </div>
 
             {/* Basic CTC Fields */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: '#111827', marginBottom: '0.35rem' }}>
+                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
                   Annual CTC (₹) <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
@@ -779,20 +803,20 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: '#111827', marginBottom: '0.35rem' }}>
+                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
                   Monthly CTC (Derived)
                 </label>
                 <input
                   type="text"
                   disabled
                   className="form-input"
-                  style={{ borderRadius: '10px', fontSize: '0.875rem', fontWeight: 700, backgroundColor: '#f3f4f6', color: '#111827', width: '100%' }}
+                  style={{ borderRadius: '10px', fontSize: '0.875rem', fontWeight: 700, backgroundColor: 'var(--panel-raised)', color: 'var(--text-main)', width: '100%' }}
                   value={monthlyCTC ? `₹ ${monthlyCTC.toLocaleString('en-IN')}` : '₹ 0.00'}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: '#111827', marginBottom: '0.35rem' }}>
+                <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
                   Salary Effective From <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
@@ -807,12 +831,12 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
             </div>
 
             {/* Salary Structure Mode */}
-            <div style={{ padding: '0.85rem 1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-              <label style={{ fontWeight: 700, color: '#111827', fontSize: '0.825rem', display: 'block', marginBottom: '0.5rem' }}>
+            <div style={{ padding: '0.85rem 1rem', background: 'var(--panel-raised)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <label style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.825rem', display: 'block', marginBottom: '0.5rem' }}>
                 Salary Structure Mode
               </label>
               <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600, color: 'var(--text-main)' }}>
                   <input
                     type="radio"
                     name="salaryConfigMode"
@@ -823,7 +847,7 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                   <span>Configure Later (Basic CTC setup only)</span>
                 </label>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600, color: 'var(--text-main)' }}>
                   <input
                     type="radio"
                     name="salaryConfigMode"
@@ -839,34 +863,34 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
             {salaryConfigMode === 'ConfigureNow' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {/* Statutory Applicability Flags */}
-                <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', padding: '0.75rem 1rem', background: '#eef2ff', borderRadius: '10px', border: '1px solid #c7d2fe' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', padding: '0.75rem 1rem', background: 'var(--primary-light)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer', color: 'var(--text-main)' }}>
                     <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} />
                     <span>PF Applicable</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer', color: 'var(--text-main)' }}>
                     <input type="checkbox" checked={esiApplicable} onChange={(e) => setEsiApplicable(e.target.checked)} />
                     <span>ESI Applicable</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer', color: 'var(--text-main)' }}>
                     <input type="checkbox" checked={ptApplicable} onChange={(e) => setPtApplicable(e.target.checked)} />
                     <span>Professional Tax</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', fontWeight: 600, cursor: 'pointer', color: 'var(--text-main)' }}>
                     <input type="checkbox" checked={tdsApplicable} onChange={(e) => setTdsApplicable(e.target.checked)} />
                     <span>TDS Applicable</span>
                   </label>
                 </div>
 
                 {/* Earnings Configuration Table */}
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                  <div style={{ background: '#f8fafc', padding: '0.6rem 1rem', fontWeight: 700, fontSize: '0.85rem', color: '#111827', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
+                  <div style={{ background: 'var(--panel-raised)', padding: '0.6rem 1rem', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)', borderBottom: '1px solid var(--border)' }}>
                     💵 Earnings Configuration
                   </div>
                   <div style={{ padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {/* Basic Salary */}
                     <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 600 }}>Basic Salary</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Basic Salary</span>
                       <select className="form-select" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={basicCalcType} onChange={(e) => setBasicCalcType(Number(e.target.value))}>
                         <option value={0}>Percentage (%)</option>
                         <option value={1}>Fixed Amount</option>
@@ -876,13 +900,13 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                       ) : (
                         <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={basicFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setBasicFixed)} placeholder="₹" />
                       )}
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Base: Monthly CTC</span>
-                      <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.basic.toLocaleString('en-IN')}</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Base: Monthly CTC</span>
+                      <span style={{ fontWeight: 700, color: 'var(--success-text)', textAlign: 'right' }}>₹ {previewCalc.basic.toLocaleString('en-IN')}</span>
                     </div>
 
                     {/* HRA */}
                     <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 600 }}>HRA</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>HRA</span>
                       <select className="form-select" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={hraCalcType} onChange={(e) => setHraCalcType(Number(e.target.value))}>
                         <option value={0}>Percentage (%)</option>
                         <option value={1}>Fixed Amount</option>
@@ -900,12 +924,12 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                       ) : (
                         <span />
                       )}
-                      <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.hra.toLocaleString('en-IN')}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--success-text)', textAlign: 'right' }}>₹ {previewCalc.hra.toLocaleString('en-IN')}</span>
                     </div>
 
                     {/* Conveyance */}
                     <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 600 }}>Conveyance</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Conveyance</span>
                       <select className="form-select" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={convCalcType} onChange={(e) => setConvCalcType(Number(e.target.value))}>
                         <option value={0}>Percentage (%)</option>
                         <option value={1}>Fixed Amount</option>
@@ -916,12 +940,12 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                         <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={convFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setConvFixed)} placeholder="₹" />
                       )}
                       <span />
-                      <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.conv.toLocaleString('en-IN')}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--success-text)', textAlign: 'right' }}>₹ {previewCalc.conv.toLocaleString('en-IN')}</span>
                     </div>
 
                     {/* Medical Allowance */}
                     <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 600 }}>Medical Allowance</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Medical Allowance</span>
                       <select className="form-select" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={medCalcType} onChange={(e) => setMedCalcType(Number(e.target.value))}>
                         <option value={0}>Percentage (%)</option>
                         <option value={1}>Fixed Amount</option>
@@ -932,35 +956,35 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                         <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={medFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setMedFixed)} placeholder="₹" />
                       )}
                       <span />
-                      <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.med.toLocaleString('en-IN')}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--success-text)', textAlign: 'right' }}>₹ {previewCalc.med.toLocaleString('en-IN')}</span>
                     </div>
 
                     {/* Arrears */}
                     <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 600 }}>Arrears</span>
-                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Fixed Amount</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Arrears</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fixed Amount</span>
                       <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={arrearsFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setArrearsFixed)} placeholder="₹" />
                       <span />
-                      <span style={{ fontWeight: 700, color: '#059669', textAlign: 'right' }}>₹ {previewCalc.arrears.toLocaleString('en-IN')}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--success-text)', textAlign: 'right' }}>₹ {previewCalc.arrears.toLocaleString('en-IN')}</span>
                     </div>
 
                     {/* Special Allowance */}
                     <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 600 }}>Special Allowance</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Special Allowance</span>
                       <select className="form-select" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={specialCalcType} onChange={(e) => setSpecialCalcType(Number(e.target.value))}>
                         <option value={2}>Auto Balance</option>
                         <option value={0}>Percentage (%)</option>
                         <option value={1}>Fixed Amount</option>
                       </select>
                       {specialCalcType === 2 ? (
-                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic' }}>Auto calculated</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Auto calculated</span>
                       ) : specialCalcType === 0 ? (
                         <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={specialPct} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setSpecialPct)} placeholder="%" />
                       ) : (
                         <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={specialFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setSpecialFixed)} placeholder="₹" />
                       )}
                       <span />
-                      <span style={{ fontWeight: 700, color: previewCalc.special < 0 ? '#ef4444' : '#059669', textAlign: 'right' }}>
+                      <span style={{ fontWeight: 700, color: previewCalc.special < 0 ? 'var(--danger-text)' : 'var(--success-text)', textAlign: 'right' }}>
                         ₹ {previewCalc.special.toLocaleString('en-IN')}
                       </span>
                     </div>
@@ -968,14 +992,14 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                 </div>
 
                 {/* Employee Deductions Configuration Table */}
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                  <div style={{ background: '#f8fafc', padding: '0.6rem 1rem', fontWeight: 700, fontSize: '0.85rem', color: '#111827', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
+                  <div style={{ background: 'var(--panel-raised)', padding: '0.6rem 1rem', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)', borderBottom: '1px solid var(--border)' }}>
                     🔻 Employee Deductions Configuration
                   </div>
                   <div style={{ padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {pfApplicable && (
                       <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                        <span style={{ fontWeight: 600 }}>Employee PF</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Employee PF</span>
                         <select className="form-select" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={pfCalcType} onChange={(e) => setPfCalcType(Number(e.target.value))}>
                           <option value={0}>Percentage (%)</option>
                           <option value={1}>Fixed Amount</option>
@@ -993,13 +1017,13 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                         ) : (
                           <span />
                         )}
-                        <span style={{ fontWeight: 700, color: '#dc2626', textAlign: 'right' }}>₹ {previewCalc.pf.toLocaleString('en-IN')}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--danger-text)', textAlign: 'right' }}>₹ {previewCalc.pf.toLocaleString('en-IN')}</span>
                       </div>
                     )}
 
                     {esiApplicable && (
                       <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                        <span style={{ fontWeight: 600 }}>Employee ESI</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Employee ESI</span>
                         <select className="form-select" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={esiCalcType} onChange={(e) => setEsiCalcType(Number(e.target.value))}>
                           <option value={0}>Percentage (%)</option>
                           <option value={1}>Fixed Amount</option>
@@ -1010,27 +1034,27 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                           <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={esiFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setEsiFixed)} placeholder="₹" />
                         )}
                         <span />
-                        <span style={{ fontWeight: 700, color: '#dc2626', textAlign: 'right' }}>₹ {previewCalc.esi.toLocaleString('en-IN')}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--danger-text)', textAlign: 'right' }}>₹ {previewCalc.esi.toLocaleString('en-IN')}</span>
                       </div>
                     )}
 
                     {ptApplicable && (
                       <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                        <span style={{ fontWeight: 600 }}>Professional Tax</span>
-                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Fixed Amount</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Professional Tax</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fixed Amount</span>
                         <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={ptFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setPtFixed)} placeholder="₹" />
                         <span />
-                        <span style={{ fontWeight: 700, color: '#dc2626', textAlign: 'right' }}>₹ {previewCalc.pt.toLocaleString('en-IN')}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--danger-text)', textAlign: 'right' }}>₹ {previewCalc.pt.toLocaleString('en-IN')}</span>
                       </div>
                     )}
 
                     {tdsApplicable && (
                       <div style={{ display: 'grid', gridTemplateColumns: '160px 140px 110px 110px 1fr', gap: '0.6rem', alignItems: 'center', fontSize: '0.85rem' }}>
-                        <span style={{ fontWeight: 600 }}>TDS</span>
-                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Fixed Amount</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>TDS</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fixed Amount</span>
                         <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={tdsFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setTdsFixed)} placeholder="₹" />
                         <span />
-                        <span style={{ fontWeight: 700, color: '#dc2626', textAlign: 'right' }}>₹ {previewCalc.tds.toLocaleString('en-IN')}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--danger-text)', textAlign: 'right' }}>₹ {previewCalc.tds.toLocaleString('en-IN')}</span>
                       </div>
                     )}
 
@@ -1043,35 +1067,35 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                         onChange={(e) => setOtherDeductionName(e.target.value)}
                         placeholder="Other Deduction Name"
                       />
-                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Fixed Amount</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fixed Amount</span>
                       <input type="number" step="any" min={0} className="form-input" style={{ padding: '0.35rem', fontSize: '0.8rem' }} value={otherDeductionFixed} onKeyDown={handleKeyDownNonNegative} onChange={handleNonNegativeChange(setOtherDeductionFixed)} placeholder="₹" />
                       <span />
-                      <span style={{ fontWeight: 700, color: '#dc2626', textAlign: 'right' }}>₹ {previewCalc.other.toLocaleString('en-IN')}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--danger-text)', textAlign: 'right' }}>₹ {previewCalc.other.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Live Salary Preview Cards */}
-                <div style={{ padding: '1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Calculator size={16} style={{ color: '#E8873C' }} />
+                <div style={{ padding: '1rem', background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Calculator size={16} style={{ color: 'var(--primary)' }} />
                     <span>Live Salary Structure Preview</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                    <div style={{ padding: '0.85rem', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', textAlign: 'center' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 600, display: 'block' }}>Total Gross Earnings</span>
-                      <span style={{ fontSize: '1.15rem', color: '#065f46', fontWeight: 800 }}>₹ {previewCalc.gross.toLocaleString('en-IN')}</span>
+                    <div style={{ padding: '0.85rem', background: 'var(--success-bg)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--success-text)', fontWeight: 600, display: 'block' }}>Total Gross Earnings</span>
+                      <span style={{ fontSize: '1.15rem', color: 'var(--success-text)', fontWeight: 800 }}>₹ {previewCalc.gross.toLocaleString('en-IN')}</span>
                     </div>
 
-                    <div style={{ padding: '0.85rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', textAlign: 'center' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#b91c1c', fontWeight: 600, display: 'block' }}>Total Deductions</span>
-                      <span style={{ fontSize: '1.15rem', color: '#991b1b', fontWeight: 800 }}>₹ {previewCalc.deductions.toLocaleString('en-IN')}</span>
+                    <div style={{ padding: '0.85rem', background: 'var(--danger-bg)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--danger-text)', fontWeight: 600, display: 'block' }}>Total Deductions</span>
+                      <span style={{ fontSize: '1.15rem', color: 'var(--danger-text)', fontWeight: 800 }}>₹ {previewCalc.deductions.toLocaleString('en-IN')}</span>
                     </div>
 
-                    <div style={{ padding: '0.85rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', textAlign: 'center' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 600, display: 'block' }}>Estimated Net Pay</span>
-                      <span style={{ fontSize: '1.15rem', color: '#1e40af', fontWeight: 800 }}>₹ {previewCalc.netPay.toLocaleString('en-IN')}</span>
+                    <div style={{ padding: '0.85rem', background: 'var(--primary-tint)', border: '1px solid rgba(232, 135, 60, 0.3)', borderRadius: '10px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600, display: 'block' }}>Estimated Net Pay</span>
+                      <span style={{ fontSize: '1.15rem', color: 'var(--primary)', fontWeight: 800 }}>₹ {previewCalc.netPay.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
                 </div>
@@ -1079,14 +1103,30 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
             )}
 
             {/* Save Button Row */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
               <button
                 type="submit"
                 disabled={saving}
                 className="btn btn-primary"
-                style={{ padding: '0.65rem 1.75rem', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                style={{
+                  padding: '0.65rem 1.75rem',
+                  borderRadius: '10px',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving ? 0.75 : 1,
+                  transition: 'all 0.2s ease',
+                  transform: saving ? 'scale(0.98)' : 'none'
+                }}
               >
-                <Save size={18} />
+                {saving ? (
+                  <Loader2 size={18} className="spin-animation" />
+                ) : (
+                  <Save size={18} />
+                )}
                 <span>{saving ? 'Saving Structure...' : 'Save Salary Structure'}</span>
               </button>
             </div>
@@ -1096,18 +1136,18 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
 
       {/* Revision History Card */}
       {selectedEmployeeId && history.length > 0 && (
-        <div className="ui-card" style={{ padding: '1.5rem', background: '#ffffff', borderRadius: '14px', border: '1px solid #e5e7eb' }}>
+        <div className="ui-card" style={{ padding: '1.5rem', borderRadius: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-            <History size={20} style={{ color: '#E8873C' }} />
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
+            <History size={20} style={{ color: 'var(--primary)' }} />
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
               Salary Revision History
             </h3>
           </div>
 
           <div className="table-responsive">
-            <table className="table" style={{ width: '100%', fontSize: '0.85rem' }}>
+            <table className="data-table" style={{ width: '100%', fontSize: '0.85rem' }}>
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                <tr>
                   <th style={{ padding: '0.65rem 1rem' }}>Effective From</th>
                   <th style={{ padding: '0.65rem 1rem' }}>Annual CTC</th>
                   <th style={{ padding: '0.65rem 1rem' }}>Monthly CTC</th>
@@ -1118,19 +1158,19 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
               </thead>
               <tbody>
                 {history.map((h) => (
-                  <tr key={h.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <tr key={h.id}>
                     <td style={{ padding: '0.65rem 1rem', fontWeight: 600 }}>{h.effectiveFrom ? h.effectiveFrom.split('T')[0] : 'N/A'}</td>
                     <td style={{ padding: '0.65rem 1rem' }}>₹ {h.annualCTC ? h.annualCTC.toLocaleString('en-IN') : 0}</td>
                     <td style={{ padding: '0.65rem 1rem' }}>₹ {h.monthlyCTC ? h.monthlyCTC.toLocaleString('en-IN') : 0}</td>
-                    <td style={{ padding: '0.65rem 1rem', color: '#059669', fontWeight: 600 }}>₹ {h.grossEarnings ? h.grossEarnings.toLocaleString('en-IN') : 0}</td>
-                    <td style={{ padding: '0.65rem 1rem', color: '#1d4ed8', fontWeight: 700 }}>₹ {h.estimatedNetPay ? h.estimatedNetPay.toLocaleString('en-IN') : 0}</td>
+                    <td style={{ padding: '0.65rem 1rem', color: 'var(--success-text)', fontWeight: 600 }}>₹ {h.grossEarnings ? h.grossEarnings.toLocaleString('en-IN') : 0}</td>
+                    <td style={{ padding: '0.65rem 1rem', color: 'var(--primary)', fontWeight: 700 }}>₹ {h.estimatedNetPay ? h.estimatedNetPay.toLocaleString('en-IN') : 0}</td>
                     <td style={{ padding: '0.65rem 1rem' }}>
                       {h.isActive ? (
-                        <span style={{ padding: '0.2rem 0.5rem', background: '#d1fae5', color: '#065f46', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                        <span style={{ padding: '0.2rem 0.5rem', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
                           Active Current
                         </span>
                       ) : (
-                        <span style={{ padding: '0.2rem 0.5rem', background: '#f3f4f6', color: '#6b7280', borderRadius: '6px', fontSize: '0.75rem' }}>
+                        <span style={{ padding: '0.2rem 0.5rem', background: 'var(--panel-raised)', color: 'var(--text-secondary)', borderRadius: '6px', fontSize: '0.75rem' }}>
                           Historical
                         </span>
                       )}
@@ -1139,6 +1179,28 @@ export const EmployeeSalaryStructurePage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Modern Toast / Snackbar Notification */}
+      {toast && (
+        <div className="toast-container" style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 1100 }}>
+          <div className={`toast toast-${toast.type}`} style={{ minWidth: '300px', maxWidth: '420px', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1.15rem' }}>
+            {toast.type === 'success' ? (
+              <CheckCircle size={18} style={{ color: 'var(--success)', flexShrink: 0 }} />
+            ) : (
+              <AlertCircle size={18} style={{ color: 'var(--danger)', flexShrink: 0 }} />
+            )}
+            <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginLeft: '0.5rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}
+              aria-label="Close notification"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       )}

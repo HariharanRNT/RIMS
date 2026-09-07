@@ -120,22 +120,22 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
           padding: '0.55rem 0.85rem',
           fontSize: '0.8125rem',
           fontFamily: 'inherit',
-          background: '#ffffff',
+          background: 'var(--input)',
           border: error
             ? '1px solid var(--danger)'
             : isOpen
-            ? '1px solid #E8873C'
-            : '1px solid #e5e7eb',
+            ? '1px solid var(--primary)'
+            : '1px solid var(--border)',
           borderRadius: 'var(--radius-sm)',
-          color: selectedOption ? (selectedOption.isAction ? '#E8873C' : '#111827') : '#9ca3af',
+          color: selectedOption ? (selectedOption.isAction ? 'var(--primary)' : 'var(--text-main)') : 'var(--text-faint)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.55 : 1,
           outline: 'none',
-          boxShadow: isOpen ? '0 0 0 3px rgba(232, 135, 60, 0.15)' : '0 1px 2px rgba(0, 0, 0, 0.04)',
-          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+          boxShadow: isOpen ? 'var(--shadow-glow-primary)' : 'var(--shadow-xs)',
+          transition: 'border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease',
         }}
       >
         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -144,7 +144,7 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
         <ChevronDown
           size={16}
           style={{
-            color: isOpen ? '#E8873C' : '#6b7280',
+            color: isOpen ? 'var(--primary)' : 'var(--text-muted)',
             transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.2s ease, color 0.15s ease',
             flexShrink: 0,
@@ -164,10 +164,10 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
               left: `${coords.left}px`,
               width: `${coords.width}px`,
               zIndex: 99999,
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
               borderRadius: '12px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              boxShadow: 'var(--shadow-lg)',
               maxHeight: '280px',
               display: 'flex',
               flexDirection: 'column',
@@ -176,7 +176,7 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
             }}
           >
             {searchable && (
-              <div style={{ padding: '0.35rem 0.5rem 0.5rem', borderBottom: '1px solid #f0f0f0' }}>
+              <div style={{ padding: '0.35rem 0.5rem 0.5rem', borderBottom: '1px solid var(--border-soft)' }}>
                 <input
                   type="text"
                   placeholder="Type to filter..."
@@ -187,10 +187,10 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
                     width: '100%',
                     padding: '0.4rem 0.6rem',
                     fontSize: '0.785rem',
-                    background: '#f9fafb',
-                    border: '1px solid #e5e7eb',
+                    background: 'var(--input)',
+                    border: '1px solid var(--border)',
                     borderRadius: '6px',
-                    color: '#111827',
+                    color: 'var(--text-main)',
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
@@ -200,7 +200,7 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
 
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {filteredOptions.length === 0 ? (
-                <div style={{ padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#9ca3af' }}>
+                <div style={{ padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                   No matching options
                 </div>
               ) : (
@@ -215,13 +215,13 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
                         padding: '0.65rem 0.85rem',
                         fontSize: '0.8125rem',
                         color: isAction
-                          ? '#E8873C'
+                          ? 'var(--primary)'
                           : isSelected
-                          ? '#E8873C'
-                          : '#374151',
-                        backgroundColor: isSelected ? '#fff4e6' : 'transparent',
-                        borderLeft: isSelected ? '3px solid #E8873C' : '3px solid transparent',
-                        borderTop: opt.dividerAbove ? '1px solid #f0f0f0' : 'none',
+                          ? 'var(--primary)'
+                          : 'var(--text-main)',
+                        backgroundColor: isSelected ? 'var(--primary-tint)' : 'transparent',
+                        borderLeft: isSelected ? '3px solid var(--primary)' : '3px solid transparent',
+                        borderTop: opt.dividerAbove ? '1px solid var(--border-soft)' : 'none',
                         marginTop: opt.dividerAbove ? '0.35rem' : 0,
                         paddingTop: opt.dividerAbove ? '0.65rem' : '0.65rem',
                         cursor: 'pointer',
@@ -233,21 +233,21 @@ export const GlassSelect: React.FC<GlassSelectProps> = ({
                       }}
                       onMouseEnter={(e) => {
                         if (!isSelected) {
-                          e.currentTarget.style.backgroundColor = '#f3f4f6';
-                          e.currentTarget.style.color = isAction ? '#d4782f' : '#111827';
+                          e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                          e.currentTarget.style.color = isAction ? 'var(--primary)' : 'var(--text-main)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!isSelected) {
                           e.currentTarget.style.backgroundColor = 'transparent';
                           e.currentTarget.style.color = isAction
-                            ? '#E8873C'
-                            : '#374151';
+                            ? 'var(--primary)'
+                            : 'var(--text-main)';
                         }
                       }}
                     >
                       <span>{opt.label}</span>
-                      {isSelected && <Check size={14} style={{ color: '#E8873C', marginLeft: '0.5rem' }} />}
+                      {isSelected && <Check size={14} style={{ color: 'var(--primary)', marginLeft: '0.5rem' }} />}
                     </div>
                   );
                 })

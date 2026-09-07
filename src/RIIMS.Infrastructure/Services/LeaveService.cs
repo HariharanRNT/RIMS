@@ -1,8 +1,10 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using RIIMS.Application.DTOs.Leave;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
 using RIIMS.Domain.Enums;
+using Microsoft.Extensions.Configuration;
 using RIIMS.Infrastructure.Data;
 
 namespace RIIMS.Infrastructure.Services;
@@ -11,11 +13,13 @@ public class LeaveService : ILeaveService
 {
     private readonly RiimsDbContext _context;
     private readonly IEmailService _emailService;
+    private readonly IConfiguration? _configuration;
 
-    public LeaveService(RiimsDbContext context, IEmailService emailService)
+    public LeaveService(RiimsDbContext context, IEmailService emailService, IConfiguration? configuration = null)
     {
         _context = context;
         _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task<LeaveRequestDto> SubmitLeaveAsync(int employeeId, CreateLeaveRequest request)
@@ -80,24 +84,37 @@ public class LeaveService : ILeaveService
 
             if (emp == null || leaveType == null) return;
 
-            var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+            var adminRoles = await _context.Roles
+                .Where(r => r.Name == "Admin" || r.Name == "Super Admin")
+                .Select(r => r.Id)
+                .ToListAsync();
+
             var adminEmails = new List<string>();
-            if (adminRole != null)
+            if (adminRoles.Any())
             {
                 var adminUserIds = await _context.UserRoles
-                    .Where(ur => ur.RoleId == adminRole.Id)
+                    .Where(ur => adminRoles.Contains(ur.RoleId))
                     .Select(ur => ur.UserId)
                     .ToListAsync();
 
                 adminEmails = await _context.Users
-                    .Where(u => adminUserIds.Contains(u.Id) && !string.IsNullOrEmpty(u.Email))
+                    .Where(u => adminUserIds.Contains(u.Id) && u.IsActive && !string.IsNullOrEmpty(u.Email))
                     .Select(u => u.Email!)
                     .ToListAsync();
             }
 
-            if (adminEmails.Count == 0) adminEmails.Add("admin@riims.local");
+            // Remove any local dummy domains
+            adminEmails = adminEmails
+                .Where(e => !e.EndsWith("@riims.local", StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
-            if (emp.ReportingPerson != null && !string.IsNullOrEmpty(emp.ReportingPerson.Email) && !adminEmails.Contains(emp.ReportingPerson.Email))
+            var defaultAdminEmail = _configuration?["AdminEmail"] ?? "anitha@reshandthosh.com";
+            if (!string.IsNullOrWhiteSpace(defaultAdminEmail) && !adminEmails.Contains(defaultAdminEmail, StringComparer.OrdinalIgnoreCase))
+            {
+                adminEmails.Add(defaultAdminEmail);
+            }
+
+            if (emp.ReportingPerson != null && !string.IsNullOrEmpty(emp.ReportingPerson.Email) && !adminEmails.Contains(emp.ReportingPerson.Email, StringComparer.OrdinalIgnoreCase))
             {
                 adminEmails.Add(emp.ReportingPerson.Email);
             }
@@ -121,7 +138,7 @@ public class LeaveService : ILeaveService
                     </div>
 
                     <div style=""text-align: center; margin-top: 30px;"">
-                        <a href=""http://localhost:3000/admin/approvals"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Review & Approve Request</a>
+                        <a href=""{(_configuration?["AppUrl"] ?? "http://10.60.121.234:99").TrimEnd('/')}/admin/approvals"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Review & Approve Request</a>
                     </div>
                 </div>
                 <div style=""background: #f1f5f9; padding: 15px; text-align: center; font-size: 12px; color: #64748b;"">
@@ -190,16 +207,7 @@ public class LeaveService : ILeaveService
         await _context.SaveChangesAsync();
 
         // Send email notification
-        try
-        {
-            await _emailService.SendEmailAsync(
-                leave.Employee.Email,
-                "RIMS - Leave Request Approved",
-                $"Hello {leave.Employee.Name},\n\nYour {leave.LeaveType.Name} request from {leave.FromDate:yyyy-MM-dd} to {leave.ToDate:yyyy-MM-dd} has been APPROVED.\n\nRegards,\nRIMS Approval Engine");
-        }
-        catch
-        {
-        }
+        await SendLeaveStatusNotificationAsync(leave, isApproved: true);
     }
 
     public async Task RejectLeaveAsync(int leaveRequestId, int approverEmployeeId)
@@ -219,12 +227,162 @@ public class LeaveService : ILeaveService
         await _context.SaveChangesAsync();
 
         // Send email notification
+        await SendLeaveStatusNotificationAsync(leave, isApproved: false);
+    }
+
+    private async Task<string> FormatLeaveDurationAsync(LeaveRequest leave)
+    {
+        if (leave.LeaveDuration == LeaveDuration.HalfDay)
+        {
+            var halfType = leave.HalfDayType == HalfDayType.SecondHalf ? "Second Half" : "First Half";
+            return $"0.5 Day ({halfType})";
+        }
+
+        var days = await CalculateLeaveDaysAsync(leave.FromDate, leave.ToDate, leave.EmployeeId);
+        if (days <= 0)
+        {
+            days = (leave.ToDate.Date - leave.FromDate.Date).Days + 1;
+        }
+
+        return $"{days} {(days == 1 ? "Day" : "Days")}";
+    }
+
+    private async Task SendLeaveStatusNotificationAsync(LeaveRequest leave, bool isApproved)
+    {
         try
         {
-            await _emailService.SendEmailAsync(
-                leave.Employee.Email,
-                "RIMS - Leave Request Rejected",
-                $"Hello {leave.Employee.Name},\n\nYour {leave.LeaveType.Name} request from {leave.FromDate:yyyy-MM-dd} to {leave.ToDate:yyyy-MM-dd} has been REJECTED.\n\nRegards,\nRIMS Approval Engine");
+            if (string.IsNullOrWhiteSpace(leave.Employee?.Email))
+                return;
+
+            var employeeName = WebUtility.HtmlEncode(leave.Employee.Name ?? "Employee");
+            var leaveTypeName = WebUtility.HtmlEncode(leave.LeaveType?.Name ?? "Leave");
+            var fromDateStr = leave.FromDate.ToString("yyyy-MM-dd");
+            var toDateStr = leave.ToDate.ToString("yyyy-MM-dd");
+            var durationText = await FormatLeaveDurationAsync(leave);
+            var reasonText = !string.IsNullOrWhiteSpace(leave.Reason) ? WebUtility.HtmlEncode(leave.Reason) : "Not specified";
+
+            var statusText = isApproved ? "APPROVED" : "REJECTED";
+            var subject = isApproved
+                ? $"✅ Leave Request Approved — {leaveTypeName}"
+                : $"❌ Leave Request Rejected — {leaveTypeName}";
+
+            var headerGradient = isApproved
+                ? "background: #16a34a; background-image: linear-gradient(135deg, #10b981 0%, #059669 100%);"
+                : "background: #dc2626; background-image: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);";
+
+            var statusBadge = isApproved
+                ? @"<span style=""display: inline-block; padding: 4px 14px; font-size: 12px; font-weight: 700; color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; border-radius: 9999px; letter-spacing: 0.5px;"">APPROVED</span>"
+                : @"<span style=""display: inline-block; padding: 4px 14px; font-size: 12px; font-weight: 700; color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; border-radius: 9999px; letter-spacing: 0.5px;"">REJECTED</span>";
+
+            var introMessage = isApproved
+                ? @"Your leave request has been <strong style=""color: #15803d;"">APPROVED</strong>. Below is the approved schedule:"
+                : @"Your leave request has been <strong style=""color: #b91c1c;"">REJECTED</strong>. Below is the summary of your request:";
+
+            var closingNote = isApproved
+                ? @"<div style=""background-color: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 6px; padding: 14px 16px; margin: 20px 0 24px 0;"">
+                    <p style=""margin: 0; font-size: 13px; color: #166534; line-height: 1.5;"">
+                        <strong>📌 Next Steps:</strong> Please ensure that your pending responsibilities are handed over and inform your team about your planned absence.
+                    </p>
+                   </div>"
+                : @"<div style=""background-color: #fef2f2; border-left: 4px solid #dc2626; border-radius: 6px; padding: 14px 16px; margin: 20px 0 24px 0;"">
+                    <p style=""margin: 0; font-size: 13px; color: #991b1b; line-height: 1.5;"">
+                        <strong>📌 Next Steps:</strong> If you have questions or require further clarification regarding this decision, please contact your reporting manager or the HR department.
+                    </p>
+                   </div>";
+
+            var reasonRow = !isApproved
+                ? $@"<tr>
+                        <td style=""padding: 11px 16px; color: #64748b; font-size: 13px; font-weight: 600; width: 120px; border-top: 1px solid #e2e8f0; vertical-align: top;"">Reason</td>
+                        <td style=""padding: 11px 16px; color: #334155; font-size: 13px; font-style: italic; border-top: 1px solid #e2e8f0;"">{reasonText}</td>
+                    </tr>"
+                : string.Empty;
+
+            var htmlBody = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>{subject}</title>
+</head>
+<body style=""margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; color: #1e293b;"">
+    <table role=""presentation"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""100%"" style=""background-color: #f8fafc; padding: 32px 16px;"">
+        <tr>
+            <td align=""center"">
+                <table role=""presentation"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""100%"" style=""max-width: 580px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);"">
+                    <!-- Header -->
+                    <tr>
+                        <td style=""{headerGradient} padding: 24px 30px; text-align: center; color: #ffffff;"">
+                            <h1 style=""margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.2px;"">
+                                Leave Request {statusText}
+                            </h1>
+                            <p style=""margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;"">
+                                RIMS Leave Management System
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                        <td style=""padding: 28px 30px;"">
+                            <p style=""margin: 0 0 12px 0; font-size: 15px; color: #1e293b; font-weight: 600;"">
+                                Hello {employeeName},
+                            </p>
+                            <p style=""margin: 0 0 20px 0; font-size: 14px; color: #475569; line-height: 1.5;"">
+                                {introMessage}
+                            </p>
+
+                            <!-- Structured Summary Block -->
+                            <table role=""presentation"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""100%"" style=""background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; border-collapse: collapse; margin-bottom: 20px;"">
+                                <tr>
+                                    <td style=""padding: 11px 16px; color: #64748b; font-size: 13px; font-weight: 600; width: 120px;"">Leave Type</td>
+                                    <td style=""padding: 11px 16px; color: #1e293b; font-size: 13px; font-weight: 600;"">{leaveTypeName}</td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 11px 16px; color: #64748b; font-size: 13px; font-weight: 600; border-top: 1px solid #e2e8f0;"">From</td>
+                                    <td style=""padding: 11px 16px; color: #1e293b; font-size: 13px; font-weight: 600; border-top: 1px solid #e2e8f0;"">{fromDateStr}</td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 11px 16px; color: #64748b; font-size: 13px; font-weight: 600; border-top: 1px solid #e2e8f0;"">To</td>
+                                    <td style=""padding: 11px 16px; color: #1e293b; font-size: 13px; font-weight: 600; border-top: 1px solid #e2e8f0;"">{toDateStr}</td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 11px 16px; color: #64748b; font-size: 13px; font-weight: 600; border-top: 1px solid #e2e8f0;"">Duration</td>
+                                    <td style=""padding: 11px 16px; color: #1e293b; font-size: 13px; font-weight: 600; border-top: 1px solid #e2e8f0;"">{durationText}</td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 11px 16px; color: #64748b; font-size: 13px; font-weight: 600; border-top: 1px solid #e2e8f0;"">Status</td>
+                                    <td style=""padding: 11px 16px; border-top: 1px solid #e2e8f0;"">{statusBadge}</td>
+                                </tr>
+                                {reasonRow}
+                            </table>
+
+                            <!-- Closing Note -->
+                            {closingNote}
+
+                            <!-- Sign-off -->
+                            <div style=""margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 14px; color: #475569;"">
+                                <p style=""margin: 0 0 4px 0;"">Regards,</p>
+                                <p style=""margin: 0; font-weight: 700; color: #1e293b; font-size: 14px;"">RIMS Approval Engine</p>
+                                <p style=""margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;"">Resource &amp; Information Management System</p>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style=""background-color: #f1f5f9; padding: 14px 20px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;"">
+                            This is an automated notification from RIMS. Please do not reply directly to this email.
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+
+            await _emailService.SendEmailAsync(leave.Employee.Email, subject, htmlBody);
         }
         catch
         {

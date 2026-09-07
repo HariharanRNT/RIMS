@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileSpreadsheet,
   Download,
   AlertCircle,
   RefreshCw,
-  Search
+  Search,
+  Calendar,
+  Lock
 } from 'lucide-react';
 import {
   monthlyEmployeeReportApi
 } from '../../../api/monthlyEmployeeReportApi';
 import type { MonthlyEmployeePayrollReportItem } from '../../../api/monthlyEmployeeReportApi';
+import {
+  attendanceCalendarApi
+} from '../../../api/attendanceCalendarApi';
+import type { MonthAccessValidationDto } from '../../../api/attendanceCalendarApi';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { Pagination } from '../../../components/ui/Pagination';
 
@@ -24,6 +31,10 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const debouncedSearch = useDebounce(searchQuery, 350);
+
+  // Access validation state
+  const [accessValidation, setAccessValidation] = useState<MonthAccessValidationDto | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState<boolean>(false);
 
   // Pagination State
   const [page, setPage] = useState<number>(1);
@@ -48,7 +59,48 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
 
   const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
 
-  const fetchReport = async () => {
+  const checkAccessValidation = async () => {
+    setCheckingAccess(true);
+    try {
+      const data = await attendanceCalendarApi.getAccessValidation(selectedYear, selectedMonth);
+      setAccessValidation(data);
+      return data;
+    } catch {
+      const now = new Date();
+      const currYear = now.getFullYear();
+      const currMonth = now.getMonth() + 1;
+      const isEnded = currYear > selectedYear || (currYear === selectedYear && currMonth > selectedMonth);
+      const fallback: MonthAccessValidationDto = {
+        year: selectedYear,
+        month: selectedMonth,
+        monthName: months.find(m => m.id === selectedMonth)?.name || `Month ${selectedMonth}`,
+        isMonthEnded: isEnded,
+        nextYear: selectedMonth === 12 ? selectedYear + 1 : selectedYear,
+        nextMonth: selectedMonth === 12 ? 1 : selectedMonth + 1,
+        nextMonthName: months.find(m => m.id === (selectedMonth === 12 ? 1 : selectedMonth + 1))?.name || '',
+        isNextMonthPublished: false,
+        canProcessPayroll: false,
+        canGenerateReport: false,
+        reasonMessage: !isEnded
+          ? 'Generating the monthly employee report is disabled because the selected month has not completely ended.'
+          : "The next month's Monthly Attendance Calendar must be published before generating the report."
+      };
+      setAccessValidation(fallback);
+      return fallback;
+    } finally {
+      setCheckingAccess(false);
+    }
+  };
+
+  const fetchReport = async (validation?: MonthAccessValidationDto | null) => {
+    const currentValidation = validation !== undefined ? validation : accessValidation;
+    if (currentValidation && !currentValidation.canGenerateReport) {
+      setReportData(null);
+      setTotalCount(0);
+      setTotalPages(0);
+      return;
+    }
+
     setLoading(true);
     setErrorMessage(null);
     try {
@@ -92,8 +144,24 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
   }, [selectedMonth, selectedYear, debouncedSearch]);
 
   useEffect(() => {
-    fetchReport();
-  }, [selectedMonth, selectedYear, page, pageSize, debouncedSearch]);
+    const runValidationAndFetch = async () => {
+      const val = await checkAccessValidation();
+      if (val && val.canGenerateReport) {
+        fetchReport(val);
+      } else {
+        setReportData(null);
+        setTotalCount(0);
+        setTotalPages(0);
+      }
+    };
+    runValidationAndFetch();
+  }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    if (accessValidation?.canGenerateReport) {
+      fetchReport();
+    }
+  }, [page, pageSize, debouncedSearch]);
 
   const handleGenerateReport = () => {
     fetchReport();
@@ -144,8 +212,9 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
   // const totalLateLoginsSum = reportData ? reportData.reduce((acc, curr) => acc + curr.lateLoginCount, 0) : 0;
   // const totalLopDaysSum = reportData ? reportData.reduce((acc, curr) => acc + curr.totalLOPDays, 0) : 0;
   // const totalLopAmountSum = reportData ? reportData.reduce((acc, curr) => acc + curr.lopAmount, 0) : 0;
-  // const totalDeductionsSum = reportData ? reportData.reduce((acc, curr) => acc + curr.totalDeduction, 0) : 0;
   // const totalFinalSalarySum = reportData ? reportData.reduce((acc, curr) => acc + curr.finalSalary, 0) : 0;
+
+  const canGenerate = accessValidation ? accessValidation.canGenerateReport : false;
 
   return (
     <div>
@@ -158,6 +227,51 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* Access Rule Validation Warning Alert */}
+      {accessValidation && !accessValidation.canGenerateReport && (
+        <div
+          style={{
+            background: 'var(--warning-bg, rgba(245, 158, 11, 0.12))',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            color: 'var(--warning-text, #d97706)',
+            padding: '0.9rem 1.2rem',
+            borderRadius: 'var(--radius-md, 8px)',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.75rem'
+          }}
+        >
+          <AlertCircle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ flex: 1, fontSize: '0.875rem' }}>
+            <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+              Report Generation Disabled for {monthName} {selectedYear}
+            </div>
+            <div>{accessValidation.reasonMessage}</div>
+            {!accessValidation.isNextMonthPublished && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <Link
+                  to="/admin/attendance-calendar"
+                  className="btn btn-sm btn-outline"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.3rem 0.75rem',
+                    fontSize: '0.8rem',
+                    borderColor: 'rgba(245, 158, 11, 0.5)',
+                    color: 'inherit'
+                  }}
+                >
+                  <Calendar size={14} />
+                  <span>Go to Monthly Calendar to Publish {accessValidation.nextMonthName} {accessValidation.nextYear}</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Error Alert */}
       {errorMessage && (
@@ -179,10 +293,12 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
             <AlertCircle size={18} />
             <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{errorMessage}</span>
           </div>
-          <button className="btn btn-sm btn-danger" onClick={handleGenerateReport}>
-            <RefreshCw size={14} />
-            <span>Retry</span>
-          </button>
+          {canGenerate && (
+            <button className="btn btn-sm btn-danger" onClick={handleGenerateReport}>
+              <RefreshCw size={14} />
+              <span>Retry</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -230,105 +346,28 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
         <button
           className="btn btn-primary"
           onClick={handleGenerateReport}
-          disabled={loading}
-          style={{ padding: '0.55rem 1.1rem' }}
+          disabled={!canGenerate || loading || checkingAccess}
+          title={!canGenerate ? accessValidation?.reasonMessage || 'Report generation disabled for this month' : 'Generate Monthly Employee Report'}
+          style={{
+            padding: '0.55rem 1.1rem',
+            opacity: !canGenerate ? 0.6 : 1,
+            cursor: !canGenerate ? 'not-allowed' : 'pointer'
+          }}
         >
-          <FileSpreadsheet size={16} />
+          {!canGenerate ? <Lock size={16} /> : <FileSpreadsheet size={16} />}
           <span>{loading ? 'Generating...' : 'Generate Report'}</span>
         </button>
 
         <button
           className="btn btn-secondary"
           onClick={handleDownloadExcel}
-          disabled={!reportData || reportData.length === 0 || downloading}
+          disabled={!canGenerate || !reportData || reportData.length === 0 || downloading}
           style={{ padding: '0.55rem 1.1rem' }}
         >
           <Download size={16} />
           <span>{downloading ? 'Downloading...' : 'Download Excel'}</span>
         </button>
       </div>
-
-      {/* 3. Summary Cards Section */}
-      {/* {reportData && reportData.length > 0 && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-            gap: '1rem',
-            marginBottom: '1.5rem'
-          }}
-        >
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Employees
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700 }}>{totalEmployees}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Working Days
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700 }}>{totalWorkingDays}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Present Days
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--success)' }}>{totalPresentDaysSum}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Leave Days
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--warning)' }}>{totalLeaveDaysSum}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Permissions
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--primary)' }}>{totalPermissionsSum}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Late Logins
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--warning)' }}>{totalLateLoginsSum}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total LOP Days
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--danger)' }}>{totalLopDaysSum.toFixed(1)} Days</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total LOP Amount
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--danger)' }}>{formatCurrency(totalLopAmountSum)}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Deductions
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--danger)' }}>{formatCurrency(totalDeductionsSum)}</h3>
-          </div>
-
-          <div className="glass-card">
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Final Salary
-            </span>
-            <h3 style={{ fontSize: '1.4rem', marginTop: '0.25rem', fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(totalFinalSalarySum)}</h3>
-          </div>
-        </div>
-      )} */}
 
       {/* 4. Report Preview Card & Table Container */}
       <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
@@ -379,7 +418,6 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
             </thead>
             <tbody>
               {loading ? (
-                // 9. Skeleton / Loading State
                 Array.from({ length: 4 }).map((_, idx) => (
                   <tr key={idx}>
                     <td colSpan={15} style={{ padding: '0.8rem 1rem' }}>
@@ -387,21 +425,31 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
                     </td>
                   </tr>
                 ))
+              ) : !canGenerate ? (
+                <tr>
+                  <td colSpan={15} style={{ textAlign: 'center', padding: '3.5rem 1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem', color: 'var(--text-secondary)' }}>
+                      <Lock size={36} style={{ color: 'var(--warning-text, #d97706)' }} />
+                      <h4 style={{ fontWeight: 600, color: 'var(--text-main)' }}>Report Generation Not Available</h4>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '500px' }}>
+                        {accessValidation?.reasonMessage || 'This month has either not completed or the next month attendance calendar is not yet published.'}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
               ) : !reportData || filteredData.length === 0 ? (
-                // 10. Empty State
                 <tr>
                   <td colSpan={15} style={{ textAlign: 'center', padding: '3.5rem 1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
                       <AlertCircle size={40} style={{ color: 'var(--text-muted)' }} />
                       <h4 style={{ fontWeight: 600, color: 'var(--text-main)' }}>No payroll data available</h4>
                       <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        No payroll data is available for the selected month.
+                        No payroll records found for {monthName} {selectedYear}.
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                // Data Rows
                 filteredData.map((item) => {
                   const statusBadgeClass =
                     item.payrollStatus === 'Finalized'
@@ -412,7 +460,6 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
 
                   return (
                     <tr key={item.employeeId}>
-                      {/* 6. Employee Row Formatting */}
                       <td>
                         <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{item.employeeName}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>{item.employeeCode}</div>
@@ -430,11 +477,9 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
                       <td>{item.sandwichLeaveDays}</td>
                       <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{item.permissionCount}</td>
                       <td style={{ fontWeight: 600, color: 'var(--warning)' }}>{item.lateLoginCount}</td>
-                      {/* 8. LOP Days Formatting */}
                       <td style={{ fontWeight: 600, color: item.totalLOPDays > 0 ? 'var(--danger)' : 'var(--text-main)' }}>
                         {item.totalLOPDays} Days
                       </td>
-                      {/* 7. Currency Formatting */}
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(item.monthlySalary)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(item.lopAmount)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(item.totalDeduction)}</td>
@@ -456,7 +501,7 @@ export const MonthlyEmployeePayrollReportPage: React.FC = () => {
             setPageSize(s);
             setPage(1);
           }}
-          disabled={loading}
+          disabled={loading || !canGenerate}
         />
       </div>
     </div>

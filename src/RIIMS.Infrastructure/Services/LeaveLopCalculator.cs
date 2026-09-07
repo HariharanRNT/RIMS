@@ -113,7 +113,7 @@ public static class LeaveLopCalculator
                 isAttendanceMarkedPerm,
                 isAttendanceMarkedLate);
 
-            bool isLate = (eval.IsLateLogin || isAttendanceMarkedLate) && !eval.IsHalfDayAttendance;
+            bool isLate = (eval.IsLateLogin || (isAttendanceMarkedLate && !eval.IsOnTime)) && !eval.IsHalfDayAttendance;
             bool isPermission = eval.IsPermissionUsed || isAttendanceMarkedPerm || permReq != null;
 
             decimal dayLeaveCount = eval.LeaveDaysCount;
@@ -131,8 +131,11 @@ public static class LeaveLopCalculator
                 LogoutTime = eval.LogoutTime ?? dayLog?.LogoutTime,
                 IsLate = isLate,
                 IsPermission = isPermission,
-                IsLeave = eval.IsFullDayLeave || eval.IsHalfDayLeave || eval.IsHalfDayAttendance,
+                IsLeave = eval.IsFullDayLeave || eval.IsHalfDayLeave || eval.IsHalfDayAttendance || dayLeaveCount > 0,
                 IsHalfDayAttendance = eval.IsHalfDayAttendance,
+                IsFullDayLeave = eval.IsFullDayLeave || (eval.Status == "Absent" && !eval.IsHalfDayAttendance),
+                IsHalfDayLeave = eval.IsHalfDayLeave,
+                HalfDayType = eval.HalfDayType,
                 LeaveDaysCount = dayLeaveCount,
                 PresentDaysCount = eval.PresentDaysCount,
                 IsSandwichLeave = false,
@@ -143,14 +146,48 @@ public static class LeaveLopCalculator
             });
         }
 
-        // 2. Sandwich Leave Detection Engine
-        Func<DateOnly, bool> isWorkingDayLeave = (d) =>
+        // 2. Sandwich Leave Detection Engine (Connecting Preceding/Succeeding Workdays)
+        // Rule: On Friday (preceding), only Full-Day Leave/Absent or Second-Half Leave connects into the weekend.
+        // First-Half Leave / Login after 11:00 AM means employee was present during second half, so Sandwich Leave does NOT apply.
+        Func<DateOnly, bool> isPrevConnectingLeave = (d) =>
         {
             var detail = dailyDetails.FirstOrDefault(x => x.Date == d);
-            if (detail != null) return detail.IsWorkingDay && detail.IsLeave;
-            DayOfWeek dow = d.ToDateTime(TimeOnly.MinValue).DayOfWeek;
-            bool defaultWorking = dow != DayOfWeek.Saturday && dow != DayOfWeek.Sunday;
-            return defaultWorking && getApprovedLeave(d) != null;
+            if (detail != null)
+            {
+                if (!detail.IsWorkingDay) return false;
+                if (detail.IsFullDayLeave || (detail.Status == "Absent" && !detail.IsHalfDayAttendance))
+                    return true;
+                if (detail.IsHalfDayLeave && detail.HalfDayType == HalfDayType.SecondHalf)
+                    return true;
+                // First-half leave or Login after 11:00 AM (First-half absent) was PRESENT during 2nd half -> NO sandwich
+                return false;
+            }
+            var appLeave = getApprovedLeave(d);
+            if (appLeave == null) return false;
+            if (appLeave.LeaveDuration == LeaveDuration.FullDay) return true;
+            return appLeave.HalfDayType == HalfDayType.SecondHalf;
+        };
+
+        // Rule: On Monday (succeeding), Full-Day Leave/Absent, First-Half Leave, or Login after 11:00 AM connects from the weekend.
+        Func<DateOnly, bool> isNextConnectingLeave = (d) =>
+        {
+            var detail = dailyDetails.FirstOrDefault(x => x.Date == d);
+            if (detail != null)
+            {
+                if (!detail.IsWorkingDay) return false;
+                if (detail.IsFullDayLeave || (detail.Status == "Absent" && !detail.IsHalfDayAttendance))
+                    return true;
+                if (detail.IsHalfDayLeave && detail.HalfDayType == HalfDayType.FirstHalf)
+                    return true;
+                if (detail.IsHalfDayAttendance)
+                    return true;
+                // Second-half leave (present in 1st half) -> NO sandwich
+                return false;
+            }
+            var appLeave = getApprovedLeave(d);
+            if (appLeave == null) return false;
+            if (appLeave.LeaveDuration == LeaveDuration.FullDay) return true;
+            return appLeave.HalfDayType == HalfDayType.FirstHalf;
         };
 
         Func<DateOnly, bool> checkIsWorkingDay = (d) =>
@@ -197,8 +234,8 @@ public static class LeaveLopCalculator
                     checkNext = checkNext.AddDays(1);
                 }
 
-                bool prevIsLeave = prevWorkingDate.HasValue && isWorkingDayLeave(prevWorkingDate.Value);
-                bool nextIsLeave = nextWorkingDate.HasValue && isWorkingDayLeave(nextWorkingDate.Value);
+                bool prevIsLeave = prevWorkingDate.HasValue && isPrevConnectingLeave(prevWorkingDate.Value);
+                bool nextIsLeave = nextWorkingDate.HasValue && isNextConnectingLeave(nextWorkingDate.Value);
 
                 if (prevIsLeave && nextIsLeave)
                 {
@@ -218,23 +255,24 @@ public static class LeaveLopCalculator
         // 3. Centralized LOP Calculation (Pipeline Step 10)
         decimal actualLeaveDays = dailyDetails.Where(d => d.IsWorkingDay).Sum(d => d.LeaveDaysCount);
         decimal sandwichLeaveDays = dailyDetails.Count(d => d.IsSandwichLeave);
-        decimal totalLeaveDaysTaken = actualLeaveDays + sandwichLeaveDays;
 
-        decimal availableAllowedLeave = Math.Max(0m, monthlyAllowedLeave - totalLeaveDaysTaken);
-        decimal rawLeaveLopDays = Math.Max(0m, totalLeaveDaysTaken - monthlyAllowedLeave);
-
-        int totalLateCount = dailyDetails.Count(d => d.IsLate);
+        int totalLateCount = dailyDetails.Count(d => d.IsLate && !d.IsHalfDayAttendance);
         int permissionCount = dailyDetails.Count(d => d.IsPermission);
-        int lateWithPermissionCount = dailyDetails.Count(d => d.IsLate && d.IsPermission);
+        int lateWithPermissionCount = dailyDetails.Count(d => d.IsLate && d.IsPermission && !d.IsHalfDayAttendance);
         int unpermissionedLateCount = Math.Max(0, totalLateCount - lateWithPermissionCount);
 
         int threshold = Math.Max(1, settings?.LateLoginsForHalfDay ?? lateLoginsForHalfDay);
         decimal rawLateLoginLopDays = Math.Floor((decimal)unpermissionedLateCount / threshold) * 0.5m;
 
+        decimal totalLeaveDaysTaken = actualLeaveDays + sandwichLeaveDays + rawLateLoginLopDays;
+
+        decimal leaveBaseDays = actualLeaveDays + sandwichLeaveDays;
+        decimal availableAllowedLeave = Math.Max(0m, monthlyAllowedLeave - leaveBaseDays);
+        decimal leaveLopDays = Math.Max(0m, leaveBaseDays - monthlyAllowedLeave);
+
         // Centralized Offset Rule: Available allowed leave absorbs Late Login LOP
         decimal allowedLeaveOffset = Math.Min(rawLateLoginLopDays, availableAllowedLeave);
         decimal lateLoginLopDays = Math.Max(0m, rawLateLoginLopDays - availableAllowedLeave);
-        decimal leaveLopDays = rawLeaveLopDays;
         decimal totalLopDays = leaveLopDays + lateLoginLopDays;
 
         decimal dailySalary = Math.Round(monthlySalary / 31m, 4);
@@ -257,12 +295,9 @@ public static class LeaveLopCalculator
             else if (d.IsLeave)
             {
                 d.IsLop = leaveLopDays > 0;
-                d.LopReason = leaveLopDays > 0 ? "Leave LOP" : "Covered by Allowed Leave";
-            }
-            else if (d.IsWorkingDay && !d.LoginTime.HasValue && d.Date.ToDateTime(TimeOnly.MinValue).Date < nowIst.Date)
-            {
-                d.IsLop = true;
-                d.LopReason = "Absent / Unapproved Leave";
+                d.LopReason = leaveLopDays > 0 
+                    ? (d.Status.StartsWith("Absent") ? "Absent LOP" : "Leave LOP") 
+                    : "Covered by Allowed Leave";
             }
 
             if (d.IsLate && !d.IsPermission)
@@ -276,6 +311,8 @@ public static class LeaveLopCalculator
         int weekendCount = dailyDetails.Count(d => d.DayType == AttendanceDayType.Weekend);
         int holidayCount = dailyDetails.Count(d => d.DayType == AttendanceDayType.CompanyHoliday || d.DayType == AttendanceDayType.OptionalHoliday);
 
+        decimal approvedLeaveDays = dailyDetails.Where(d => d.IsWorkingDay && getApprovedLeave(d.Date) != null).Sum(d => getApprovedLeave(d.Date)!.LeaveDuration == LeaveDuration.HalfDay ? 0.5m : 1.0m);
+
         return new LeaveLopResult
         {
             EmployeeId = employeeId,
@@ -284,7 +321,7 @@ public static class LeaveLopCalculator
             TotalCalendarDays = totalDays,
             WorkingDays = workingDaysCount,
             PresentDays = presentDaysTotal,
-            ApprovedLeaveDays = actualLeaveDays,
+            ApprovedLeaveDays = approvedLeaveDays,
             WeekendDays = weekendCount,
             HolidayDays = holidayCount,
             MonthlyAllowedLeave = monthlyAllowedLeave,

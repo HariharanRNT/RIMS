@@ -20,9 +20,8 @@ interface RoleOption {
 export const UserFormModal: React.FC<UserFormModalProps> = ({ user, onClose, onSuccess }) => {
   const { isSuperAdmin } = useAuth();
   const isProtectedAdmin = Boolean(
-    user?.email === 'hariharanrntgemini@gmail.com' ||
-    user?.email === 'admin@riims.local' ||
-    user?.email === 'harideepa0611@gmail.com'
+    user?.isSuperAdmin ||
+    user?.roles?.includes('Super Admin')
   );
 
   const [username, setUsername] = useState(user?.username || '');

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Enums;
+using Microsoft.Extensions.Configuration;
 using RIIMS.Infrastructure.Data;
 
 namespace RIIMS.Jobs;
@@ -9,11 +10,13 @@ public class DemoFollowUpReminderJob
 {
     private readonly RiimsDbContext _context;
     private readonly IEmailService _emailService;
+    private readonly IConfiguration? _configuration;
 
-    public DemoFollowUpReminderJob(RiimsDbContext context, IEmailService emailService)
+    public DemoFollowUpReminderJob(RiimsDbContext context, IEmailService emailService, IConfiguration? configuration = null)
     {
         _context = context;
         _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task ExecuteAsync()
@@ -52,7 +55,7 @@ public class DemoFollowUpReminderJob
                         </div>
 
                         <div style=""text-align: center; margin-top: 30px;"">
-                            <a href=""http://localhost:3000/work-task"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Open Portal to Complete</a>
+                            <a href=""{(_configuration?["AppUrl"] ?? "http://10.60.121.234:99").TrimEnd('/')}/work-task"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Open Portal to Complete</a>
                         </div>
                     </div>
                     <div style=""background: #f1f5f9; padding: 15px; text-align: center; font-size: 12px; color: #64748b;"">

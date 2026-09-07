@@ -7,6 +7,8 @@ import { formatTimeIST, formatDurationToHoursMinutes } from '../../utils/dateUti
 interface ActivityItem {
   id: number;
   employeeId: number;
+  employeeName?: string;
+  employeeCode?: string;
   activityType: string;
   refTable: string;
   refId: number;
@@ -63,7 +65,12 @@ export const AdminDashboardPage: React.FC = () => {
   useEffect(() => {
     fetchMetrics();
     const interval = setInterval(() => fetchMetrics(), 30000);
-    return () => clearInterval(interval);
+    const handleActivityChanged = () => fetchMetrics();
+    window.addEventListener('activity-changed', handleActivityChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('activity-changed', handleActivityChanged);
+    };
   }, []);
 
   const getRelativeTime = (isoStr: string) => {
@@ -321,17 +328,26 @@ export const AdminDashboardPage: React.FC = () => {
                     ? 'tag tag-resumed'
                     : 'tag tag-completed';
 
+                  const getInitials = (name?: string, id?: number) => {
+                    if (name && name.trim()) {
+                      const parts = name.trim().split(/\s+/);
+                      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+                      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                    }
+                    return `E${id}`;
+                  };
+
                   return (
                     <div key={a.id} className="feed-item">
                       {/* Avatar */}
                       <div className="feed-avatar" style={{ '--accent': accentVar, '--accent-dim': accentDimVar } as React.CSSProperties}>
-                        E{a.employeeId}
+                        {getInitials(a.employeeName, a.employeeId)}
                       </div>
 
                       {/* Main */}
                       <div className="feed-main">
                         <div className="row1">
-                          <span className="feed-name">Employee #{a.employeeId}</span>
+                          <span className="feed-name">{a.employeeName || `Employee #${a.employeeId}`}</span>
                           <span className="feed-ref">Ref table: {a.refTable} #{a.refId}</span>
                           <span className={tagClass}>{a.activityType}</span>
                           {a.status && <span className={statusTagClass}>{a.status}</span>}

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { TaskTimelineDrawer } from '../../../components/tasks/TaskTimelineDrawer';
 import type { TaskTimelineEventDto } from '../../../components/tasks/TaskTimelineDrawer';
-import { formatTimeIST, formatDateIST, formatDurationToHoursMinutes } from '../../../utils/dateUtils';
+import { formatDateIST, formatDurationToHoursMinutes } from '../../../utils/dateUtils';
 import { GlassSelect } from '../../../components/ui/GlassSelect';
 import { GlassDatePicker } from '../../../components/ui/GlassDatePicker';
 
@@ -70,6 +70,7 @@ interface TaskItem {
   duration?: string;
   totalProductiveSeconds: number;
   isOverdue: boolean;
+  isExceededDuration?: boolean;
   timelineEvents: TaskTimelineEventDto[];
 }
 
@@ -88,6 +89,7 @@ export const TaskAllocationPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterPriority, setFilterPriority] = useState<string>('');
   const [filterOverdue, setFilterOverdue] = useState<boolean>(false);
+  const [filterExceededDuration, setFilterExceededDuration] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Date & Smart View Filters
@@ -164,6 +166,7 @@ export const TaskAllocationPage: React.FC = () => {
       if (filterDepartmentId) params.departmentId = filterDepartmentId;
       if (filterStatus) params.status = filterStatus;
       if (filterOverdue) params.isOverdue = true;
+      if (filterExceededDuration) params.isExceededDuration = true;
 
       const res = await apiClient.get('/tasks/admin-all', { params });
       if (res.data?.success) {
@@ -182,7 +185,7 @@ export const TaskAllocationPage: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
-  }, [filterEmployeeId, filterDepartmentId, filterStatus, filterOverdue]);
+  }, [filterEmployeeId, filterDepartmentId, filterStatus, filterOverdue, filterExceededDuration]);
 
   const availableClients = React.useMemo(() => {
     if (!assignProductId || isCustomProduct) return [];
@@ -332,6 +335,7 @@ export const TaskAllocationPage: React.FC = () => {
     setFilterStatus('');
     setFilterPriority('');
     setFilterOverdue(false);
+    setFilterExceededDuration(false);
     setFilterDatePreset('DEFAULT');
     setCustomStartDate('');
     setCustomEndDate('');
@@ -505,6 +509,12 @@ export const TaskAllocationPage: React.FC = () => {
       return false;
     }
 
+    // Exceeded Duration Filter
+    if (filterExceededDuration) {
+      const isExceeded = t.isExceededDuration || (t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 && t.totalProductiveSeconds > (t.plannedDurationMinutes * 60));
+      if (!isExceeded) return false;
+    }
+
     // Date Range Filter
     if (filterDatePreset !== 'DEFAULT') {
       if (!isTaskInDateRange(t, filterDatePreset, customStartDate, customEndDate)) {
@@ -544,6 +554,7 @@ export const TaskAllocationPage: React.FC = () => {
   const assignedCount = safeTasks.filter((t) => t && (t.status === 'Assigned' || t.status === 'NotStarted')).length;
   const inProgressCount = safeTasks.filter((t) => t && (t.status === 'Running' || t.status === 'InProgress')).length;
   const overdueCount = safeTasks.filter((t) => t && t.isOverdue).length;
+  const exceededCount = safeTasks.filter((t) => t && (t.isExceededDuration || (t.plannedDurationMinutes && t.totalProductiveSeconds > t.plannedDurationMinutes * 60))).length;
   const completedCount = safeTasks.filter((t) => t && t.status === 'Completed').length;
 
   const isAnyFilterActive =
@@ -554,6 +565,7 @@ export const TaskAllocationPage: React.FC = () => {
     !!filterStatus ||
     !!filterPriority ||
     filterOverdue ||
+    filterExceededDuration ||
     !!searchQuery;
 
   const selectedEmployeeObj = employees.find((e) => e.id.toString() === filterEmployeeId);
@@ -586,22 +598,22 @@ export const TaskAllocationPage: React.FC = () => {
 
   const getStatusBadge = (status: string, isOverdue: boolean) => {
     if (isOverdue && status !== 'Completed' && status !== 'Cancelled') {
-      return <span className="badge badge-danger" style={badgeStyle}>⚠️ Overdue</span>;
+      return <span style={{ ...badgeStyle, background: 'rgba(225, 29, 72, 0.15)', color: '#E11D48', border: '1px solid rgba(225, 29, 72, 0.4)' }}>⚠️ Overdue</span>;
     }
     switch (status) {
       case 'Assigned':
-        return <span className="badge badge-info" style={badgeStyle}>📋 Assigned</span>;
+        return <span style={{ ...badgeStyle, background: 'rgba(14, 165, 233, 0.15)', color: '#38BDF8', border: '1px solid rgba(14, 165, 233, 0.35)' }}>📋 Assigned</span>;
       case 'NotStarted':
-        return <span className="badge badge-secondary" style={badgeStyle}>⏳ Not Started</span>;
+        return <span style={{ ...badgeStyle, background: 'rgba(148, 163, 184, 0.15)', color: '#94A3B8', border: '1px solid rgba(148, 163, 184, 0.3)' }}>⏳ Not Started</span>;
       case 'Running':
       case 'InProgress':
-        return <span className="badge badge-success" style={badgeStyle}>⚙️ In Progress</span>;
+        return <span style={{ ...badgeStyle, background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.35)' }}>⚙️ Running</span>;
       case 'OnHold':
-        return <span className="badge badge-warning" style={badgeStyle}>⏸️ On Hold</span>;
+        return <span style={{ ...badgeStyle, background: 'rgba(245, 158, 11, 0.15)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.35)' }}>⏸️ On Hold</span>;
       case 'Completed':
-        return <span className="badge badge-success" style={badgeStyle}>✅ Completed</span>;
+        return <span style={{ ...badgeStyle, background: 'rgba(99, 102, 241, 0.15)', color: '#818CF8', border: '1px solid rgba(99, 102, 241, 0.35)' }}>✅ Completed</span>;
       case 'Cancelled':
-        return <span className="badge badge-danger" style={badgeStyle}>❌ Cancelled</span>;
+        return <span style={{ ...badgeStyle, background: 'rgba(148, 163, 184, 0.15)', color: '#94A3B8', border: '1px solid rgba(148, 163, 184, 0.3)' }}>❌ Cancelled</span>;
       default:
         return <span className="badge badge-secondary" style={badgeStyle}>{status}</span>;
     }
@@ -643,6 +655,10 @@ export const TaskAllocationPage: React.FC = () => {
         <div className="ui-card">
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Overdue Tasks</span>
           <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--danger)', marginTop: '0.25rem' }}>{overdueCount}</div>
+        </div>
+        <div className="ui-card">
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Exceeded Estimate</span>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--warning, #F59E0B)', marginTop: '0.25rem' }}>{exceededCount}</div>
         </div>
         <div className="ui-card">
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Completed</span>
@@ -786,6 +802,15 @@ export const TaskAllocationPage: React.FC = () => {
               />
               <span style={{ color: filterOverdue ? 'var(--danger)' : 'var(--text-primary)' }}>⚠️ Overdue Only</span>
             </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={filterExceededDuration}
+                onChange={(e) => setFilterExceededDuration(e.target.checked)}
+              />
+              <span style={{ color: filterExceededDuration ? '#F59E0B' : 'var(--text-primary)' }}>⏳ Exceeded Estimate Only</span>
+            </label>
           </div>
 
           {isAnyFilterActive && (
@@ -820,9 +845,9 @@ export const TaskAllocationPage: React.FC = () => {
           justifyContent: 'space-between',
           padding: '0.75rem 1.25rem',
           borderRadius: 'var(--radius-md)',
-          background: '#ffffff',
-          border: '1px solid var(--border-color)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow-xs)',
           marginBottom: '1rem',
           flexWrap: 'wrap',
           gap: '0.75rem'
@@ -834,7 +859,7 @@ export const TaskAllocationPage: React.FC = () => {
               width: '32px',
               height: '32px',
               borderRadius: '8px',
-              background: '#fff4e6',
+              background: 'var(--primary-tint)',
               color: 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
@@ -853,7 +878,7 @@ export const TaskAllocationPage: React.FC = () => {
             )}
           </div>
           <div>
-            <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)' }}>
               {filterEmployeeId && selectedEmployeeObj
                 ? `Showing full task history for ${selectedEmployeeObj.employeeCode} - ${selectedEmployeeObj.name}`
                 : filterDatePreset !== 'DEFAULT'
@@ -867,7 +892,8 @@ export const TaskAllocationPage: React.FC = () => {
                   fontSize: '0.75rem',
                   padding: '0.2rem 0.6rem',
                   borderRadius: '12px',
-                  background: '#f3f4f6',
+                  background: 'var(--panel-raised)',
+                  border: '1px solid var(--border)',
                   color: 'var(--text-secondary)',
                   fontWeight: 600
                 }}
@@ -889,19 +915,19 @@ export const TaskAllocationPage: React.FC = () => {
       </div>
 
       {/* Task List Table */}
-      <div className="table-container" style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+      <div className="table-container" style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
         <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
           <thead>
             <tr>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Task / Module</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Assigned To</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Product & Client</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Assigned By</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Priority</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Schedule & Planned</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Status</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem' }}>Actual Time</th>
-              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f9fafb', padding: '10px 14px', borderBottom: '2px solid var(--border-color)', fontSize: '0.725rem', textAlign: 'right' }}>Actions</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Task / Module</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Assigned To</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Product & Client</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Assigned By</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Priority</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Schedule & Planned</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Status</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem' }}>Actual Time</th>
+              <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-table-header)', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '0.725rem', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -986,7 +1012,7 @@ export const TaskAllocationPage: React.FC = () => {
                   {/* Schedule & Planned */}
                   <td style={{ verticalAlign: 'middle', padding: '10px 14px', whiteSpace: 'nowrap' }}>
                     <div style={{ fontSize: '0.75rem', fontWeight: 600, color: t.isOverdue ? 'var(--danger-text)' : 'var(--text-primary)' }}>
-                      {t.plannedStart ? formatDateIST(t.plannedStart) : 'ASAP'} → {t.dueDate ? `${formatDateIST(t.dueDate)} ${formatTimeIST(t.dueDate)}` : 'N/A'}
+                      {t.plannedStart ? formatDateIST(t.plannedStart) : 'ASAP'} → {t.dueDate ? formatDateIST(t.dueDate) : 'No due date'}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                       {t.plannedDurationMinutes ? `Planned: ${Math.floor(t.plannedDurationMinutes / 60)}h ${t.plannedDurationMinutes % 60}m` : 'Planned: N/A'}
@@ -995,7 +1021,14 @@ export const TaskAllocationPage: React.FC = () => {
 
                   {/* Status */}
                   <td style={{ verticalAlign: 'middle', padding: '10px 14px' }}>
-                    {getStatusBadge(t.status, t.isOverdue)}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                      {getStatusBadge(t.status, t.isOverdue)}
+                      {(t.isExceededDuration || (t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 && t.totalProductiveSeconds > (t.plannedDurationMinutes * 60))) && (
+                        <span style={{ fontSize: '0.675rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.15)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          ⏳ Exceeded Estimate
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Actual Productive Time */}
@@ -1067,32 +1100,32 @@ export const TaskAllocationPage: React.FC = () => {
               maxHeight: '90vh',
               overflowY: 'auto',
               padding: '2rem',
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
               borderRadius: '20px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              boxShadow: 'var(--shadow-lg)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)' }}>
                   Assign Work Task
                 </h3>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   Create and allocate a new work task for any employee.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAssignModal(false)}
-                style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '0.25rem' }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}
               >
                 <XCircle size={20} />
               </button>
             </div>
 
             {assignError && (
-              <div style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
+              <div style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
                 ⚠️ {assignError}
               </div>
             )}
@@ -1100,8 +1133,8 @@ export const TaskAllocationPage: React.FC = () => {
             <form onSubmit={handleConfirmAssignTask} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
               {/* SECTION 1: ASSIGNMENT DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
-                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   1. Assignment Details
                 </div>
 
@@ -1126,10 +1159,10 @@ export const TaskAllocationPage: React.FC = () => {
                   {/* Product */}
                   <div className="form-group" style={{ margin: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                      <label className="form-label" style={{ margin: 0 }}>Product Name *</label>
+                      <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Product Name *</label>
                       <button
                         type="button"
-                        style={{ background: 'none', border: 'none', color: '#E8873C', fontSize: '0.785rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.785rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
                         onClick={() => {
                           const newMode = !isCustomProduct;
                           setIsCustomProduct(newMode);
@@ -1181,10 +1214,10 @@ export const TaskAllocationPage: React.FC = () => {
                   {/* Client */}
                   <div className="form-group" style={{ margin: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                      <label className="form-label" style={{ margin: 0 }}>Client Name *</label>
+                      <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Client Name *</label>
                       <button
                         type="button"
-                        style={{ background: 'none', border: 'none', color: '#E8873C', fontSize: '0.785rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                        style={{ background: 'none', border: 'none', color: (!isCustomProduct && !assignProductId) ? 'var(--text-muted)' : 'var(--primary)', fontSize: '0.785rem', fontWeight: 700, cursor: (!isCustomProduct && !assignProductId) ? 'not-allowed' : 'pointer', textDecoration: 'underline', padding: 0 }}
                         onClick={() => {
                           const newMode = !isCustomClient;
                           setIsCustomClient(newMode);
@@ -1238,19 +1271,19 @@ export const TaskAllocationPage: React.FC = () => {
               </div>
 
               {/* SECTION 2: TASK DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
-                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   2. Task Details
                 </div>
 
                 {/* Module / Feature Name (max 100) */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Task Title / Module Name *</label>
+                    <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Task Title / Module Name *</label>
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: moduleName.length >= 100 ? '#ef4444' : moduleName.length >= 90 ? '#E8873C' : '#9ca3af',
+                        color: moduleName.length >= 100 ? '#ef4444' : moduleName.length >= 90 ? 'var(--primary)' : 'var(--text-muted)',
                         fontWeight: moduleName.length >= 90 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -1272,11 +1305,11 @@ export const TaskAllocationPage: React.FC = () => {
                 {/* Task Description (max 500) */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Task Description *</label>
+                    <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Task Description *</label>
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: description.length >= 500 ? '#ef4444' : description.length >= 450 ? '#E8873C' : '#9ca3af',
+                        color: description.length >= 500 ? '#ef4444' : description.length >= 450 ? 'var(--primary)' : 'var(--text-muted)',
                         fontWeight: description.length >= 450 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -1298,7 +1331,7 @@ export const TaskAllocationPage: React.FC = () => {
 
               {/* SECTION 3: SCHEDULING & INSTRUCTIONS */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   3. Scheduling & Instructions
                 </div>
 
@@ -1344,12 +1377,12 @@ export const TaskAllocationPage: React.FC = () => {
 
                 {/* Planned Duration (Hours & Minutes) */}
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ display: 'block', marginBottom: '0.3rem' }}>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '0.3rem', color: 'var(--text-main)' }}>
                     Planned Duration *
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Hours:
                       </span>
                       <input
@@ -1364,7 +1397,7 @@ export const TaskAllocationPage: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Minutes:
                       </span>
                       <GlassSelect
@@ -1384,11 +1417,11 @@ export const TaskAllocationPage: React.FC = () => {
                 {/* Instructions / Remarks (max 300) */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Instructions / Remarks</label>
+                    <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Instructions / Remarks</label>
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: instructions.length >= 300 ? '#ef4444' : instructions.length >= 270 ? '#E8873C' : '#9ca3af',
+                        color: instructions.length >= 300 ? '#ef4444' : instructions.length >= 270 ? 'var(--primary)' : 'var(--text-muted)',
                         fontWeight: instructions.length >= 270 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -1408,20 +1441,16 @@ export const TaskAllocationPage: React.FC = () => {
               </div>
 
               {/* ACTION BUTTONS */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid #f0f0f0', paddingTop: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(false)}
+                  className="btn btn-secondary"
                   style={{
                     padding: '0.65rem 1.35rem',
-                    background: '#ffffff',
-                    color: '#374151',
-                    border: '1px solid #e5e7eb',
                     borderRadius: '10px',
                     fontSize: '0.875rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background 0.15s ease',
                   }}
                 >
                   Cancel
@@ -1429,21 +1458,18 @@ export const TaskAllocationPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submittingAssign}
+                  className="btn btn-primary"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '0.5rem',
                     padding: '0.65rem 1.85rem',
-                    background: '#E8873C',
-                    color: '#FFFFFF',
-                    border: 'none',
                     borderRadius: '10px',
                     fontSize: '0.875rem',
                     fontWeight: 700,
                     cursor: submittingAssign ? 'not-allowed' : 'pointer',
                     opacity: submittingAssign ? 0.65 : 1,
-                    transition: 'transform 0.15s ease, opacity 0.15s ease',
                   }}
                 >
                   <span>{submittingAssign ? 'Assigning Work Task...' : 'Assign Work Task'}</span>
@@ -1562,6 +1588,15 @@ export const TaskAllocationPage: React.FC = () => {
         taskTitle={selectedTaskForTimeline?.moduleName || ''}
         employeeName={selectedTaskForTimeline?.employeeName || ''}
         events={selectedTaskForTimeline?.timelineEvents || []}
+        productName={selectedTaskForTimeline?.productName}
+        clientCompanyName={selectedTaskForTimeline?.clientCompanyName}
+        status={selectedTaskForTimeline?.status}
+        isOverdue={selectedTaskForTimeline?.isOverdue}
+        isExceededDuration={selectedTaskForTimeline?.isExceededDuration}
+        plannedDurationMinutes={selectedTaskForTimeline?.plannedDurationMinutes}
+        totalProductiveSeconds={selectedTaskForTimeline?.totalProductiveSeconds}
+        dueDate={selectedTaskForTimeline?.dueDate}
+        plannedStart={selectedTaskForTimeline?.plannedStart}
       />
     </div>
   );

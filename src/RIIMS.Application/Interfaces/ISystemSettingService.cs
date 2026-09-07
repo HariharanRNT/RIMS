@@ -6,6 +6,8 @@ public interface ISystemSettingService
 {
     Task<List<SystemSettingDto>> GetAllAsync();
     Task<TypedSystemSettingsDto> GetTypedSettingsAsync();
+    Task<TaskReminderSettingsDto> GetTaskReminderSettingsAsync();
+    Task<IdleNotificationSettingsDto> GetIdleNotificationSettingsAsync();
     Task<SystemSettingDto?> GetByKeyAsync(string key);
     Task<SystemSettingDto> UpdateAsync(string key, UpdateSettingRequest request);
 }

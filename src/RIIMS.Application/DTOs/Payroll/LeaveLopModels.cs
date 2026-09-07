@@ -17,6 +17,9 @@ public class DailyLopDetail
     public bool IsSandwichLeave { get; set; }
     public bool IsLop { get; set; }
     public bool IsHalfDayAttendance { get; set; }
+    public bool IsFullDayLeave { get; set; }
+    public bool IsHalfDayLeave { get; set; }
+    public HalfDayType? HalfDayType { get; set; }
     public decimal LeaveDaysCount { get; set; }
     public decimal PresentDaysCount { get; set; }
     public string? LopReason { get; set; }

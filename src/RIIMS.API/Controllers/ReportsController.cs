@@ -74,7 +74,6 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("export-daily-production")]
-    [RequirePermission("Report.Export", "Attendance.Export", "Payroll.Export")]
     public async Task<IActionResult> ExportDailyProduction(
         [FromQuery] DateTime? date,
         [FromQuery] DateTime? startDate,
@@ -82,6 +81,18 @@ public class ReportsController : ControllerBase
         [FromQuery] int? employeeId,
         [FromQuery] int? departmentId)
     {
+        var hasExportPermission = await _currentUser.HasPermissionAsync("Report.Export") ||
+                                  await _currentUser.HasPermissionAsync("Attendance.Export") ||
+                                  await _currentUser.HasPermissionAsync("Payroll.Export") ||
+                                  _currentUser.IsAdmin;
+
+        if (!hasExportPermission)
+        {
+            // Regular employees can export their own daily performance report
+            employeeId = _currentUser.EmployeeId;
+            departmentId = null;
+        }
+
         var start = startDate ?? date ?? DateTime.UtcNow.Date;
         var end = endDate ?? date ?? DateTime.UtcNow.Date;
 
@@ -125,6 +136,24 @@ public class ReportsController : ControllerBase
         var end = endDate ?? date ?? DateTime.UtcNow.Date;
         var result = await _service.GetEmployeeDailyDetailAsync(employeeId, start, end);
         return Ok(ApiResponse<EmployeeDailyDetailDto>.SuccessResponse(result));
+    }
+
+    [HttpGet("employee-attendance-breakdown/{employeeId}")]
+    public async Task<IActionResult> GetEmployeeAttendanceBreakdown(
+        int employeeId,
+        [FromQuery] int? year,
+        [FromQuery] int? month)
+    {
+        if (!_currentUser.IsAdmin && _currentUser.EmployeeId != employeeId && !await _currentUser.HasPermissionAsync("Attendance.View") && !await _currentUser.HasPermissionAsync("Report.View"))
+        {
+            return Forbid();
+        }
+
+        int targetYear = year ?? DateTime.UtcNow.Year;
+        int targetMonth = month ?? DateTime.UtcNow.Month;
+
+        var result = await _service.GetEmployeeAttendanceBreakdownAsync(employeeId, targetYear, targetMonth);
+        return Ok(ApiResponse<AttendanceBreakdownSummaryDto>.SuccessResponse(result));
     }
 
     [HttpGet("work-distribution")]

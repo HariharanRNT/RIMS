@@ -49,7 +49,7 @@ public class ReportService : IReportService
         return (startUtc, endUtc);
     }
 
-    private DateTime GetEffectiveEndTime(DateTime startTime, DateTime? endTime, RIIMS.Application.DTOs.Settings.TypedSystemSettingsDto? settings = null)
+    private DateTime GetEffectiveEndTime(DateTime startTime, DateTime? endTime, RIIMS.Application.DTOs.Settings.TypedSystemSettingsDto? settings = null, DateTime? allowedEndTime = null)
     {
         if (endTime.HasValue) return endTime.Value;
 
@@ -61,10 +61,65 @@ public class ReportService : IReportService
             var officeEndTs = settings?.OfficeEndTime ?? new TimeSpan(19, 0, 0);
             var officeEndIst = startIst.Date.Add(officeEndTs);
             var officeEndUtc = TimeZoneInfo.ConvertTimeToUtc(officeEndIst, IstTimeZone);
+            if (allowedEndTime.HasValue && allowedEndTime.Value > officeEndUtc)
+            {
+                officeEndUtc = allowedEndTime.Value;
+            }
             return officeEndUtc > startTime ? officeEndUtc : startTime;
         }
 
         return DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Returns the OfficeEndTime (or AllowedEndTime) cutoff in UTC for the IST date of the given startTime.
+    /// </summary>
+    private DateTime GetOfficeEndTimeUtc(DateTime startTimeUtc, RIIMS.Application.DTOs.Settings.TypedSystemSettingsDto? settings = null, DateTime? allowedEndTime = null)
+    {
+        var startIst = TimeZoneInfo.ConvertTimeFromUtc(startTimeUtc, IstTimeZone);
+        var officeEndTs = settings?.OfficeEndTime ?? new TimeSpan(19, 0, 0);
+        var officeEndIst = startIst.Date.Add(officeEndTs);
+        var officeEndUtc = TimeZoneInfo.ConvertTimeToUtc(officeEndIst, IstTimeZone);
+        if (allowedEndTime.HasValue && allowedEndTime.Value > officeEndUtc)
+        {
+            return allowedEndTime.Value;
+        }
+        return officeEndUtc;
+    }
+
+    /// <summary>
+    /// Returns the OfficeStartTime cutoff in UTC for the IST date of the given startTime.
+    /// </summary>
+    private DateTime GetOfficeStartTimeUtc(DateTime startTimeUtc, RIIMS.Application.DTOs.Settings.TypedSystemSettingsDto? settings = null)
+    {
+        var startIst = TimeZoneInfo.ConvertTimeFromUtc(startTimeUtc, IstTimeZone);
+        var officeStartTs = settings?.OfficeStartTime ?? new TimeSpan(10, 0, 0);
+        var officeStartIst = startIst.Date.Add(officeStartTs);
+        return TimeZoneInfo.ConvertTimeToUtc(officeStartIst, IstTimeZone);
+    }
+
+    /// <summary>
+    /// Returns the bounded duration in seconds for an activity, clamped to [OfficeStartTime, OfficeEndTime/AllowedEndTime].
+    /// Activities entirely outside office hours contribute 0 seconds.
+    /// Activities spanning boundaries are truncated at the boundary.
+    /// </summary>
+    private double GetBoundedDurationSeconds(DateTime startTime, DateTime? endTime, RIIMS.Application.DTOs.Settings.TypedSystemSettingsDto? settings = null, DateTime? allowedEndTime = null)
+    {
+        var effEnd = GetEffectiveEndTime(startTime, endTime, settings, allowedEndTime);
+        var cutoffUtc = GetOfficeEndTimeUtc(startTime, settings, allowedEndTime);
+        var officeStartUtc = GetOfficeStartTimeUtc(startTime, settings);
+
+        // Clamp effective start to OfficeStartTime
+        var effStart = startTime < officeStartUtc ? officeStartUtc : startTime;
+
+        // Activity entirely outside office hours → 0 seconds
+        if (effStart >= cutoffUtc) return 0;
+
+        // Cap the effective end at the cutoff
+        var boundedEnd = effEnd > cutoffUtc ? cutoffUtc : effEnd;
+        if (boundedEnd <= effStart) return 0;
+
+        return Math.Max(0, (boundedEnd - effStart).TotalSeconds);
     }
 
     public async Task<AdminDashboardMetricsDto> GetAdminDashboardMetricsAsync()
@@ -101,18 +156,38 @@ public class ReportService : IReportService
 
         var offlineCount = Math.Max(0, totalEmployees - activeWorkforceCount);
 
-        // Today Productive Hours (Tasks + Support)
+        // Today Productive Hours (Tasks + Support) — capped at AllowedEndTime (or OfficeEndTime)
+        var adminSettings = await _settingService.GetTypedSettingsAsync();
+
+        var todayAttendances = await _context.AttendanceLogs
+            .Where(a => a.LoginTime >= today && a.LoginTime < nextDay)
+            .ToListAsync();
+
+        var empAllowedEndMap = todayAttendances
+            .GroupBy(a => a.EmployeeId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Where(a => a.AllowedEndTime.HasValue).Select(a => a.AllowedEndTime!.Value).DefaultIfEmpty().Max()
+            );
+
         var todayTaskLogsAdmin = await _context.TaskTimeLogs
+            .Include(t => t.Task)
             .Where(t => t.StartTime >= today && t.StartTime < nextDay)
             .ToListAsync();
         var todayTaskSeconds = todayTaskLogsAdmin
-            .Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
+            .Sum(t => {
+                empAllowedEndMap.TryGetValue(t.Task?.EmployeeId ?? 0, out var allowedEnd);
+                return GetBoundedDurationSeconds(t.StartTime, t.EndTime, adminSettings, allowedEnd == default ? null : allowedEnd);
+            });
 
         var todaySupportLogsAdmin = await _context.SupportActivityLogs
             .Where(s => s.StartTime >= today && s.StartTime < nextDay)
             .ToListAsync();
         var todaySupportSeconds = todaySupportLogsAdmin
-            .Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
+            .Sum(s => {
+                empAllowedEndMap.TryGetValue(s.EmployeeId, out var allowedEnd);
+                return GetBoundedDurationSeconds(s.StartTime, s.EndTime, adminSettings, allowedEnd == default ? null : allowedEnd);
+            });
 
         var todayProductiveHours = Math.Round((todayTaskSeconds + todaySupportSeconds) / 3600.0, 2);
 
@@ -121,6 +196,7 @@ public class ReportService : IReportService
 
         // Recent timeline activities
         var recentTimeline = await _context.ActivityTimelines
+            .Include(a => a.Employee)
             .OrderByDescending(a => a.StartTime)
             .Take(10)
             .ToListAsync();
@@ -129,6 +205,8 @@ public class ReportService : IReportService
         {
             Id = a.Id,
             EmployeeId = a.EmployeeId,
+            EmployeeName = a.Employee != null ? a.Employee.Name : null,
+            EmployeeCode = a.Employee != null ? a.Employee.EmployeeCode : null,
             ActivityType = a.ActivityType,
             RefTable = a.RefTable,
             RefId = a.RefId,
@@ -175,41 +253,52 @@ public class ReportService : IReportService
             .OrderBy(a => a.LoginTime)
             .FirstOrDefaultAsync();
 
+        var todayAttendanceSessions = await _context.AttendanceLogs
+            .Where(a => a.EmployeeId == employeeId && a.LoginTime >= today && a.LoginTime < nextDay)
+            .ToListAsync();
+
+        var empAllowedEndUtc = todayAttendance?.AllowedEndTime ?? todayAttendanceSessions.Select(a => a.AllowedEndTime).Max();
+
+        var empSettings = await _settingService.GetTypedSettingsAsync();
+
         var todayTaskLogs = await _context.TaskTimeLogs
             .Where(t => t.Task.EmployeeId == employeeId && t.StartTime >= today && t.StartTime < nextDay)
             .ToListAsync();
         var empTaskSeconds = todayTaskLogs
-            .Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
+            .Sum(t => GetBoundedDurationSeconds(t.StartTime, t.EndTime, empSettings, empAllowedEndUtc));
 
         var todaySupportLogs = await _context.SupportActivityLogs
             .Where(s => s.EmployeeId == employeeId && s.StartTime >= today && s.StartTime < nextDay)
             .ToListAsync();
         var empSupportSeconds = todaySupportLogs
-            .Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
+            .Sum(s => GetBoundedDurationSeconds(s.StartTime, s.EndTime, empSettings, empAllowedEndUtc));
 
         var todayBreakLogs = await _context.BreakLogs
             .Where(b => b.EmployeeId == employeeId && b.StartTime >= today && b.StartTime < nextDay)
             .ToListAsync();
         var empBreakSeconds = todayBreakLogs
-            .Sum(b => ((b.EndTime ?? DateTime.UtcNow) - b.StartTime).TotalSeconds);
+            .Sum(b => GetBoundedDurationSeconds(b.StartTime, b.EndTime, empSettings, empAllowedEndUtc));
 
         var todayIdleLogs = await _context.IdleTimeLogs
             .Where(i => i.EmployeeId == employeeId && i.StartTime >= today && i.StartTime < nextDay)
             .ToListAsync();
-        var rawIdleSeconds = todayIdleLogs.Sum(i => ((i.EndTime ?? DateTime.UtcNow) - i.StartTime).TotalSeconds);
-
-        var todayAttendanceSessions = await _context.AttendanceLogs
-            .Where(a => a.EmployeeId == employeeId && a.LoginTime >= today && a.LoginTime < nextDay)
-            .ToListAsync();
+        var rawIdleSeconds = todayIdleLogs.Sum(i => GetBoundedDurationSeconds(i.StartTime, i.EndTime, empSettings, empAllowedEndUtc));
 
         double totalSessionSec = 0;
         var nowUtc = DateTime.UtcNow;
         foreach (var att in todayAttendanceSessions)
         {
             var sessEnd = att.LogoutTime ?? nowUtc;
-            if (sessEnd > att.LoginTime)
+            // Cap session end at office end time or allowed end time
+            var cutoff = GetOfficeEndTimeUtc(att.LoginTime, empSettings, att.AllowedEndTime ?? empAllowedEndUtc);
+            if (sessEnd > cutoff) sessEnd = cutoff;
+            // Clamp session start to OfficeStartTime
+            var officeStartUtc = GetOfficeStartTimeUtc(att.LoginTime, empSettings);
+            var sessionStart = att.LoginTime < officeStartUtc ? officeStartUtc : att.LoginTime;
+            if (sessionStart >= cutoff) continue;
+            if (sessEnd > sessionStart)
             {
-                totalSessionSec += (sessEnd - att.LoginTime).TotalSeconds;
+                totalSessionSec += (sessEnd - sessionStart).TotalSeconds;
             }
         }
 
@@ -222,6 +311,7 @@ public class ReportService : IReportService
         var activeTask = await _taskService.GetActiveTaskAsync(employeeId);
 
         var todayTimeline = await _context.ActivityTimelines
+            .Include(a => a.Employee)
             .Where(a => a.EmployeeId == employeeId && a.StartTime >= today && a.StartTime < nextDay)
             .OrderBy(a => a.StartTime)
             .ToListAsync();
@@ -230,6 +320,8 @@ public class ReportService : IReportService
         {
             Id = a.Id,
             EmployeeId = a.EmployeeId,
+            EmployeeName = a.Employee != null ? a.Employee.Name : null,
+            EmployeeCode = a.Employee != null ? a.Employee.EmployeeCode : null,
             ActivityType = a.ActivityType,
             RefTable = a.RefTable,
             RefId = a.RefId,
@@ -317,36 +409,59 @@ public class ReportService : IReportService
 
             var settings = await _settingService.GetTypedSettingsAsync();
 
+            var monthLogs = await _context.AttendanceLogs
+                .Where(a => a.EmployeeId == emp.Id && a.LoginTime >= monthStartUtc && a.LoginTime <= monthEndUtc)
+                .ToListAsync();
+
+            var allowedEndByDate = monthLogs
+                .GroupBy(a => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone)))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Where(a => a.AllowedEndTime.HasValue).Select(a => a.AllowedEndTime!.Value).DefaultIfEmpty().Max()
+                );
+
             var taskLogs = await _context.TaskTimeLogs
                 .Where(t => t.Task.EmployeeId == emp.Id && t.StartTime >= monthStartUtc && t.StartTime <= monthEndUtc)
                 .Select(t => new { t.StartTime, t.EndTime })
                 .ToListAsync();
-            var taskSeconds = taskLogs.Sum(t => ((GetEffectiveEndTime(t.StartTime, t.EndTime, settings)) - t.StartTime).TotalSeconds);
+            var taskSeconds = taskLogs.Sum(t => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(t.StartTime, IstTimeZone));
+                allowedEndByDate.TryGetValue(logDate, out var allowedEnd);
+                return GetBoundedDurationSeconds(t.StartTime, t.EndTime, settings, allowedEnd == default ? null : allowedEnd);
+            });
 
             var supportLogs = await _context.SupportActivityLogs
                 .Where(s => s.EmployeeId == emp.Id && s.StartTime >= monthStartUtc && s.StartTime <= monthEndUtc)
                 .Select(s => new { s.StartTime, s.EndTime })
                 .ToListAsync();
-            var supportSeconds = supportLogs.Sum(s => ((GetEffectiveEndTime(s.StartTime, s.EndTime, settings)) - s.StartTime).TotalSeconds);
+            var supportSeconds = supportLogs.Sum(s => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, IstTimeZone));
+                allowedEndByDate.TryGetValue(logDate, out var allowedEnd);
+                return GetBoundedDurationSeconds(s.StartTime, s.EndTime, settings, allowedEnd == default ? null : allowedEnd);
+            });
 
             var breakLogs = await _context.BreakLogs
                 .Where(b => b.EmployeeId == emp.Id && b.StartTime >= monthStartUtc && b.StartTime <= monthEndUtc)
                 .Select(b => new { b.StartTime, b.EndTime })
                 .ToListAsync();
-            var breakSeconds = breakLogs.Sum(b => ((GetEffectiveEndTime(b.StartTime, b.EndTime, settings)) - b.StartTime).TotalSeconds);
+            var breakSeconds = breakLogs.Sum(b => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(b.StartTime, IstTimeZone));
+                allowedEndByDate.TryGetValue(logDate, out var allowedEnd);
+                return GetBoundedDurationSeconds(b.StartTime, b.EndTime, settings, allowedEnd == default ? null : allowedEnd);
+            });
 
             var idleLogs = await _context.IdleTimeLogs
                 .Where(i => i.EmployeeId == emp.Id && i.StartTime >= monthStartUtc && i.StartTime <= monthEndUtc)
                 .Select(i => new { i.StartTime, i.EndTime })
                 .ToListAsync();
-            var idleSeconds = idleLogs.Sum(i => ((GetEffectiveEndTime(i.StartTime, i.EndTime, settings)) - i.StartTime).TotalSeconds);
+            var idleSeconds = idleLogs.Sum(i => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(i.StartTime, IstTimeZone));
+                allowedEndByDate.TryGetValue(logDate, out var allowedEnd);
+                return GetBoundedDurationSeconds(i.StartTime, i.EndTime, settings, allowedEnd == default ? null : allowedEnd);
+            });
 
             var tasksCompleted = await _context.WorkTasks
                 .CountAsync(t => t.EmployeeId == emp.Id && t.Status == TaskStatusEnum.Completed && t.CreatedAt >= monthStartUtc && t.CreatedAt <= monthEndUtc);
-
-            var monthLogs = await _context.AttendanceLogs
-                .Where(a => a.EmployeeId == emp.Id && a.LoginTime >= monthStartUtc && a.LoginTime <= monthEndUtc)
-                .ToListAsync();
 
             // Daily First Login Rule: Only the earliest valid login event per calendar working day is evaluated
             var firstLogsByDate = monthLogs
@@ -384,23 +499,41 @@ public class ReportService : IReportService
         DateTime monthStartUtc = TimeZoneInfo.ConvertTimeToUtc(monthStartIst, IstTimeZone);
         DateTime monthEndUtc = TimeZoneInfo.ConvertTimeToUtc(monthEndIst, IstTimeZone);
 
-        // Products distribution
+        // Products distribution — capped at AllowedEndTime (or OfficeEndTime)
+        var wdSettings = await _settingService.GetTypedSettingsAsync();
         var products = await _context.Products.Where(p => p.IsActive).ToListAsync();
         var prodList = new List<ProductWorkDistributionDto>();
+
+        var monthAttendances = await _context.AttendanceLogs
+            .Where(a => a.LoginTime >= monthStartUtc && a.LoginTime <= monthEndUtc)
+            .ToListAsync();
+        var allowedEndByEmpDate = monthAttendances
+            .GroupBy(a => (a.EmployeeId, DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone))))
+            .ToDictionary(
+                g => g.Key,
+                g => g.Where(a => a.AllowedEndTime.HasValue).Select(a => a.AllowedEndTime!.Value).DefaultIfEmpty().Max()
+            );
 
         foreach (var p in products)
         {
             var taskLogs = await _context.TaskTimeLogs
+                .Include(t => t.Task)
                 .Where(t => t.Task.ProductId == p.Id && t.StartTime >= monthStartUtc && t.StartTime <= monthEndUtc)
-                .Select(t => new { t.StartTime, t.EndTime })
                 .ToListAsync();
-            var taskSec = taskLogs.Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
+            var taskSec = taskLogs.Sum(t => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(t.StartTime, IstTimeZone));
+                allowedEndByEmpDate.TryGetValue((t.Task.EmployeeId, logDate), out var allowedEnd);
+                return GetBoundedDurationSeconds(t.StartTime, t.EndTime, wdSettings, allowedEnd == default ? null : allowedEnd);
+            });
 
             var supportLogs = await _context.SupportActivityLogs
                 .Where(s => s.ProductId == p.Id && s.StartTime >= monthStartUtc && s.StartTime <= monthEndUtc)
-                .Select(s => new { s.StartTime, s.EndTime })
                 .ToListAsync();
-            var supportSec = supportLogs.Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
+            var supportSec = supportLogs.Sum(s => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, IstTimeZone));
+                allowedEndByEmpDate.TryGetValue((s.EmployeeId, logDate), out var allowedEnd);
+                return GetBoundedDurationSeconds(s.StartTime, s.EndTime, wdSettings, allowedEnd == default ? null : allowedEnd);
+            });
 
             prodList.Add(new ProductWorkDistributionDto
             {
@@ -418,16 +551,23 @@ public class ReportService : IReportService
         foreach (var c in clients)
         {
             var taskLogs = await _context.TaskTimeLogs
+                .Include(t => t.Task)
                 .Where(t => t.Task.ClientId == c.Id && t.StartTime >= monthStartUtc && t.StartTime <= monthEndUtc)
-                .Select(t => new { t.StartTime, t.EndTime })
                 .ToListAsync();
-            var taskSec = taskLogs.Sum(t => ((t.EndTime ?? DateTime.UtcNow) - t.StartTime).TotalSeconds);
+            var taskSec = taskLogs.Sum(t => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(t.StartTime, IstTimeZone));
+                allowedEndByEmpDate.TryGetValue((t.Task.EmployeeId, logDate), out var allowedEnd);
+                return GetBoundedDurationSeconds(t.StartTime, t.EndTime, wdSettings, allowedEnd == default ? null : allowedEnd);
+            });
 
             var supportLogs = await _context.SupportActivityLogs
                 .Where(s => s.ClientId == c.Id && s.StartTime >= monthStartUtc && s.StartTime <= monthEndUtc)
-                .Select(s => new { s.StartTime, s.EndTime })
                 .ToListAsync();
-            var supportSec = supportLogs.Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
+            var supportSec = supportLogs.Sum(s => {
+                var logDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, IstTimeZone));
+                allowedEndByEmpDate.TryGetValue((s.EmployeeId, logDate), out var allowedEnd);
+                return GetBoundedDurationSeconds(s.StartTime, s.EndTime, wdSettings, allowedEnd == default ? null : allowedEnd);
+            });
 
             clientList.Add(new ClientWorkDistributionDto
             {
@@ -508,41 +648,47 @@ public class ReportService : IReportService
                     .ToListAsync();
 
                 var attendance = dayAttLogs.FirstOrDefault();
+                var allowedEndUtc = attendance?.AllowedEndTime ?? dayAttLogs.Select(a => a.AllowedEndTime).Max();
 
                 var taskLogs = await _context.TaskTimeLogs
                     .Where(t => t.Task.EmployeeId == emp.Id && t.StartTime >= startUtc && t.StartTime < endUtc)
                     .Select(t => new { t.TaskId, t.StartTime, t.EndTime })
                     .ToListAsync();
-                var taskSeconds = taskLogs.Sum(t => ((GetEffectiveEndTime(t.StartTime, t.EndTime, settings)) - t.StartTime).TotalSeconds);
+                var taskSeconds = taskLogs.Sum(t => GetBoundedDurationSeconds(t.StartTime, t.EndTime, settings, allowedEndUtc));
                 var workTaskCount = taskLogs.Select(t => t.TaskId).Distinct().Count();
 
                 var supportLogs = await _context.SupportActivityLogs
                     .Where(s => s.EmployeeId == emp.Id && s.StartTime >= startUtc && s.StartTime < endUtc)
                     .Select(s => new { s.StartTime, s.EndTime })
                     .ToListAsync();
-                var supportSeconds = supportLogs.Sum(s => ((GetEffectiveEndTime(s.StartTime, s.EndTime, settings)) - s.StartTime).TotalSeconds);
+                var supportSeconds = supportLogs.Sum(s => GetBoundedDurationSeconds(s.StartTime, s.EndTime, settings, allowedEndUtc));
                 var callCount = supportLogs.Count;
 
                 var breakLogs = await _context.BreakLogs
                     .Where(b => b.EmployeeId == emp.Id && b.StartTime >= startUtc && b.StartTime < endUtc)
                     .Select(b => new { b.StartTime, b.EndTime })
                     .ToListAsync();
-                var breakSeconds = breakLogs.Sum(b => ((GetEffectiveEndTime(b.StartTime, b.EndTime, settings)) - b.StartTime).TotalSeconds);
+                var breakSeconds = breakLogs.Sum(b => GetBoundedDurationSeconds(b.StartTime, b.EndTime, settings, allowedEndUtc));
                 var breakCount = breakLogs.Count;
 
                 var idleLogs = await _context.IdleTimeLogs
                     .Where(i => i.EmployeeId == emp.Id && i.StartTime >= startUtc && i.StartTime < endUtc)
                     .Select(i => new { i.StartTime, i.EndTime })
                     .ToListAsync();
-                var rawIdleSeconds = idleLogs.Sum(i => ((GetEffectiveEndTime(i.StartTime, i.EndTime, settings)) - i.StartTime).TotalSeconds);
+                var rawIdleSeconds = idleLogs.Sum(i => GetBoundedDurationSeconds(i.StartTime, i.EndTime, settings, allowedEndUtc));
 
                 double totalSessionSec = 0;
                 foreach (var att in dayAttLogs)
                 {
-                    var sessEnd = GetEffectiveEndTime(att.LoginTime, att.LogoutTime, settings);
-                    if (sessEnd > att.LoginTime)
+                    var sessCutoff = GetOfficeEndTimeUtc(att.LoginTime, settings, att.AllowedEndTime ?? allowedEndUtc);
+                    var sessEnd = GetEffectiveEndTime(att.LoginTime, att.LogoutTime, settings, att.AllowedEndTime ?? allowedEndUtc);
+                    if (sessEnd > sessCutoff) sessEnd = sessCutoff;
+                    // Clamp session start to OfficeStartTime
+                    var officeStartUtc = GetOfficeStartTimeUtc(att.LoginTime, settings);
+                    var sessionStart = att.LoginTime < officeStartUtc ? officeStartUtc : att.LoginTime;
+                    if (sessionStart < sessCutoff && sessEnd > sessionStart)
                     {
-                        totalSessionSec += (sessEnd - att.LoginTime).TotalSeconds;
+                        totalSessionSec += (sessEnd - sessionStart).TotalSeconds;
                     }
                 }
 
@@ -688,7 +834,7 @@ public class ReportService : IReportService
                     GraceEndTime = graceEndStr,
                     LateCount = lopResultMtd.TotalLateCount,
                     PermissionCount = lopResultMtd.PermissionCount,
-                    LeaveCount = lopResultMtd.ActualLeaveDays,
+                    LeaveCount = lopResultMtd.TotalLeaveLOPDays,
                     LopDays = lopDays
                 });
             }
@@ -716,6 +862,12 @@ public class ReportService : IReportService
             .Where(a => a.EmployeeId == employeeId && a.LoginTime >= startUtc && a.LoginTime < endUtc)
             .OrderBy(a => a.LoginTime)
             .FirstOrDefaultAsync();
+
+        var dayAttLogs = await _context.AttendanceLogs
+            .Where(a => a.EmployeeId == employeeId && a.LoginTime >= startUtc && a.LoginTime < endUtc)
+            .ToListAsync();
+
+        var allowedEndUtc = attendance?.AllowedEndTime ?? dayAttLogs.Select(a => a.AllowedEndTime).Max();
 
         var graceViolation = await _context.GraceTimeViolations
             .FirstOrDefaultAsync(g => g.EmployeeId == employeeId && g.Date >= startIst && g.Date < endIst);
@@ -755,7 +907,7 @@ public class ReportService : IReportService
             if (taskLogsOnDate.Count > 0)
             {
                 logsToMap = taskLogsOnDate;
-                taskSeconds = taskLogsOnDate.Sum(t => ((GetEffectiveEndTime(t.StartTime, t.EndTime, settings)) - t.StartTime).TotalSeconds);
+                taskSeconds = taskLogsOnDate.Sum(t => GetBoundedDurationSeconds(t.StartTime, t.EndTime, settings, allowedEndUtc));
             }
             else
             {
@@ -763,18 +915,19 @@ public class ReportService : IReportService
                     .Where(t => t.TaskId == task.Id)
                     .OrderBy(t => t.StartTime)
                     .ToListAsync();
-                taskSeconds = logsToMap.Sum(t => ((GetEffectiveEndTime(t.StartTime, t.EndTime, settings)) - t.StartTime).TotalSeconds);
+                taskSeconds = logsToMap.Sum(t => GetBoundedDurationSeconds(t.StartTime, t.EndTime, settings, allowedEndUtc));
             }
 
             var sessionDtos = logsToMap.Select(tl => {
-                var effEnd = GetEffectiveEndTime(tl.StartTime, tl.EndTime, settings);
+                var effEnd = GetEffectiveEndTime(tl.StartTime, tl.EndTime, settings, allowedEndUtc);
+                var durSec = GetBoundedDurationSeconds(tl.StartTime, tl.EndTime, settings, allowedEndUtc);
                 return new DailyTaskSessionDto
                 {
                     StartTime = tl.StartTime,
                     EndTime = tl.EndTime,
                     Duration = tl.EndTime.HasValue
-                        ? FormatSecondsToHhMm((tl.EndTime.Value - tl.StartTime).TotalSeconds)
-                        : FormatSecondsToHhMm((effEnd - tl.StartTime).TotalSeconds) + (effEnd == DateTime.UtcNow ? " (In Progress)" : "")
+                        ? FormatSecondsToHhMm(durSec)
+                        : FormatSecondsToHhMm(durSec) + (effEnd == DateTime.UtcNow ? " (In Progress)" : "")
                 };
             }).ToList();
 
@@ -808,7 +961,8 @@ public class ReportService : IReportService
         var settingsObj = await _settingService.GetTypedSettingsAsync();
 
         var breakDtos = breaks.Select(b => {
-            var effEnd = GetEffectiveEndTime(b.StartTime, b.EndTime, settingsObj);
+            var effEnd = GetEffectiveEndTime(b.StartTime, b.EndTime, settingsObj, allowedEndUtc);
+            var durSec = GetBoundedDurationSeconds(b.StartTime, b.EndTime, settingsObj, allowedEndUtc);
 
             string? moduleName = b.HeldTask?.ModuleName;
             if (string.IsNullOrEmpty(moduleName) && b.HeldTaskId.HasValue)
@@ -846,8 +1000,8 @@ public class ReportService : IReportService
                 StartTime = b.StartTime,
                 EndTime = b.EndTime,
                 Duration = b.EndTime.HasValue
-                    ? FormatSecondsToHhMm((b.EndTime.Value - b.StartTime).TotalSeconds)
-                    : FormatSecondsToHhMm((effEnd - b.StartTime).TotalSeconds) + (effEnd == DateTime.UtcNow ? " (In Progress)" : "")
+                    ? FormatSecondsToHhMm(durSec)
+                    : FormatSecondsToHhMm(durSec) + (effEnd == DateTime.UtcNow ? " (In Progress)" : "")
             };
         }).ToList();
 
@@ -860,7 +1014,8 @@ public class ReportService : IReportService
             .ToListAsync();
 
         var supportDtos = supports.Select(s => {
-            var effEnd = GetEffectiveEndTime(s.StartTime, s.EndTime, settingsObj);
+            var effEnd = GetEffectiveEndTime(s.StartTime, s.EndTime, settingsObj, allowedEndUtc);
+            var durSec = GetBoundedDurationSeconds(s.StartTime, s.EndTime, settingsObj, allowedEndUtc);
             return new DailySupportDetailDto
             {
                 ActivityTypeName = s.ActivityType?.Name ?? "Support",
@@ -870,8 +1025,8 @@ public class ReportService : IReportService
                 StartTime = s.StartTime,
                 EndTime = s.EndTime,
                 Duration = s.EndTime.HasValue
-                    ? FormatSecondsToHhMm((s.EndTime.Value - s.StartTime).TotalSeconds)
-                    : FormatSecondsToHhMm((effEnd - s.StartTime).TotalSeconds) + (effEnd == DateTime.UtcNow ? " (In Progress)" : "")
+                    ? FormatSecondsToHhMm(durSec)
+                    : FormatSecondsToHhMm(durSec) + (effEnd == DateTime.UtcNow ? " (In Progress)" : "")
             };
         }).ToList();
 
@@ -902,14 +1057,15 @@ public class ReportService : IReportService
             .ToListAsync();
 
         var idleDtos = idleLogs.Select(i => {
-            var effEnd = GetEffectiveEndTime(i.StartTime, i.EndTime, settingsObj);
+            var effEnd = GetEffectiveEndTime(i.StartTime, i.EndTime, settingsObj, allowedEndUtc);
+            var durSec = GetBoundedDurationSeconds(i.StartTime, i.EndTime, settingsObj, allowedEndUtc);
             return new DailyIdleDetailDto
             {
                 StartTime = i.StartTime,
                 EndTime = effEnd,
                 Duration = i.EndTime.HasValue
-                    ? FormatSecondsToHhMm((i.EndTime.Value - i.StartTime).TotalSeconds)
-                    : FormatSecondsToHhMm((effEnd - i.StartTime).TotalSeconds) + (effEnd == DateTime.UtcNow ? " (In Progress)" : ""),
+                    ? FormatSecondsToHhMm(durSec)
+                    : FormatSecondsToHhMm(durSec) + (effEnd == DateTime.UtcNow ? " (In Progress)" : ""),
                 Type = i.Type ?? "Idle"
             };
         }).ToList();
@@ -918,22 +1074,23 @@ public class ReportService : IReportService
             .Where(tl => tl.Task.EmployeeId == employeeId && tl.StartTime >= startUtc && tl.StartTime < endUtc)
             .ToListAsync();
 
-        var totalTaskSec = todayTaskLogs.Sum(tl => ((GetEffectiveEndTime(tl.StartTime, tl.EndTime, settingsObj)) - tl.StartTime).TotalSeconds);
-        var totalSuppSec = supports.Sum(s => ((GetEffectiveEndTime(s.StartTime, s.EndTime, settingsObj)) - s.StartTime).TotalSeconds);
-        var totalBreakSec = breaks.Sum(b => ((GetEffectiveEndTime(b.StartTime, b.EndTime, settingsObj)) - b.StartTime).TotalSeconds);
-        var rawIdleSec = idleLogs.Sum(i => ((GetEffectiveEndTime(i.StartTime, i.EndTime, settingsObj)) - i.StartTime).TotalSeconds);
-
-        var dayAttLogs = await _context.AttendanceLogs
-            .Where(a => a.EmployeeId == employeeId && a.LoginTime >= startUtc && a.LoginTime < endUtc)
-            .ToListAsync();
+        var totalTaskSec = todayTaskLogs.Sum(tl => GetBoundedDurationSeconds(tl.StartTime, tl.EndTime, settingsObj, allowedEndUtc));
+        var totalSuppSec = supports.Sum(s => GetBoundedDurationSeconds(s.StartTime, s.EndTime, settingsObj, allowedEndUtc));
+        var totalBreakSec = breaks.Sum(b => GetBoundedDurationSeconds(b.StartTime, b.EndTime, settingsObj, allowedEndUtc));
+        var rawIdleSec = idleLogs.Sum(i => GetBoundedDurationSeconds(i.StartTime, i.EndTime, settingsObj, allowedEndUtc));
 
         double totalSessionSec = 0;
         foreach (var att in dayAttLogs)
         {
-            var sessEnd = GetEffectiveEndTime(att.LoginTime, att.LogoutTime, settingsObj);
-            if (sessEnd > att.LoginTime)
+            var sessCutoff = GetOfficeEndTimeUtc(att.LoginTime, settingsObj, att.AllowedEndTime ?? allowedEndUtc);
+            var sessEnd = GetEffectiveEndTime(att.LoginTime, att.LogoutTime, settingsObj, att.AllowedEndTime ?? allowedEndUtc);
+            if (sessEnd > sessCutoff) sessEnd = sessCutoff;
+            // Clamp session start to OfficeStartTime
+            var officeStartUtc = GetOfficeStartTimeUtc(att.LoginTime, settingsObj);
+            var sessionStart = att.LoginTime < officeStartUtc ? officeStartUtc : att.LoginTime;
+            if (sessionStart < sessCutoff && sessEnd > sessionStart)
             {
-                totalSessionSec += (sessEnd - att.LoginTime).TotalSeconds;
+                totalSessionSec += (sessEnd - sessionStart).TotalSeconds;
             }
         }
 
@@ -943,9 +1100,13 @@ public class ReportService : IReportService
         if (dayAttLogs.Any() && totalIdleSec > rawIdleSec)
         {
             var firstAtt = dayAttLogs.OrderBy(a => a.LoginTime).First();
-            var sessEnd = GetEffectiveEndTime(firstAtt.LoginTime, firstAtt.LogoutTime, settingsObj);
+            var sessEnd = GetEffectiveEndTime(firstAtt.LoginTime, firstAtt.LogoutTime, settingsObj, firstAtt.AllowedEndTime ?? allowedEndUtc);
+            var sessCutoff = GetOfficeEndTimeUtc(firstAtt.LoginTime, settingsObj, firstAtt.AllowedEndTime ?? allowedEndUtc);
+            if (sessEnd > sessCutoff) sessEnd = sessCutoff;
 
-            DateTime idleGapStart = firstAtt.LoginTime;
+            // Clamp idle gap start to OfficeStartTime
+            var gapOfficeStartUtc = GetOfficeStartTimeUtc(firstAtt.LoginTime, settingsObj);
+            DateTime idleGapStart = firstAtt.LoginTime < gapOfficeStartUtc ? gapOfficeStartUtc : firstAtt.LoginTime;
             if (idleDtos.Any())
             {
                 var maxIdleEnd = idleDtos.Max(i => i.EndTime);
@@ -1094,7 +1255,7 @@ public class ReportService : IReportService
             string title = c.EventType switch
             {
                 "Birthday" => $"🎉 Birthday Celebration",
-                "CompanyAnniversary" => $"🏆 Company Anniversary",
+                "CompanyAnniversary" => $"🏆 Work Anniversary",
                 "MarriageAnniversary" => $"💍 Marriage Anniversary",
                 _ => $"🎉 Celebration Wish"
             };
@@ -1102,7 +1263,7 @@ public class ReportService : IReportService
             string message = c.EventType switch
             {
                 "Birthday" => $"Warm Birthday wishes dispatched for {c.Employee?.Name ?? "Employee"}!",
-                "CompanyAnniversary" => $"Company Anniversary wishes dispatched for {c.Employee?.Name ?? "Employee"}!",
+                "CompanyAnniversary" => $"Work Anniversary wishes dispatched for {c.Employee?.Name ?? "Employee"}!",
                 "MarriageAnniversary" => $"Marriage Anniversary wishes dispatched for {c.Employee?.Name ?? "Employee"}!",
                 _ => $"Celebration wish dispatched for {c.Employee?.Name ?? "Employee"}!"
             };
@@ -1247,7 +1408,7 @@ public class ReportService : IReportService
         var worksheet = workbook.Worksheets.Add("Daily Activity Timeline");
 
         // Title Block
-        worksheet.Cell(1, 1).Value = "RIIMS V2 - Daily Activity Timeline Report";
+        worksheet.Cell(1, 1).Value = "RIMS - Daily Activity Timeline Report";
         worksheet.Cell(1, 1).Style.Font.SetBold(true);
         worksheet.Cell(1, 1).Style.Font.SetFontSize(16);
         worksheet.Cell(1, 1).Style.Font.SetFontColor(XLColor.FromHtml("#1E3A8A"));
@@ -1395,11 +1556,13 @@ public class ReportService : IReportService
                     .OrderBy(i => i.StartTime)
                     .ToListAsync();
 
-                // Calculate Totals
-                double totalTaskSec = taskLogs.Sum(tl => ((tl.EndTime ?? DateTime.UtcNow) - tl.StartTime).TotalSeconds);
-                double totalSuppSec = supports.Sum(s => ((s.EndTime ?? DateTime.UtcNow) - s.StartTime).TotalSeconds);
-                double totalBreakSec = breaks.Sum(b => ((b.EndTime ?? DateTime.UtcNow) - b.StartTime).TotalSeconds);
-                double totalIdleSec = idles.Sum(i => ((i.EndTime ?? DateTime.UtcNow) - i.StartTime).TotalSeconds);
+                // Calculate Totals — capped at AllowedEndTime (or OfficeEndTime)
+                var xlAllowedEndUtc = attendance?.AllowedEndTime;
+                var xlSettings = await _settingService.GetTypedSettingsAsync();
+                double totalTaskSec = taskLogs.Sum(tl => GetBoundedDurationSeconds(tl.StartTime, tl.EndTime, xlSettings, xlAllowedEndUtc));
+                double totalSuppSec = supports.Sum(s => GetBoundedDurationSeconds(s.StartTime, s.EndTime, xlSettings, xlAllowedEndUtc));
+                double totalBreakSec = breaks.Sum(b => GetBoundedDurationSeconds(b.StartTime, b.EndTime, xlSettings, xlAllowedEndUtc));
+                double totalIdleSec = idles.Sum(i => GetBoundedDurationSeconds(i.StartTime, i.EndTime, xlSettings, xlAllowedEndUtc));
 
                 double totalProductiveSec = totalTaskSec + totalSuppSec;
                 double totalNonProductiveSec = totalBreakSec + totalSuppSec + totalIdleSec;
@@ -1639,5 +1802,228 @@ public class ReportService : IReportService
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);
         return ms.ToArray();
+    }
+
+    public async Task<AttendanceBreakdownSummaryDto> GetEmployeeAttendanceBreakdownAsync(int employeeId, int year, int month)
+    {
+        var emp = await _context.Employees
+            .Include(e => e.Department)
+            .FirstOrDefaultAsync(e => e.Id == employeeId);
+
+        if (emp == null)
+        {
+            throw new KeyNotFoundException($"Employee with ID {employeeId} not found.");
+        }
+
+        var settings = await _settingService.GetTypedSettingsAsync();
+
+        var monthStartDate = new DateOnly(year, month, 1);
+        int daysInMonth = DateTime.DaysInMonth(year, month);
+        var monthEndDate = new DateOnly(year, month, daysInMonth);
+
+        var calendarEntriesList = await _context.AttendanceCalendars
+            .Where(c => c.Year == year && c.Month == month)
+            .OrderBy(c => c.CalendarDate)
+            .ToListAsync();
+
+        var calDtos = new List<AttendanceCalendarDto>();
+        if (calendarEntriesList.Any())
+        {
+            calDtos = calendarEntriesList.Select(c => new AttendanceCalendarDto
+            {
+                Id = c.Id,
+                CalendarDate = c.CalendarDate,
+                Year = c.Year,
+                Month = c.Month,
+                DayType = c.DayType,
+                IsWorkingDay = c.IsWorkingDay,
+                IsHoliday = c.IsHoliday,
+                HolidayName = c.HolidayName
+            }).ToList();
+        }
+        else
+        {
+            for (int day = 1; day <= daysInMonth; day++)
+            {
+                var date = new DateOnly(year, month, day);
+                bool isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+                calDtos.Add(new AttendanceCalendarDto
+                {
+                    CalendarDate = date,
+                    Year = year,
+                    Month = month,
+                    DayType = isWeekend ? RIIMS.Domain.Enums.AttendanceDayType.Weekend : RIIMS.Domain.Enums.AttendanceDayType.WorkingDay,
+                    IsWorkingDay = !isWeekend,
+                    IsHoliday = false
+                });
+            }
+        }
+
+        var monthStartUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(year, month, 1, 0, 0, 0), IstTimeZone);
+        var monthEndUtc = TimeZoneInfo.ConvertTimeToUtc(new DateTime(year, month, daysInMonth, 23, 59, 59), IstTimeZone);
+
+        var empLeaves = await _context.LeaveRequests
+            .Include(l => l.LeaveType)
+            .Where(l => l.EmployeeId == employeeId && l.Status == RIIMS.Domain.Enums.RequestStatus.Approved && l.FromDate <= monthEndUtc && l.ToDate >= monthStartUtc)
+            .ToListAsync();
+
+        var empLogs = await _context.AttendanceLogs
+            .Where(l => l.EmployeeId == employeeId && l.LoginTime >= monthStartUtc && l.LoginTime <= monthEndUtc)
+            .ToListAsync();
+
+        var empPermissions = await _context.PermissionRequests
+            .Where(p => p.EmployeeId == employeeId && p.Status == RIIMS.Domain.Enums.RequestStatus.Approved && p.RequestDate.Year == year && p.RequestDate.Month == month)
+            .ToListAsync();
+
+        var activeSalaryStructure = await _context.EmployeeSalaryStructures
+            .FirstOrDefaultAsync(s => s.EmployeeId == employeeId && s.IsActive);
+
+        decimal salary = (activeSalaryStructure != null && activeSalaryStructure.MonthlyCTC > 0)
+            ? activeSalaryStructure.MonthlyCTC
+            : 30000m;
+
+        var lopResult = LeaveLopCalculator.Calculate(
+            employeeId,
+            year,
+            month,
+            settings.MonthlyAllowedLeave,
+            settings.LateLoginsForHalfDay,
+            salary,
+            calDtos,
+            empLeaves,
+            empLogs,
+            empPermissions,
+            settings
+        );
+
+        int lateLoginCount = lopResult.TotalLateCount;
+        decimal absentCount = lopResult.DailyDetails.Count(d => d.Status == "Absent" && d.DayType == RIIMS.Domain.Enums.AttendanceDayType.WorkingDay);
+        decimal approvedLeaveCount = lopResult.ApprovedLeaveDays;
+        decimal halfDayCount = lopResult.DailyDetails.Count(d => d.IsHalfDayAttendance || d.Status == "HalfDay Attendance" || (d.IsLeave && d.LeaveDaysCount == 0.5m && d.Status != "Absent"));
+        int permissionCount = lopResult.PermissionCount;
+        decimal totalLeaveCount = lopResult.TotalLeaveLOPDays;
+
+        var monthName = new DateTime(year, month, 1).ToString("MMMM yyyy");
+
+        var summary = new AttendanceBreakdownSummaryDto
+        {
+            EmployeeId = emp.Id,
+            EmployeeCode = emp.EmployeeCode,
+            EmployeeName = emp.Name,
+            DepartmentName = emp.Department?.Name ?? string.Empty,
+            Year = year,
+            Month = month,
+            MonthName = monthName,
+            LateLoginCount = lateLoginCount,
+            AbsentCount = absentCount,
+            ApprovedLeaveCount = approvedLeaveCount,
+            HalfDayCount = halfDayCount,
+            SandwichLeaveCount = lopResult.SandwichLeaveDays,
+            PermissionCount = permissionCount,
+            TotalLeaveCount = totalLeaveCount,
+            MonthlyAllowedLeave = lopResult.MonthlyAllowedLeave,
+            LeaveLopDays = lopResult.LeaveLOPDays,
+            LateLoginLopDays = lopResult.RawLateLoginLOPDays,
+            TotalLopDays = lopResult.TotalLOPDays,
+            LopAmount = lopResult.TotalLOPAmount
+        };
+
+        foreach (var d in lopResult.DailyDetails.OrderByDescending(x => x.Date))
+        {
+            string type;
+            string value;
+            string details;
+
+            string formattedLogin = d.LoginTime.HasValue
+                ? TimeZoneInfo.ConvertTimeFromUtc(d.LoginTime.Value, IstTimeZone).ToString("hh:mm tt")
+                : string.Empty;
+
+            if (d.IsSandwichLeave || d.Status == "SandwichLeave")
+            {
+                type = "Sandwich Leave";
+                value = "+1";
+                details = "Sandwich Leave (Weekend/Holiday between leaves)";
+            }
+            else if (d.Status == "Absent")
+            {
+                type = "Absent";
+                value = "+1";
+                details = "No login";
+            }
+            else if (d.IsHalfDayAttendance || d.Status == "HalfDay Attendance")
+            {
+                type = "Half Day";
+                value = "+0.5";
+                details = !string.IsNullOrEmpty(formattedLogin)
+                    ? $"Login: {formattedLogin} (after 11:00 AM)"
+                    : "Login after 11:00 AM";
+            }
+            else if (d.IsLeave && d.Status != "Absent")
+            {
+                type = "Approved Leave";
+                value = $"+{d.LeaveDaysCount:0.#}";
+                details = !string.IsNullOrWhiteSpace(d.LeaveReason)
+                    ? $"Approved Leave ({d.LeaveReason})"
+                    : "Approved Leave";
+            }
+            else if (d.IsPermission || d.Status == "Permission")
+            {
+                type = "Permission";
+                value = "1";
+                details = !string.IsNullOrEmpty(formattedLogin)
+                    ? $"Login: {formattedLogin} (Approved Permission)"
+                    : "Approved Permission";
+            }
+            else if (d.IsLate)
+            {
+                type = "Late Login";
+                value = "1";
+                details = !string.IsNullOrEmpty(formattedLogin)
+                    ? $"Login: {formattedLogin}"
+                    : "Late Login";
+            }
+            else if (d.Status == "Holiday" || d.DayType == RIIMS.Domain.Enums.AttendanceDayType.CompanyHoliday)
+            {
+                type = "Holiday";
+                value = "-";
+                details = !string.IsNullOrWhiteSpace(d.HolidayName) ? d.HolidayName : "Company Holiday";
+            }
+            else if (d.Status == "Weekend" || d.DayType == RIIMS.Domain.Enums.AttendanceDayType.Weekend)
+            {
+                type = "Weekend";
+                value = "-";
+                details = "Weekend";
+            }
+            else if (d.Status == "Upcoming")
+            {
+                type = "Upcoming";
+                value = "-";
+                details = "Upcoming Working Day";
+            }
+            else
+            {
+                type = "Present";
+                value = "0";
+                details = !string.IsNullOrEmpty(formattedLogin)
+                    ? $"Login: {formattedLogin}"
+                    : "Present";
+            }
+
+            summary.Items.Add(new AttendanceBreakdownItemDto
+            {
+                Date = d.Date,
+                Type = type,
+                Value = value,
+                Details = details,
+                LoginTime = d.LoginTime,
+                LogoutTime = d.LogoutTime,
+                LeaveDaysCount = d.LeaveDaysCount,
+                PresentDaysCount = d.PresentDaysCount,
+                IsLop = d.IsLop,
+                Status = d.Status
+            });
+        }
+
+        return summary;
     }
 }

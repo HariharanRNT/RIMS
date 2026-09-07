@@ -23,34 +23,52 @@ import {
   ShieldCheck,
   Calculator,
   UserCog,
-  Shield
+  Shield,
+  type LucideIcon
 } from 'lucide-react';
 
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  permissions?: string[];
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
 export const Sidebar: React.FC = () => {
-  const { role, user, logout, isAdmin, hasAnyPermission, isSuperAdmin } = useAuth();
+  const { role, user, logout, isPureAdmin, hasAnyPermission, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
 
-  const profilePath = isAdmin ? '/admin/profile' : '/profile';
+  const profilePath = isPureAdmin ? '/admin/profile' : '/profile';
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  const adminNavGroups = [
+  const adminNavGroups: NavGroup[] = [
     {
       title: 'OVERVIEW',
       items: [
         { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/admin/attendance-permissions', label: 'Attendance & Permissions', icon: ShieldCheck, permissions: ['Attendance.View', 'Permission.View', 'Report.View'] },
-        { to: '/admin/approvals', label: 'Approval Queue', icon: CheckCircle, permissions: ['Leave.Approve', 'Permission.Approve', 'Attendance.Approve'] },
       ]
     },
     {
-      title: 'WORKFORCE & ATTENDANCE',
+      title: 'ATTENDANCE & APPROVAL',
       items: [
+        { to: '/admin/attendance-permissions', label: 'Attendance & Permissions', icon: ShieldCheck, permissions: ['Attendance.View', 'Permission.View', 'Report.View'] },
+        { to: '/admin/approvals', label: 'Approval Queue', icon: CheckCircle, permissions: ['Leave.Approve', 'Permission.Approve', 'Attendance.Approve'] },
         { to: '/admin/attendance-calendar', label: 'Monthly Calendar', icon: CalendarDays, permissions: ['AttendanceCalendar.View', 'AttendanceCalendar.Manage'] },
+      ]
+    },
+    {
+      title: 'WORKFORCE & EMPLOYEES',
+      items: [
         { to: '/admin/tasks', label: 'Task Allocation', icon: Briefcase, permissions: ['Task.View', 'Task.Assign'] },
         { to: '/admin/employees', label: 'Employees', icon: Users, permissions: ['Employee.View', 'Employee.Create'] },
         { to: '/admin/departments', label: 'Departments', icon: Building2, permissions: ['Department.View', 'Department.Manage'] },
@@ -61,8 +79,8 @@ export const Sidebar: React.FC = () => {
       title: 'FINANCE & REPORTS',
       items: [
         { to: '/admin/payroll', label: 'Payroll & LOP', icon: CreditCard, permissions: ['Payroll.View', 'Payroll.Generate'] },
-        { to: '/admin/salary-structure', label: 'Salary Structure', icon: Calculator, permissions: ['SalaryStructure.View', 'SalaryStructure.Manage'] },
         { to: '/admin/payroll/monthly-report', label: 'Monthly Employee Report', icon: FileSpreadsheet, permissions: ['Payroll.View', 'Report.View'] },
+        { to: '/admin/salary-structure', label: 'Salary Structure', icon: Calculator, permissions: ['SalaryStructure.View', 'SalaryStructure.Manage'] },
         { to: '/admin/reports', label: 'Production Reports', icon: FileText, permissions: ['Report.View'] },
       ]
     },
@@ -86,7 +104,7 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  const employeeNavGroups = [
+  const employeeNavGroups: NavGroup[] = [
     {
       title: 'MY WORKSPACE',
       items: [
@@ -105,7 +123,32 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  // Filter groups according to permissions
+  // Specific additional administration tools permitted for hybrid employees (e.g. Employee Admin, HR Admin)
+  const employeeAdminItems: NavItem[] = ([
+    { to: '/admin/employees', label: 'Employees', icon: Users, permissions: ['Employee.View', 'Employee.Create'] },
+    { to: '/admin/approvals', label: 'Approval Queue', icon: CheckCircle, permissions: ['Leave.Approve', 'Permission.Approve', 'Attendance.Approve'] },
+    { to: '/admin/attendance-permissions', label: 'Attendance & Permissions', icon: ShieldCheck, permissions: ['Attendance.View', 'Permission.View'] },
+    { to: '/admin/attendance-calendar', label: 'Monthly Calendar', icon: CalendarDays, permissions: ['AttendanceCalendar.Manage'] },
+    { to: '/admin/tasks', label: 'Task Allocation', icon: Briefcase, permissions: ['Task.Assign'] },
+    { to: '/admin/payroll', label: 'Payroll & LOP', icon: CreditCard, permissions: ['Payroll.View', 'Payroll.Generate'] },
+    { to: '/admin/salary-structure', label: 'Salary Structure', icon: Calculator, permissions: ['SalaryStructure.View', 'SalaryStructure.Manage'] },
+    { to: '/admin/payroll/monthly-report', label: 'Monthly Employee Report', icon: FileSpreadsheet, permissions: ['Payroll.View', 'Report.View'] },
+    { to: '/admin/reports', label: 'Production Reports', icon: FileText, permissions: ['Report.View'] },
+    { to: '/admin/departments', label: 'Departments', icon: Building2, permissions: ['Department.View', 'Department.Manage'] },
+    { to: '/admin/designations', label: 'Designations', icon: Briefcase, permissions: ['Designation.View', 'Designation.Manage'] },
+  ] as NavItem[]).filter(item => !item.permissions || hasAnyPermission(item.permissions));
+
+  const hybridEmployeeGroups = [
+    ...employeeNavGroups,
+    ...(employeeAdminItems.length > 0
+      ? [{
+        title: 'ADMINISTRATION & MANAGEMENT',
+        items: employeeAdminItems
+      }]
+      : [])
+  ];
+
+  // Filter groups according to permissions for pure admins
   const filteredAdminGroups = adminNavGroups
     .map(group => ({
       ...group,
@@ -117,14 +160,14 @@ export const Sidebar: React.FC = () => {
     }))
     .filter(group => group.items.length > 0);
 
-  const groups = isAdmin ? filteredAdminGroups : employeeNavGroups;
+  const groups = isPureAdmin ? filteredAdminGroups : hybridEmployeeGroups;
 
   const formatDisplayName = (name?: string) => {
-    if (!name) return isAdmin ? 'Administrator' : 'Employee';
+    if (!name) return isPureAdmin ? 'Administrator' : 'Employee';
     if (name.includes('@')) {
       const localPart = name.split('@')[0];
       const cleanName = localPart.replace(/[0-9._-]/g, ' ').trim();
-      if (!cleanName) return isAdmin ? 'Administrator' : 'Employee';
+      if (!cleanName) return isPureAdmin ? 'Administrator' : 'Employee';
       return cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
     return name;
@@ -139,16 +182,16 @@ export const Sidebar: React.FC = () => {
 
   const portalLabel = isSuperAdmin
     ? 'SUPER ADMIN'
-    : isAdmin
-    ? (user?.roles?.find(r => r.toLowerCase().endsWith('admin') || r.toLowerCase() === 'admin')?.toUpperCase() || 'ADMIN')
-    : 'EMPLOYEE';
+    : isPureAdmin
+      ? 'ADMIN'
+      : 'EMPLOYEE';
 
   return (
     <aside style={{
       width: collapsed ? '72px' : '248px',
       minWidth: collapsed ? '72px' : '248px',
       transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
-      background: 'var(--bg-alt)',
+      background: 'var(--bg-sidebar)',
       borderRight: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
@@ -157,13 +200,87 @@ export const Sidebar: React.FC = () => {
       top: 0,
       zIndex: 101,
     }}>
+      <style>{`
+        .rims-sidebar-collapse-btn {
+          background: var(--panel);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          color: var(--text-secondary);
+          width: 24px;
+          height: 24px;
+          padding: 0;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s ease;
+        }
+        .rims-sidebar-collapse-btn:hover {
+          color: var(--primary);
+          border-color: var(--border-hover);
+          background: var(--bg-hover);
+        }
+        .rims-sidebar-nav-link {
+          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          border-radius: 8px;
+          font-size: 13.5px;
+          text-decoration: none;
+          transition: all 0.15s ease;
+          overflow: hidden;
+        }
+        .rims-sidebar-nav-link.inactive {
+          color: var(--text-secondary);
+          font-weight: 500;
+          background: transparent;
+        }
+        .rims-sidebar-nav-link.inactive:hover {
+          background: var(--bg-hover);
+          color: var(--text-main);
+        }
+        .rims-sidebar-nav-link.inactive:hover .rims-nav-icon {
+          color: var(--text-main) !important;
+        }
+        .rims-sidebar-nav-link.active {
+          background: var(--primary-tint);
+          color: var(--primary);
+          font-weight: 600;
+        }
+        .rims-sidebar-nav-link.active .rims-nav-icon {
+          color: var(--primary) !important;
+        }
+        .rims-profile-card:hover {
+          background: var(--bg-hover);
+          border-radius: 8px;
+        }
+        .rims-logout-btn {
+          background: transparent;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 6px;
+          border-radius: 6px;
+          transition: all 0.15s ease;
+        }
+        .rims-logout-btn:hover {
+          color: var(--danger);
+          background: var(--danger-bg);
+        }
+      `}</style>
+
       {/* Brand Header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: collapsed ? 'center' : 'space-between',
         padding: collapsed ? '18px 10px' : '20px 18px 16px 18px',
-        borderBottom: '1px solid var(--border-soft)',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg-sidebar)',
         gap: '10px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -185,14 +302,14 @@ export const Sidebar: React.FC = () => {
 
           {!collapsed && (
             <div style={{ lineHeight: 1.15 }}>
-              <div style={{ fontWeight: 700, fontSize: '14.5px', letterSpacing: '-0.01em', color: 'var(--text)' }}>
+              <div style={{ fontWeight: 700, fontSize: '14.5px', letterSpacing: '-0.01em', color: 'var(--text-main)' }}>
                 RIMS
               </div>
               <div style={{
                 fontSize: '10px',
-                fontWeight: 600,
-                letterSpacing: '0.04em',
-                color: 'var(--text-faint)',
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                color: 'var(--text-muted)',
                 textTransform: 'uppercase',
                 marginTop: '3px'
               }}>
@@ -204,21 +321,8 @@ export const Sidebar: React.FC = () => {
 
         {/* Collapse Toggle */}
         <button
+          className="rims-sidebar-collapse-btn"
           onClick={() => setCollapsed(!collapsed)}
-          style={{
-            background: 'var(--panel)',
-            border: '1px solid var(--border)',
-            borderRadius: '6px',
-            color: 'var(--text-dim)',
-            width: '24px',
-            height: '24px',
-            padding: 0,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.15s ease'
-          }}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
@@ -228,12 +332,20 @@ export const Sidebar: React.FC = () => {
       {/* Grouped Navigation */}
       <nav style={{ padding: collapsed ? '14px 8px' : '16px 12px', flex: 1, overflowY: 'auto' }}>
         {groups.map((group, groupIdx) => (
-          <div key={groupIdx} style={{ marginBottom: '18px' }}>
+          <div
+            key={groupIdx}
+            style={{
+              marginBottom: '16px',
+              marginTop: groupIdx > 0 ? '18px' : 0,
+              borderTop: groupIdx > 0 ? '1px solid var(--border)' : 'none',
+              paddingTop: groupIdx > 0 ? '14px' : 0
+            }}
+          >
             {!collapsed && (
               <div style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                letterSpacing: '0.04em',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.05em',
                 color: 'var(--text-faint)',
                 textTransform: 'uppercase',
                 padding: '0 10px 8px 10px'
@@ -242,44 +354,44 @@ export const Sidebar: React.FC = () => {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
               {group.items.map((link) => {
                 const Icon = link.icon;
                 return (
                   <NavLink
                     key={link.to}
                     to={link.to}
-                    style={({ isActive }) => ({
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: collapsed ? '8px 0' : '8px 10px',
+                    className={({ isActive }) =>
+                      `rims-sidebar-nav-link ${isActive ? 'active' : 'inactive'}`
+                    }
+                    style={{
+                      padding: collapsed ? '10px 0' : '10px 14px',
                       justifyContent: collapsed ? 'center' : 'flex-start',
-                      borderRadius: '7px',
-                      fontSize: '13.5px',
-                      fontWeight: isActive ? 600 : 500,
-                      color: isActive ? 'var(--green)' : 'var(--text-dim)',
-                      background: isActive ? 'var(--green-dim)' : 'transparent',
-                      textDecoration: 'none',
-                      transition: 'all 0.12s ease',
-                    })}
+                    }}
                   >
                     {({ isActive }) => (
                       <>
-                        {isActive && !collapsed && (
+                        {isActive && (
                           <span style={{
                             position: 'absolute',
-                            left: '-12px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            width: '3px',
-                            height: '16px',
-                            borderRadius: '2px',
-                            background: 'var(--green)'
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: '3.5px',
+                            borderRadius: '0 4px 4px 0',
+                            background: 'var(--primary)'
                           }} />
                         )}
-                        <Icon size={15} style={{ color: isActive ? 'var(--green)' : 'var(--text-faint)', flexShrink: 0 }} />
+                        <Icon
+                          className="rims-nav-icon"
+                          size={16}
+                          strokeWidth={isActive ? 2.2 : 1.8}
+                          style={{
+                            color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
+                            flexShrink: 0,
+                            transition: 'color 0.15s ease'
+                          }}
+                        />
                         {!collapsed && <span>{link.label}</span>}
                       </>
                     )}
@@ -291,73 +403,69 @@ export const Sidebar: React.FC = () => {
         ))}
       </nav>
 
-      {/* User Profile & Logout */}
+      {/* User Profile & Logout (Docked Bottom) */}
       <div style={{
-        borderTop: '1px solid var(--border-soft)',
-        padding: collapsed ? '12px 8px' : '14px 16px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--bg-sidebar)',
+        padding: collapsed ? '12px 8px' : '12px 14px',
         display: 'flex',
         alignItems: 'center',
         gap: '10px'
       }}>
         {!collapsed ? (
-          <div
-            onClick={() => navigate(profilePath)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              width: '100%',
-              cursor: 'pointer'
-            }}
-            title="Click to view My Profile"
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <div
+              className="rims-profile-card"
+              onClick={() => navigate(profilePath)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                overflow: 'hidden',
+                padding: '4px 6px',
+                margin: '-4px -6px',
+                cursor: 'pointer',
+                flex: 1,
+                transition: 'background 0.15s ease'
+              }}
+              title="Click to view My Profile"
+            >
               <div style={{
-                width: '32px',
-                height: '32px',
+                width: '34px',
+                height: '34px',
                 borderRadius: '8px',
-                background: 'var(--panel-raised)',
-                border: '1px solid var(--border)',
+                background: 'var(--primary-tint)',
+                border: '1.5px solid rgba(232, 135, 60, 0.4)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '12px',
                 fontWeight: 700,
-                color: 'var(--amber)',
-                flexShrink: 0
+                color: 'var(--primary)',
+                flexShrink: 0,
+                boxShadow: 'var(--shadow-xs)'
               }}>
                 {getInitials(user?.employeeName)}
               </div>
-              <div style={{ lineHeight: 1.2, overflow: 'hidden' }}>
-                <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+              <div style={{ lineHeight: 1.25, overflow: 'hidden' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 650, color: 'var(--text-main)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                   {formatDisplayName(user?.employeeName)}
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-faint)', fontWeight: 500, marginTop: '2px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, marginTop: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                   {user?.roles && user.roles.length > 0 ? user.roles.join(', ') : (role || 'Employee')}
                 </div>
               </div>
             </div>
 
             <button
+              className="rims-logout-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 handleLogout();
               }}
-              style={{
-                marginLeft: 'auto',
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-faint)',
-                fontSize: '14px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '4px'
-              }}
               title="Logout"
             >
-              <LogOut size={14} />
+              <LogOut size={15} />
             </button>
           </div>
         ) : (
@@ -365,12 +473,12 @@ export const Sidebar: React.FC = () => {
             <button
               onClick={() => navigate(profilePath)}
               style={{
-                width: '32px',
-                height: '32px',
+                width: '34px',
+                height: '34px',
                 borderRadius: '8px',
-                background: 'var(--panel-raised)',
-                border: '1px solid var(--border)',
-                color: 'var(--amber)',
+                background: 'var(--primary-tint)',
+                border: '1.5px solid rgba(232, 135, 60, 0.4)',
+                color: 'var(--primary)',
                 fontWeight: 700,
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -383,20 +491,11 @@ export const Sidebar: React.FC = () => {
               {getInitials(user?.employeeName)}
             </button>
             <button
+              className="rims-logout-btn"
               onClick={handleLogout}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-faint)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '4px'
-              }}
               title="Logout"
             >
-              <LogOut size={14} />
+              <LogOut size={15} />
             </button>
           </div>
         )}

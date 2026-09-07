@@ -114,7 +114,21 @@ public class IdleTimeServiceTests
     public async Task Scenario5_GetCurrentState_ReturnsServerAuthoritativeStateAndTotals()
     {
         using var context = CreateInMemoryContext(nameof(Scenario5_GetCurrentState_ReturnsServerAuthoritativeStateAndTotals));
-        var idleService = new IdleTimeService(context);
+
+        // Seed system settings with a late OfficeEndTime so test data (relative to 'now') always falls within office hours
+        context.SystemSettings.AddRange(
+            new SystemSetting { Key = "OfficeStartTime", Value = "12:00 AM", Description = "Start" },
+            new SystemSetting { Key = "OfficeEndTime", Value = "11:59 PM", Description = "End" },
+            new SystemSetting { Key = "GraceMinutes", Value = "15", Description = "Grace" },
+            new SystemSetting { Key = "PermissionHours", Value = "1", Description = "Permission" },
+            new SystemSetting { Key = "MonthlyAllowedPermissions", Value = "1", Description = "Perm Count" },
+            new SystemSetting { Key = "LateLoginsForHalfDay", Value = "2", Description = "Late Count" },
+            new SystemSetting { Key = "MonthlyAllowedLeave", Value = "1", Description = "Leave" }
+        );
+        await context.SaveChangesAsync();
+
+        var settingService = new SystemSettingService(context);
+        var idleService = new IdleTimeService(context, settingService);
 
         var now = DateTime.UtcNow;
         TimeZoneInfo tz;
@@ -148,5 +162,26 @@ public class IdleTimeServiceTests
         Assert.Equal(100, state.ActiveTaskId);
         Assert.Equal(900, state.TodayIdleSeconds);
         Assert.Equal(1, state.TodayActivitiesCount);
+    }
+
+    [Fact]
+    public async Task Scenario6_TaskEnded_WithoutOpenAttendance_CreatesIdleLog_AndReturnsIdleState()
+    {
+        using var context = CreateInMemoryContext(nameof(Scenario6_TaskEnded_WithoutOpenAttendance_CreatesIdleLog_AndReturnsIdleState));
+        var idleService = new IdleTimeService(context);
+
+        var taskEndTime = DateTime.UtcNow.AddMinutes(-4);
+
+        // Employee held/completed a task without having an open AttendanceLog
+        await idleService.OnActivityEndingAsync(1, taskEndTime, "Task");
+
+        var openIdle = await context.IdleTimeLogs.FirstOrDefaultAsync(i => i.EmployeeId == 1 && i.EndTime == null);
+        Assert.NotNull(openIdle);
+        Assert.Equal(taskEndTime, openIdle.StartTime);
+
+        var state = await idleService.GetCurrentStateAsync(1);
+        Assert.Equal("IDLE", state.State);
+        Assert.NotNull(state.IdleStartedAt);
+        Assert.Equal(taskEndTime, state.IdleStartedAt.Value);
     }
 }

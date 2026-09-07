@@ -27,7 +27,7 @@ class Program
                 Timeout = 30000
             };
 
-            var message = new MailMessage(from, to, "RIIMS V2 C# Test", "Testing SmtpClient Send")
+            var message = new MailMessage(from, to, "RIMS C# Test", "Testing SmtpClient Send")
             {
                 IsBodyHtml = true
             };

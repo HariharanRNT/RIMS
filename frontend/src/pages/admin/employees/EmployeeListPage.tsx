@@ -180,12 +180,26 @@ export const EmployeeListPage: React.FC = () => {
                     </span>
                   </td>
                   <td style={{ textAlign: 'right' }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => handleOpenEdit(emp.id)} style={{ marginRight: '0.5rem' }}>
-                      <Edit2 size={14} />
-                    </button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(emp.id)}>
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="table-actions">
+                      <button
+                        type="button"
+                        className="action-btn action-btn-edit"
+                        onClick={() => handleOpenEdit(emp.id)}
+                        title="Edit Employee"
+                        aria-label="Edit Employee"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="action-btn action-btn-delete"
+                        onClick={() => handleDelete(emp.id)}
+                        title="Deactivate Employee"
+                        aria-label="Deactivate Employee"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

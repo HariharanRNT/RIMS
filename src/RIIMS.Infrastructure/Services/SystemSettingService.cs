@@ -127,6 +127,48 @@ public class SystemSettingService : ISystemSettingService
         return result;
     }
 
+    public async Task<TaskReminderSettingsDto> GetTaskReminderSettingsAsync()
+    {
+        var keys = new[] { "TaskReminderFirstMinutes", "TaskReminderSecondMinutes", "TaskReminderCompletionEnabled" };
+        var settings = await _context.SystemSettings
+            .Where(s => keys.Contains(s.Key))
+            .ToDictionaryAsync(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase);
+
+        var result = new TaskReminderSettingsDto();
+
+        if (settings.TryGetValue("TaskReminderFirstMinutes", out var firstVal) && int.TryParse(firstVal, out var firstParsed) && firstParsed > 0)
+            result.TaskReminderFirstMinutes = firstParsed;
+
+        if (settings.TryGetValue("TaskReminderSecondMinutes", out var secondVal) && int.TryParse(secondVal, out var secondParsed) && secondParsed > 0)
+            result.TaskReminderSecondMinutes = secondParsed;
+
+        if (settings.TryGetValue("TaskReminderCompletionEnabled", out var compVal) && bool.TryParse(compVal, out var compParsed))
+            result.TaskReminderCompletionEnabled = compParsed;
+
+        return result;
+    }
+
+    public async Task<IdleNotificationSettingsDto> GetIdleNotificationSettingsAsync()
+    {
+        var keys = new[] { "IdleNotificationEnabled", "IdleThresholdMinutes", "IdleRepeatIntervalMinutes" };
+        var settings = await _context.SystemSettings
+            .Where(s => keys.Contains(s.Key))
+            .ToDictionaryAsync(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase);
+
+        var result = new IdleNotificationSettingsDto();
+
+        if (settings.TryGetValue("IdleNotificationEnabled", out var enVal) && bool.TryParse(enVal, out var enParsed))
+            result.IdleNotificationEnabled = enParsed;
+
+        if (settings.TryGetValue("IdleThresholdMinutes", out var threshVal) && int.TryParse(threshVal, out var threshParsed) && threshParsed > 0)
+            result.IdleThresholdMinutes = threshParsed;
+
+        if (settings.TryGetValue("IdleRepeatIntervalMinutes", out var repVal) && int.TryParse(repVal, out var repParsed) && repParsed > 0)
+            result.IdleRepeatIntervalMinutes = repParsed;
+
+        return result;
+    }
+
     public async Task<SystemSettingDto?> GetByKeyAsync(string key)
     {
         var setting = await _context.SystemSettings
@@ -145,13 +187,74 @@ public class SystemSettingService : ISystemSettingService
 
     public async Task<SystemSettingDto> UpdateAsync(string key, UpdateSettingRequest request)
     {
+        // --- Task Reminder validation (backend-enforced) ---
+        if (key.Equals("TaskReminderFirstMinutes", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(request.Value, out var firstMin) || firstMin <= 0)
+                throw new ArgumentException("First reminder minutes must be a positive integer.");
+
+            // Cross-validate: First must be > Second
+            var secondSetting = await _context.SystemSettings
+                .FirstOrDefaultAsync(s => s.Key == "TaskReminderSecondMinutes");
+            if (secondSetting != null && int.TryParse(secondSetting.Value, out var secondMin) && firstMin <= secondMin)
+                throw new ArgumentException($"First reminder ({firstMin} min) must be greater than second reminder ({secondMin} min).");
+        }
+        else if (key.Equals("TaskReminderSecondMinutes", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(request.Value, out var secondMin) || secondMin <= 0)
+                throw new ArgumentException("Second reminder minutes must be a positive integer.");
+
+            // Cross-validate: Second must be < First
+            var firstSetting = await _context.SystemSettings
+                .FirstOrDefaultAsync(s => s.Key == "TaskReminderFirstMinutes");
+            if (firstSetting != null && int.TryParse(firstSetting.Value, out var firstMin) && secondMin >= firstMin)
+                throw new ArgumentException($"Second reminder ({secondMin} min) must be less than first reminder ({firstMin} min).");
+        }
+        else if (key.Equals("TaskReminderCompletionEnabled", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!bool.TryParse(request.Value, out _))
+                throw new ArgumentException("Completion enabled must be 'true' or 'false'.");
+
+            // Normalize to lowercase for consistent storage
+            request.Value = request.Value.Trim().ToLowerInvariant();
+        }
+        // --- Idle Notification validation (backend-enforced) ---
+        else if (key.Equals("IdleNotificationEnabled", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!bool.TryParse(request.Value, out _))
+                throw new ArgumentException("Idle notification enabled must be 'true' or 'false'.");
+
+            request.Value = request.Value.Trim().ToLowerInvariant();
+        }
+        else if (key.Equals("IdleThresholdMinutes", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(request.Value, out var thresh) || thresh <= 0)
+                throw new ArgumentException("Idle threshold minutes must be a positive integer.");
+        }
+        else if (key.Equals("IdleRepeatIntervalMinutes", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(request.Value, out var rep) || rep <= 0)
+                throw new ArgumentException("Idle repeat interval minutes must be a positive integer.");
+        }
+
         var setting = await _context.SystemSettings
             .FirstOrDefaultAsync(s => s.Key == key);
 
         if (setting == null)
-            throw new KeyNotFoundException($"Setting '{key}' not found.");
+        {
+            setting = new RIIMS.Domain.Entities.SystemSetting
+            {
+                Key = key,
+                Value = request.Value,
+                IsActive = true
+            };
+            _context.SystemSettings.Add(setting);
+        }
+        else
+        {
+            setting.Value = request.Value;
+        }
 
-        setting.Value = request.Value;
         await _context.SaveChangesAsync();
 
         if (key.Equals("OfficeEndTime", StringComparison.OrdinalIgnoreCase))

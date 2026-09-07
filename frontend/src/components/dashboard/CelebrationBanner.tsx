@@ -121,11 +121,12 @@ export const CelebrationBanner: React.FC = () => {
               width: '48px',
               height: '48px',
               borderRadius: '50%',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--panel)',
+              border: '1px solid var(--border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              boxShadow: 'var(--shadow-xs)',
               flexShrink: 0
             }}>
               {getIcon(item.eventType)}
@@ -136,7 +137,7 @@ export const CelebrationBanner: React.FC = () => {
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
                   {item.title}
                 </span>
-                <span style={{ fontSize: '0.7rem', backgroundColor: '#ffffff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                <span style={{ fontSize: '0.7rem', backgroundColor: 'var(--panel-raised)', border: '1px solid var(--border)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                   Today
                 </span>
               </div>

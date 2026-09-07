@@ -88,8 +88,21 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid email or password.");
 
         var roles = (await _userManager.GetRolesAsync(user)).ToList();
-        var primaryRole = roles.FirstOrDefault(r => r == "Super Admin" || r.EndsWith("Admin") || r == "Admin") ?? roles.FirstOrDefault() ?? "Employee";
+        bool hasEmployeeRole = roles.Contains("Employee", StringComparer.OrdinalIgnoreCase);
+        var primaryRole = hasEmployeeRole
+            ? "Employee"
+            : (roles.FirstOrDefault(r => r == "Super Admin" || r.EndsWith("Admin") || r == "Admin") ?? roles.FirstOrDefault() ?? "Employee");
         bool isSuperAdmin = roles.Contains("Super Admin", StringComparer.OrdinalIgnoreCase) || roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+
+        if (user.EmployeeId == null || user.EmployeeId <= 0)
+        {
+            var matchedEmp = await _context.Employees.FirstOrDefaultAsync(e => e.Email == user.Email);
+            if (matchedEmp != null)
+            {
+                user.EmployeeId = matchedEmp.Id;
+                await _userManager.UpdateAsync(user);
+            }
+        }
 
         int employeeId = user.EmployeeId ?? 0;
 
@@ -144,7 +157,10 @@ public class AuthService : IAuthService
             throw new KeyNotFoundException("User not found.");
 
         var roles = (await _userManager.GetRolesAsync(user)).ToList();
-        var primaryRole = roles.FirstOrDefault(r => r == "Super Admin" || r.EndsWith("Admin") || r == "Admin") ?? roles.FirstOrDefault() ?? "Employee";
+        bool hasEmployeeRole = roles.Contains("Employee", StringComparer.OrdinalIgnoreCase);
+        var primaryRole = hasEmployeeRole
+            ? "Employee"
+            : (roles.FirstOrDefault(r => r == "Super Admin" || r.EndsWith("Admin") || r == "Admin") ?? roles.FirstOrDefault() ?? "Employee");
         bool isSuperAdmin = roles.Contains("Super Admin", StringComparer.OrdinalIgnoreCase) || roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
         var permissions = await _permissionService.GetUserPermissionCodesAsync(user.Id);
 
@@ -265,7 +281,7 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync();
 
         // Send Outlook-compatible table-based HTML email with VML button fallback
-        string baseUrl = _configuration["AppUrl"] ?? "http://localhost:3000";
+        string baseUrl = (_configuration["AppUrl"] ?? "http://10.60.121.234:99").TrimEnd('/');
         string resetUrl = $"{baseUrl}/reset-password?token={rawToken}";
 
         string htmlBody = $$"""
@@ -274,7 +290,7 @@ public class AuthService : IAuthService
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Reset Your Password - RIIMS V2</title>
+  <title>Reset Your Password - RIMS</title>
   <!--[if mso]>
   <style type="text/css">
     table, td, div, p, a, h1, h2, h3, span { font-family: Arial, Helvetica, sans-serif !important; }
@@ -316,7 +332,7 @@ public class AuthService : IAuthService
                 Hello,
               </p>
               <p style="margin: 0 0 28px 0; color: #E2E8F0; font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6;">
-                We received a request to reset the password for your RIIMS V2 portal account. Click the button below to choose a new password:
+                We received a request to reset the password for your RIMS account. Click the button below to choose a new password:
               </p>
 
               <!-- 3. Bulletproof VML + HTML Button Row -->
@@ -376,7 +392,7 @@ public class AuthService : IAuthService
 </html>
 """;
 
-        await _emailService.SendEmailAsync(user.Email!, "Reset Your Password - RIIMS V2", htmlBody);
+        await _emailService.SendEmailAsync(user.Email!, "Reset Your Password - RIMS", htmlBody);
     }
 
     public async Task<bool> ValidateResetTokenAsync(string token)

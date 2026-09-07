@@ -64,24 +64,21 @@ public class GlobalExceptionMiddleware
             userMessage = "An unexpected error occurred while processing your request.";
             errors = new List<string>
             {
-                $"Reference Trace ID: {traceId}. Please contact technical support if this issue persists."
+                exception.Message
             };
 
-            // In local development only, append debug stack info for developer convenience
-            if (_env.IsDevelopment())
+            if (exception.InnerException != null)
             {
-                errors.Add($"Debug Info: {exception.Message}");
-                if (exception.InnerException != null)
-                {
-                    errors.Add($"Inner Exception: {exception.InnerException.Message}");
-                }
+                errors.Add($"Inner: {exception.InnerException.Message}");
             }
+
+            errors.Add($"TraceId: {traceId}");
         }
         else
         {
             userMessage = message;
             errors = new List<string> { message };
-            if (exception.InnerException != null && _env.IsDevelopment())
+            if (exception.InnerException != null)
             {
                 errors.Add(exception.InnerException.Message);
             }

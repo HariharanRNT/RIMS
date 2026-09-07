@@ -50,6 +50,50 @@ public class LeaveLopCalculatorTests
         };
     }
 
+    private static List<AttendanceLog> CreateDefaultAttendanceLogs(int empId, List<AttendanceCalendarDto> calendar, List<LeaveRequest>? leaves = null)
+    {
+        leaves ??= new List<LeaveRequest>();
+        var logs = new List<AttendanceLog>();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+        foreach (var c in calendar.Where(c => c.IsWorkingDay))
+        {
+            DateTime dt = c.CalendarDate.ToDateTime(TimeOnly.MinValue);
+            bool isFullDayLeave = leaves.Any(l => l.EmployeeId == empId && l.Status == RequestStatus.Approved && l.FromDate.Date <= dt.Date && l.ToDate.Date >= dt.Date && l.LeaveDuration != LeaveDuration.HalfDay);
+            if (!isFullDayLeave)
+            {
+                logs.Add(new AttendanceLog
+                {
+                    EmployeeId = empId,
+                    LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(c.Year, c.Month, c.CalendarDate.Day, 9, 30, 0), istZone),
+                    IsLate = false,
+                    IsPermission = false
+                });
+            }
+        }
+        return logs;
+    }
+
+    private static List<AttendanceLog> CreateAttendanceLogsWithSpecificOverrides(
+        int empId,
+        List<AttendanceCalendarDto> calendar,
+        List<AttendanceLog> specificLogs,
+        List<LeaveRequest>? leaves = null)
+    {
+        var defaultLogs = CreateDefaultAttendanceLogs(empId, calendar, leaves);
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var specificDates = specificLogs
+            .Select(l => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(l.LoginTime, istZone)))
+            .ToHashSet();
+
+        var result = defaultLogs
+            .Where(l => !specificDates.Contains(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(l.LoginTime, istZone))))
+            .ToList();
+
+        result.AddRange(specificLogs);
+        return result;
+    }
+
     [Fact]
     public void TestCase1_Allowed1_Leave1_LopIs0()
     {
@@ -61,7 +105,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 3), new DateTime(2026, 8, 3)) // Mon Aug 3
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(1m, result.ActualLeaveDays);
         Assert.Equal(0m, result.SandwichLeaveDays);
@@ -81,7 +125,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 3), new DateTime(2026, 8, 4)) // Mon Aug 3 - Tue Aug 4
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(2m, result.ActualLeaveDays);
         Assert.Equal(0m, result.SandwichLeaveDays);
@@ -100,7 +144,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 3), new DateTime(2026, 8, 6)) // Mon Aug 3 - Thu Aug 6
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(4m, result.ActualLeaveDays);
         Assert.Equal(0m, result.SandwichLeaveDays);
@@ -121,7 +165,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 10), new DateTime(2026, 8, 10))
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(2m, result.ActualLeaveDays);
         Assert.Equal(2m, result.SandwichLeaveDays);
@@ -143,7 +187,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 17), new DateTime(2026, 8, 17))
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(3m, result.ActualLeaveDays);
         Assert.Equal(2m, result.SandwichLeaveDays);
@@ -162,7 +206,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 10), new DateTime(2026, 8, 10))
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(1m, result.ActualLeaveDays);
         Assert.Equal(0m, result.SandwichLeaveDays);
@@ -181,7 +225,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 7), new DateTime(2026, 8, 7))
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(1m, result.ActualLeaveDays);
         Assert.Equal(0m, result.SandwichLeaveDays);
@@ -196,7 +240,7 @@ public class LeaveLopCalculatorTests
         int empId = 1;
         var calendar = CreateAugust2026Calendar();
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), CreateDefaultAttendanceLogs(empId, calendar));
 
         Assert.Equal(0m, result.ActualLeaveDays);
         Assert.Equal(0m, result.SandwichLeaveDays);
@@ -216,7 +260,7 @@ public class LeaveLopCalculatorTests
         aug15.IsWorkingDay = false;
         aug15.HolidayName = "Independence Day";
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), CreateDefaultAttendanceLogs(empId, calendar));
 
         var holidayDetail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 15));
         Assert.Equal("Holiday", holidayDetail.Status);
@@ -235,7 +279,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 3), new DateTime(2026, 8, 7)) // 5 working days (Mon-Fri)
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 2, 2, 50000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 2, 2, 50000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(5m, result.ActualLeaveDays);
         Assert.Equal(3m, result.LeaveLOPDays);
@@ -255,7 +299,7 @@ public class LeaveLopCalculatorTests
             CreateApprovedLeave(empId, new DateTime(2026, 8, 3), new DateTime(2026, 8, 5)) // 3 working days -> Allowed 1 => LOP = 2
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, CreateDefaultAttendanceLogs(empId, calendar, leaves));
 
         Assert.Equal(2m, result.LeaveLOPDays);
         Assert.Equal(1612.9032m, Math.Round(result.DailySalary, 4));
@@ -276,7 +320,7 @@ public class LeaveLopCalculatorTests
             new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 4, 10, 25, 0), istZone), IsLate = true, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 40000m, calendar, new List<LeaveRequest>(), logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 40000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs));
 
         Assert.Equal(2, result.UnpermissionedLateCount);
         Assert.Equal(0.5m, result.LateLoginLOPDays);
@@ -296,7 +340,7 @@ public class LeaveLopCalculatorTests
             new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 4, 10, 25, 0), istZone), IsLate = true, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs));
 
         Assert.Equal(2, result.UnpermissionedLateCount);
         Assert.Equal(0.0m, result.LateLoginLOPDays);
@@ -320,7 +364,7 @@ public class LeaveLopCalculatorTests
             new AttendanceLog { EmployeeId = empId, LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 4, 10, 25, 0), istZone), IsLate = true, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), logs, perms);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 40000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), perms);
 
         Assert.Equal(1, result.UnpermissionedLateCount);
         Assert.Equal(0.0m, result.LateLoginLOPDays);
@@ -334,7 +378,7 @@ public class LeaveLopCalculatorTests
         int empId = 1;
         var calendar = CreateAugust2026Calendar();
         // Set all weekends and holidays as non-working with no employee login
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), new List<AttendanceLog>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), CreateDefaultAttendanceLogs(empId, calendar));
 
         var nonWorkingDays = result.DailyDetails.Where(d => !d.IsWorkingDay).ToList();
         Assert.All(nonWorkingDays, d => Assert.False(d.IsLop));
@@ -354,8 +398,8 @@ public class LeaveLopCalculatorTests
 
         var emp2Leaves = new List<LeaveRequest>(); // Emp 2 has 0 leaves
 
-        var resEmp1 = LeaveLopCalculator.Calculate(1, 2026, 8, 1, 2, 40000m, calendar, emp1Leaves, new List<AttendanceLog>());
-        var resEmp2 = LeaveLopCalculator.Calculate(2, 2026, 8, 1, 2, 60000m, calendar, emp2Leaves, new List<AttendanceLog>());
+        var resEmp1 = LeaveLopCalculator.Calculate(1, 2026, 8, 1, 2, 40000m, calendar, emp1Leaves, CreateDefaultAttendanceLogs(1, calendar, emp1Leaves));
+        var resEmp2 = LeaveLopCalculator.Calculate(2, 2026, 8, 1, 2, 60000m, calendar, emp2Leaves, CreateDefaultAttendanceLogs(2, calendar, emp2Leaves));
 
         Assert.Equal(5m, resEmp1.ActualLeaveDays);
         Assert.Equal(4m, resEmp1.LeaveLOPDays);
@@ -394,7 +438,7 @@ public class LeaveLopCalculatorTests
             new AttendanceLog { EmployeeId = empId, LoginTime = loginUtc, IsLate = false, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs, leaves));
 
         var aug3Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 3));
 
@@ -435,7 +479,7 @@ public class LeaveLopCalculatorTests
             new AttendanceLog { EmployeeId = empId, LoginTime = loginUtc, IsLate = false, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs, leaves));
 
         var aug3Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 3));
 
@@ -460,7 +504,7 @@ public class LeaveLopCalculatorTests
             new AttendanceLog { EmployeeId = empId, LoginTime = loginUtc, IsLate = false, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs));
 
         var aug3Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 3));
 
@@ -504,7 +548,7 @@ public class LeaveLopCalculatorTests
             new AttendanceLog { EmployeeId = empId, LoginTime = aug5Late, IsLate = true, IsPermission = false }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs, leaves));
 
         Assert.Equal(0.5m, result.ActualLeaveDays);
         Assert.Equal(2, result.UnpermissionedLateCount);
@@ -536,7 +580,7 @@ public class LeaveLopCalculatorTests
         }
 
         // Allowed leave = 0 (or all used up) so no offset
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), new List<PermissionRequest>());
 
         Assert.Equal(8, result.TotalLateCount);
         Assert.Equal(1, result.PermissionCount);
@@ -575,7 +619,7 @@ public class LeaveLopCalculatorTests
         };
 
         // 1 Allowed Leave offset
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), perms);
 
         Assert.Equal(8, result.TotalLateCount);
         Assert.Equal(2, result.PermissionCount);
@@ -613,7 +657,7 @@ public class LeaveLopCalculatorTests
             new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 10), Status = RequestStatus.Approved }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), perms);
 
         Assert.Equal(8, result.TotalLateCount);
         Assert.Equal(1, result.PermissionCount); // Must be 1, NOT 2!
@@ -646,7 +690,7 @@ public class LeaveLopCalculatorTests
             new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 15), Status = RequestStatus.Approved }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), perms);
 
         Assert.Equal(1, result.TotalLateCount);
         Assert.Equal(1, result.PermissionCount); // Aug 15 was permitted
@@ -674,7 +718,7 @@ public class LeaveLopCalculatorTests
             });
         }
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 0, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), new List<PermissionRequest>());
 
         Assert.Equal(8, result.TotalLateCount);
         Assert.Equal(0, result.PermissionCount);
@@ -702,7 +746,7 @@ public class LeaveLopCalculatorTests
             }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), new List<PermissionRequest>());
 
         var aug21Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 21));
 
@@ -732,7 +776,7 @@ public class LeaveLopCalculatorTests
             }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, new List<PermissionRequest>());
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), new List<PermissionRequest>());
 
         var aug21Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 21));
 
@@ -767,7 +811,7 @@ public class LeaveLopCalculatorTests
             new PermissionRequest { EmployeeId = empId, RequestDate = new DateTime(2026, 8, 21), Status = RequestStatus.Approved }
         };
 
-        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), logs, perms);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs), perms);
 
         var aug21Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 21));
 
@@ -777,4 +821,126 @@ public class LeaveLopCalculatorTests
         Assert.Equal(0.0m, aug21Detail.LeaveDaysCount);
         Assert.Equal(0.0m, result.ActualLeaveDays);
     }
+
+    [Fact]
+    public void Test_UserScenario_AbsentPlusApprovedLeavePlusPresentPlusHoliday_MonthlyAllowed1_Lop1()
+    {
+        // User Scenario:
+        // 24-Aug: Absent (+1 Leave Count)
+        // 25-Aug: Approved Leave (+1 Leave Count)
+        // 26-Aug: Present (+0 Leave Count)
+        // 27-Aug: Company Holiday (+0 Leave Count)
+        // Total Leave Count = 2. Allowed = 1 => LOP = 1 Day
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var aug27 = calendar.First(c => c.CalendarDate == new DateOnly(2026, 8, 27));
+        aug27.DayType = AttendanceDayType.CompanyHoliday;
+        aug27.IsWorkingDay = false;
+
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var leaves = new List<LeaveRequest>
+        {
+            CreateApprovedLeave(empId, new DateTime(2026, 8, 25), new DateTime(2026, 8, 25))
+        };
+
+        // Populate attendance on working days except 24-Aug (absent) and 25-Aug (approved leave)
+        var logs = new List<AttendanceLog>();
+        foreach (var c in calendar.Where(c => c.IsWorkingDay && c.CalendarDate != new DateOnly(2026, 8, 24) && c.CalendarDate != new DateOnly(2026, 8, 25)))
+        {
+            logs.Add(new AttendanceLog
+            {
+                EmployeeId = empId,
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(c.Year, c.Month, c.CalendarDate.Day, 9, 30, 0), istZone),
+                IsLate = false,
+                IsPermission = false
+            });
+        }
+
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 62000m, calendar, leaves, logs);
+
+        var aug24Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 24));
+        var aug25Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 25));
+        var aug26Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 26));
+        var aug27Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 27));
+
+        Assert.Equal("Absent", aug24Detail.Status);
+        Assert.Equal(1.0m, aug24Detail.LeaveDaysCount);
+
+        Assert.Equal("Leave", aug25Detail.Status);
+        Assert.Equal(1.0m, aug25Detail.LeaveDaysCount);
+
+        Assert.Equal("Present", aug26Detail.Status);
+        Assert.Equal(0.0m, aug26Detail.LeaveDaysCount);
+
+        Assert.Equal("Holiday", aug27Detail.Status);
+        Assert.Equal(0.0m, aug27Detail.LeaveDaysCount);
+
+        // Monthly Totals
+        Assert.Equal(2.0m, result.ActualLeaveDays);
+        Assert.Equal(1, result.MonthlyAllowedLeave);
+        Assert.Equal(1.0m, result.LeaveLOPDays);
+        Assert.Equal(2000m, result.LeaveLOPAmount); // 62000 / 31 = 2000
+    }
+
+    [Fact]
+    public void Test_ApprovedHalfDayLeave_WithAbsentSecondHalf_ContributesFullLeaveCount10()
+    {
+        // Approved First Half Leave + No Second Half Login => LeaveDaysCount = 1.0 (0.5 Approved + 0.5 Absent)
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var leaves = new List<LeaveRequest>
+        {
+            new LeaveRequest
+            {
+                EmployeeId = empId,
+                FromDate = new DateTime(2026, 8, 24),
+                ToDate = new DateTime(2026, 8, 24),
+                Status = RequestStatus.Approved,
+                LeaveDuration = LeaveDuration.HalfDay,
+                HalfDayType = HalfDayType.FirstHalf
+            }
+        };
+
+        var logs = new List<AttendanceLog>(); // No login on 24-Aug
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, leaves, logs);
+        var aug24Detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 24));
+
+        Assert.Equal(1.0m, aug24Detail.LeaveDaysCount);
+        Assert.Equal(0.0m, aug24Detail.PresentDaysCount);
+    }
+
+    [Fact]
+    public void Test_Rule13_LateLogin_WithPermission_DoesNotGenerateUnpermissionedLateLOP()
+    {
+        // Blueprint §6 Rule 13 & Scenario 17:
+        // When login is late (10:16 AM) but covered by permission, it is marked as Permission,
+        // and does NOT count as an unpermissioned late login towards LOP.
+        int empId = 1;
+        var calendar = CreateAugust2026Calendar();
+        var istZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+
+        var logs = new List<AttendanceLog>
+        {
+            new AttendanceLog
+            {
+                EmployeeId = empId,
+                WorkDate = new DateOnly(2026, 8, 3),
+                LoginTime = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 8, 3, 10, 16, 0), istZone),
+                IsLate = true,
+                IsPermission = true,
+                Status = "Permission"
+            }
+        };
+
+        var defaultLogs = CreateAttendanceLogsWithSpecificOverrides(empId, calendar, logs);
+        var result = LeaveLopCalculator.Calculate(empId, 2026, 8, 1, 2, 50000m, calendar, new List<LeaveRequest>(), defaultLogs);
+
+        var detail = result.DailyDetails.First(d => d.Date == new DateOnly(2026, 8, 3));
+
+        Assert.True(detail.IsPermission);
+        Assert.Equal(0, result.UnpermissionedLateCount);
+        Assert.Equal(0m, result.LateLoginLOPDays);
+    }
 }
+

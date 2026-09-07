@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import apiClient from '../../api/client';
-import { Bell, LogOut, ChevronDown, Calendar, ShieldCheck, Clock, AlertTriangle, Settings, ExternalLink, CheckCircle2, PartyPopper } from 'lucide-react';
+import { Bell, LogOut, ChevronDown, Calendar, ShieldCheck, Clock, AlertTriangle, Settings, ExternalLink, CheckCircle2, PartyPopper, X, Sun, Moon, Check } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
@@ -10,6 +12,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = () => {
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -285,22 +288,21 @@ export const Header: React.FC<HeaderProps> = () => {
   return (
     <header style={{
       height: '60px',
-      background: '#ffffff',
-      borderBottom: '1px solid #e5e7eb',
+      background: 'var(--panel)',
+      borderBottom: '1px solid var(--border)',
       padding: '0 1.5rem',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      position: 'sticky',
-      top: 0,
+      position: 'relative',
       zIndex: 90,
     }}>
       {/* Breadcrumb / Page Title */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontSize: '0.675rem', color: '#9ca3af', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           {pageMeta.category}
         </div>
-        <h1 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827', letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
           {pageMeta.title}
         </h1>
       </div>
@@ -311,27 +313,31 @@ export const Header: React.FC<HeaderProps> = () => {
         <div ref={notificationContainerRef} style={{ position: 'relative' }}>
           <button
             ref={bellButtonRef}
+            type="button"
             onClick={() => {
               setShowNotifications(!showNotifications);
               setShowProfileMenu(false);
             }}
             style={{
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
+              background: showNotifications ? 'var(--primary-tint)' : 'var(--panel-raised)',
+              border: showNotifications ? '1px solid rgba(232, 135, 60, 0.3)' : '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
               width: '34px',
               height: '34px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: calculatedUnreadCount > 0 ? '#E8873C' : '#6b7280',
+              color: showNotifications ? 'var(--primary)' : (calculatedUnreadCount > 0 ? 'var(--primary)' : 'var(--text-dim)'),
               cursor: 'pointer',
               position: 'relative',
-              transition: 'all 0.12s ease'
+              boxShadow: showNotifications ? '0 0 0 2px rgba(232, 135, 60, 0.25)' : 'none',
+              transition: 'all 0.15s ease'
             }}
-            title="Notifications & Alerts"
+            title={showNotifications ? "Close notifications" : "Notifications & Alerts"}
+            aria-expanded={showNotifications}
+            aria-label="Notifications & Alerts"
           >
-            <Bell size={16} />
+            <Bell size={16} fill={showNotifications ? 'currentColor' : 'none'} />
             {calculatedUnreadCount > 0 && (
               <span style={{
                 position: 'absolute',
@@ -347,7 +353,7 @@ export const Header: React.FC<HeaderProps> = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 0 0 2px #ffffff',
+                boxShadow: '0 0 0 2px var(--panel)',
               }}>
                 {calculatedUnreadCount > 99 ? '99+' : calculatedUnreadCount}
               </span>
@@ -361,10 +367,10 @@ export const Header: React.FC<HeaderProps> = () => {
               top: 'calc(100% + 6px)',
               right: 0,
               width: '360px',
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
               borderRadius: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              boxShadow: 'var(--shadow-lg)',
               padding: '0.9rem',
               zIndex: 100,
               animation: 'fadeIn 0.15s ease-out'
@@ -375,11 +381,11 @@ export const Header: React.FC<HeaderProps> = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 marginBottom: '0.65rem',
-                borderBottom: '1px solid #f0f0f0',
+                borderBottom: '1px solid var(--border-soft)',
                 paddingBottom: '0.55rem',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111827' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
                     {user?.role === 'Admin' ? 'Admin Alerts & Requests' : 'Follow-Up Reminders'}
                   </span>
                   {user?.role === 'Admin' && (
@@ -389,7 +395,7 @@ export const Header: React.FC<HeaderProps> = () => {
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: showPrefs ? '#E8873C' : '#9ca3af',
+                        color: showPrefs ? 'var(--primary)' : 'var(--text-muted)',
                         cursor: 'pointer',
                         padding: '2px',
                         display: 'flex',
@@ -402,16 +408,16 @@ export const Header: React.FC<HeaderProps> = () => {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   {calculatedUnreadCount > 0 && (
                     <button
                       type="button"
                       onClick={handleClearAll}
                       style={{
-                        background: '#fff4e6',
-                        border: '1px solid #fed7aa',
+                        background: 'var(--primary-tint)',
+                        border: '1px solid rgba(232, 135, 60, 0.3)',
                         borderRadius: '6px',
-                        color: '#E8873C',
+                        color: 'var(--primary)',
                         fontSize: '0.7rem',
                         fontWeight: 700,
                         cursor: 'pointer',
@@ -426,14 +432,45 @@ export const Header: React.FC<HeaderProps> = () => {
                   <span className={`badge ${calculatedUnreadCount > 0 ? 'badge-warning' : 'badge-neutral'}`} style={{ fontSize: '0.675rem' }}>
                     {calculatedUnreadCount} New
                   </span>
+
+                  {/* Panel-Level Close Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowNotifications(false)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '6px',
+                      marginLeft: '2px',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--text-main)';
+                      e.currentTarget.style.background = 'var(--bg-hover)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--text-muted)';
+                      e.currentTarget.style.background = 'none';
+                    }}
+                    title="Close notifications panel"
+                    aria-label="Close notifications panel"
+                  >
+                    <X size={15} />
+                  </button>
                 </div>
               </div>
 
               {/* Preferences Filter Panel */}
               {showPrefs && user?.role === 'Admin' && (
                 <div style={{
-                  background: '#f9fafb',
-                  border: '1px solid #e5e7eb',
+                  background: 'var(--panel-raised)',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
                   padding: '0.5rem 0.65rem',
                   marginBottom: '0.65rem',
@@ -442,16 +479,16 @@ export const Header: React.FC<HeaderProps> = () => {
                   flexDirection: 'column',
                   gap: '0.35rem',
                 }}>
-                  <div style={{ fontWeight: 600, color: '#6b7280', fontSize: '0.7rem' }}>Filter Alerts:</div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#374151', cursor: 'pointer' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-dim)', fontSize: '0.7rem' }}>Filter Alerts:</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-main)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={prefLeave} onChange={(e) => setPrefLeave(e.target.checked)} style={{ accentColor: '#E8873C' }} />
                     <span>Leave Requests</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#374151', cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-main)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={prefPermission} onChange={(e) => setPrefPermission(e.target.checked)} style={{ accentColor: '#E8873C' }} />
                     <span>Permission Requests</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#374151', cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-main)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={prefLateLogin} onChange={(e) => setPrefLateLogin(e.target.checked)} style={{ accentColor: '#EF4444' }} />
                     <span>Late Login Alerts</span>
                   </label>
@@ -461,9 +498,9 @@ export const Header: React.FC<HeaderProps> = () => {
               {/* Action Error Banner */}
               {actionError && (
                 <div style={{
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#dc2626',
+                  background: 'var(--danger-bg)',
+                  border: '1px solid rgba(216, 64, 74, 0.3)',
+                  color: 'var(--danger-text)',
                   borderRadius: '6px',
                   padding: '0.4rem 0.6rem',
                   fontSize: '0.725rem',
@@ -481,20 +518,20 @@ export const Header: React.FC<HeaderProps> = () => {
                     width: '42px',
                     height: '42px',
                     borderRadius: '50%',
-                    background: '#ecfdf5',
-                    border: '1px solid #a7f3d0',
+                    background: 'var(--success-bg)',
+                    border: '1px solid rgba(21, 154, 99, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     margin: '0 auto 0.75rem auto',
-                    color: '#059669'
+                    color: 'var(--success)'
                   }}>
                     <CheckCircle2 size={22} />
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111827', marginBottom: '0.25rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '0.25rem' }}>
                     You're all caught up!
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: 1.4 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
                     {user?.role === 'Admin' ? 'No new notifications — all requests & alerts cleared.' : 'No pending follow-up reminders.'}
                   </div>
                 </div>
@@ -508,8 +545,8 @@ export const Header: React.FC<HeaderProps> = () => {
                         style={{
                           padding: '0.6rem 0.75rem',
                           borderRadius: '10px',
-                          background: '#fff7ed',
-                          border: '1px solid #fed7aa',
+                          background: 'var(--primary-tint)',
+                          border: '1px solid rgba(232, 135, 60, 0.25)',
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                           display: 'flex',
@@ -520,21 +557,21 @@ export const Header: React.FC<HeaderProps> = () => {
                       >
                         {/* Icon */}
                         <div style={{ marginTop: '2px', flexShrink: 0 }}>
-                          {item.category === 'LeaveRequest' && <Calendar size={15} style={{ color: '#E8873C' }} />}
-                          {item.category === 'PermissionRequest' && <Clock size={15} style={{ color: '#E8873C' }} />}
-                          {item.category === 'LateLogin' && <AlertTriangle size={15} style={{ color: '#EF4444' }} />}
-                          {item.category === 'Celebration' && <PartyPopper size={15} style={{ color: '#8B5CF6' }} />}
+                          {item.category === 'LeaveRequest' && <Calendar size={15} style={{ color: 'var(--primary)' }} />}
+                          {item.category === 'PermissionRequest' && <Clock size={15} style={{ color: 'var(--primary)' }} />}
+                          {item.category === 'LateLogin' && <AlertTriangle size={15} style={{ color: 'var(--danger)' }} />}
+                          {item.category === 'Celebration' && <PartyPopper size={15} style={{ color: 'var(--violet)' }} />}
                         </div>
 
                         {/* Text */}
                         <div style={{ flex: 1, paddingRight: '1rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.15rem' }}>
-                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#111827' }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-main)' }}>
                               {item.title}
                             </span>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#E8873C', display: 'inline-block', marginLeft: '6px' }} />
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)', display: 'inline-block', marginLeft: '6px' }} />
                           </div>
-                          <p style={{ fontSize: '0.74rem', color: '#4b5563', margin: 0, lineHeight: 1.35 }}>
+                          <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
                             {item.message}
                           </p>
                         </div>
@@ -546,7 +583,7 @@ export const Header: React.FC<HeaderProps> = () => {
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: '#9ca3af',
+                            color: 'var(--text-muted)',
                             fontSize: '0.8rem',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -555,8 +592,8 @@ export const Header: React.FC<HeaderProps> = () => {
                             borderRadius: '4px',
                             transition: 'color 0.12s ease',
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--danger)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
                           title="Dismiss notification"
                         >
                           ✕
@@ -571,8 +608,8 @@ export const Header: React.FC<HeaderProps> = () => {
                         style={{
                           padding: '0.55rem 0.7rem',
                           borderRadius: '10px',
-                          background: '#fff7ed',
-                          border: '1px solid #fed7aa',
+                          background: 'var(--primary-tint)',
+                          border: '1px solid rgba(232, 135, 60, 0.25)',
                           cursor: 'pointer',
                           transition: 'all 0.12s ease',
                           display: 'flex',
@@ -583,13 +620,13 @@ export const Header: React.FC<HeaderProps> = () => {
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.775rem', fontWeight: 600, gap: '0.5rem' }}>
-                            <span style={{ color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.productName}</span>
-                            <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.7rem', flexShrink: 0 }}>
+                            <span style={{ color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.productName}</span>
+                            <span style={{ color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.7rem', flexShrink: 0 }}>
                               <Calendar size={11} /> {new Date(item.followUpDate).toLocaleDateString()}
                             </span>
                           </div>
-                          <p style={{ fontSize: '0.7rem', color: '#6b7280', margin: '0.15rem 0 0 0' }}>
-                            Client: <strong style={{ color: '#374151' }}>{item.clientCompanyName}</strong>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: '0.15rem 0 0 0' }}>
+                            Client: <strong style={{ color: 'var(--text-main)' }}>{item.clientCompanyName}</strong>
                           </p>
                         </div>
 
@@ -600,7 +637,7 @@ export const Header: React.FC<HeaderProps> = () => {
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: '#9ca3af',
+                            color: 'var(--text-muted)',
                             fontSize: '0.8rem',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -611,8 +648,8 @@ export const Header: React.FC<HeaderProps> = () => {
                             flexShrink: 0,
                             marginTop: '-1px',
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--danger)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
                           title="Dismiss reminder"
                         >
                           ✕
@@ -626,7 +663,7 @@ export const Header: React.FC<HeaderProps> = () => {
               {/* Panel Footer */}
               {user?.role === 'Admin' && (
                 <div style={{
-                  borderTop: '1px solid #f0f0f0',
+                  borderTop: '1px solid var(--border-soft)',
                   paddingTop: '0.5rem',
                   marginTop: '0.5rem',
                   textAlign: 'center',
@@ -640,7 +677,7 @@ export const Header: React.FC<HeaderProps> = () => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#E8873C',
+                      color: 'var(--primary)',
                       fontSize: '0.775rem',
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -658,7 +695,10 @@ export const Header: React.FC<HeaderProps> = () => {
           )}
         </div>
 
-        <div style={{ height: '20px', width: '1px', background: '#e5e7eb' }} />
+        {/* Theme Toggle Button */}
+        <ThemeToggle />
+
+        <div style={{ height: '20px', width: '1px', background: 'var(--border)' }} />
 
         {/* User Profile Menu */}
         <div ref={profileMenuRef} style={{ position: 'relative' }}>
@@ -671,8 +711,8 @@ export const Header: React.FC<HeaderProps> = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '0.55rem',
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel-raised)',
+              border: '1px solid var(--border)',
               cursor: 'pointer',
               padding: '0.25rem 0.5rem 0.25rem 0.6rem',
               borderRadius: 'var(--radius-sm)',
@@ -698,15 +738,15 @@ export const Header: React.FC<HeaderProps> = () => {
             </div>
 
             <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#111827', lineHeight: 1.2 }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.2 }}>
                 {formatDisplayName(user?.employeeName, user?.role)}
               </span>
-              <span style={{ fontSize: '0.65rem', color: '#E8873C', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: 600 }}>
                 {user?.role}
               </span>
             </div>
 
-            <ChevronDown size={14} style={{ color: '#9ca3af' }} />
+            <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
           </button>
 
           {/* Profile Dropdown */}
@@ -715,18 +755,75 @@ export const Header: React.FC<HeaderProps> = () => {
               position: 'absolute',
               top: 'calc(100% + 6px)',
               right: 0,
-              width: '200px',
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
+              width: '210px',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
               borderRadius: 'var(--radius-lg)',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.12)',
-              padding: '0.35rem',
+              boxShadow: 'var(--shadow-lg)',
+              padding: '0.4rem',
               zIndex: 100,
               animation: 'fadeIn 0.15s ease-out'
             }}>
-              <div style={{ padding: '0.45rem 0.65rem', borderBottom: '1px solid #f0f0f0', marginBottom: '0.3rem' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#111827' }}>{formatDisplayName(user?.employeeName, user?.role)}</div>
-                <div style={{ fontSize: '0.675rem', color: '#9ca3af' }}>{user?.role} Portal</div>
+              <div style={{ padding: '0.45rem 0.65rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.3rem' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-main)' }}>{formatDisplayName(user?.employeeName, user?.role)}</div>
+                <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>{user?.role} Portal</div>
+              </div>
+
+              {/* Theme Selection in Profile Menu */}
+              <div style={{ padding: '0.35rem 0.65rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.3rem' }}>
+                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.35rem' }}>
+                  Theme Preference
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setTheme('light')}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      padding: '5px 8px',
+                      fontSize: '0.725rem',
+                      fontWeight: theme === 'light' ? 700 : 500,
+                      borderRadius: '6px',
+                      border: theme === 'light' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                      background: theme === 'light' ? 'var(--primary-tint)' : 'transparent',
+                      color: theme === 'light' ? 'var(--primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.12s ease',
+                    }}
+                  >
+                    <Sun size={13} />
+                    <span>Light</span>
+                    {theme === 'light' && <Check size={12} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTheme('dark')}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      padding: '5px 8px',
+                      fontSize: '0.725rem',
+                      fontWeight: theme === 'dark' ? 700 : 500,
+                      borderRadius: '6px',
+                      border: theme === 'dark' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                      background: theme === 'dark' ? 'var(--primary-tint)' : 'transparent',
+                      color: theme === 'dark' ? 'var(--primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.12s ease',
+                    }}
+                  >
+                    <Moon size={13} />
+                    <span>Dark</span>
+                    {theme === 'dark' && <Check size={12} />}
+                  </button>
+                </div>
               </div>
 
               <button
@@ -744,7 +841,7 @@ export const Header: React.FC<HeaderProps> = () => {
               <button
                 onClick={handleLogout}
                 className="btn btn-ghost"
-                style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.775rem', padding: '0.4rem 0.65rem', color: '#ef4444' }}
+                style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.775rem', padding: '0.4rem 0.65rem', color: 'var(--danger)' }}
               >
                 <LogOut size={15} />
                 <span>Sign Out</span>

@@ -67,35 +67,35 @@ export const Pagination: React.FC<PaginationProps> = ({
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '12px',
-        padding: '12px 16px',
+        padding: '14px 18px',
         marginTop: '16px',
-        borderRadius: '12px',
-        background: '#ffffff',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+        borderRadius: '14px',
+        background: 'var(--panel)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-xs)',
       }}
     >
       {/* Items count summary */}
-      <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-        Showing <strong style={{ color: '#111827' }}>{startItem}</strong>–
-        <strong style={{ color: '#111827' }}>{endItem}</strong> of{' '}
-        <strong style={{ color: '#111827' }}>{totalCount}</strong> items
+      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+        Showing <strong style={{ color: 'var(--text-main)' }}>{startItem}</strong>–
+        <strong style={{ color: 'var(--text-main)' }}>{endItem}</strong> of{' '}
+        <strong style={{ color: 'var(--text-main)' }}>{totalCount}</strong> items
       </div>
 
       {/* Controls & Page Selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         {/* Page Size Selector */}
         {onPageSizeChange && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.825rem', color: '#6b7280' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
             <span>Per page:</span>
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
               disabled={disabled}
               style={{
-                background: '#ffffff',
-                color: '#111827',
-                border: '1px solid #e5e7eb',
+                background: 'var(--input)',
+                color: 'var(--text-main)',
+                border: '1px solid var(--border)',
                 borderRadius: '6px',
                 padding: '4px 8px',
                 fontSize: '0.825rem',
@@ -104,7 +104,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               }}
             >
               {pageSizeOptions.map((option) => (
-                <option key={option} value={option} style={{ background: '#ffffff', color: '#111827' }}>
+                <option key={option} value={option} style={{ background: 'var(--panel)', color: 'var(--text-main)' }}>
                   {option}
                 </option>
               ))}
@@ -125,12 +125,13 @@ export const Pagination: React.FC<PaginationProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               padding: '6px 10px',
-              borderRadius: '6px',
-              border: '1px solid #e5e7eb',
-              background: '#f9fafb',
-              color: safeCurrentPage <= 1 || disabled ? '#d1d5db' : '#374151',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+              background: 'var(--panel-raised)',
+              color: safeCurrentPage <= 1 || disabled ? 'var(--text-faint)' : 'var(--text-main)',
               cursor: safeCurrentPage <= 1 || disabled ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s ease',
+              fontWeight: 500,
             }}
           >
             <ChevronLeft size={16} />
@@ -145,7 +146,7 @@ export const Pagination: React.FC<PaginationProps> = ({
                   key={`ellipsis-${idx}`}
                   style={{
                     padding: '4px 8px',
-                    color: '#9ca3af',
+                    color: 'var(--text-muted)',
                     fontSize: '0.85rem',
                   }}
                 >
@@ -162,17 +163,18 @@ export const Pagination: React.FC<PaginationProps> = ({
                 onClick={() => onPageChange(p)}
                 disabled={disabled || isActive}
                 style={{
-                  minWidth: '32px',
-                  height: '32px',
+                  minWidth: '34px',
+                  height: '34px',
                   padding: '0 6px',
-                  borderRadius: '6px',
+                  borderRadius: '8px',
                   fontSize: '0.825rem',
                   fontWeight: isActive ? 600 : 400,
-                  border: isActive ? '1px solid #E8873C' : '1px solid #e5e7eb',
-                  background: isActive ? '#fff4e6' : '#ffffff',
-                  color: isActive ? '#E8873C' : '#374151',
+                  border: isActive ? '1px solid var(--primary)' : '1px solid var(--border)',
+                  background: isActive ? 'var(--primary-tint)' : 'var(--panel)',
+                  color: isActive ? 'var(--primary)' : 'var(--text-main)',
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   transition: 'all 0.15s ease',
+                  boxShadow: isActive ? 'var(--shadow-glow-primary)' : 'none',
                 }}
               >
                 {p}
@@ -191,12 +193,13 @@ export const Pagination: React.FC<PaginationProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               padding: '6px 10px',
-              borderRadius: '6px',
-              border: '1px solid #e5e7eb',
-              background: '#f9fafb',
-              color: safeCurrentPage >= totalPages || disabled ? '#d1d5db' : '#374151',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+              background: 'var(--panel-raised)',
+              color: safeCurrentPage >= totalPages || disabled ? 'var(--text-faint)' : 'var(--text-main)',
               cursor: safeCurrentPage >= totalPages || disabled ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s ease',
+              fontWeight: 500,
             }}
           >
             <span style={{ fontSize: '0.8rem', marginRight: '4px' }}>Next</span>

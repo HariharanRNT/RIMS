@@ -129,7 +129,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("admin-all")]
-    [RequirePermission("Task.View")]
+    [RequirePermission("Task.View", "Task.Assign")]
     public async Task<IActionResult> GetAdminTasks(
         [FromQuery] int? employeeId,
         [FromQuery] int? departmentId,
@@ -137,9 +137,10 @@ public class TasksController : ControllerBase
         [FromQuery] string? status,
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
-        [FromQuery] bool? isOverdue)
+        [FromQuery] bool? isOverdue,
+        [FromQuery] bool? isExceededDuration)
     {
-        var result = await _service.GetAdminTasksAsync(employeeId, departmentId, managerId, status, from, to, isOverdue);
+        var result = await _service.GetAdminTasksAsync(employeeId, departmentId, managerId, status, from, to, isOverdue, isExceededDuration);
         return Ok(ApiResponse<List<TaskDto>>.SuccessResponse(result));
     }
 

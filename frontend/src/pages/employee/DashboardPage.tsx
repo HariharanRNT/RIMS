@@ -196,6 +196,18 @@ export const EmployeeDashboardPage: React.FC = () => {
     }
   }, [employeeId, histDateMode, histSingleDate, histStartDate, histEndDate]);
 
+  // Listen for real-time activity changes (e.g. stopping/starting break, task, support)
+  useEffect(() => {
+    const handleActivityChanged = () => {
+      if (employeeId) {
+        fetchMetrics();
+        fetchHistDetail();
+      }
+    };
+    window.addEventListener('activity-changed', handleActivityChanged);
+    return () => window.removeEventListener('activity-changed', handleActivityChanged);
+  }, [employeeId, histDateMode, histSingleDate, histStartDate, histEndDate]);
+
   return (
     <div>
       {/* Header */}
@@ -370,19 +382,19 @@ export const EmployeeDashboardPage: React.FC = () => {
                   <label style={{ fontSize: '0.785rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
                     Date Mode
                   </label>
-                  <div style={{ display: 'inline-flex', background: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'inline-flex', background: 'var(--panel-raised)', padding: '0.2rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                     <button
                       type="button"
-                      className={`btn ${histDateMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ padding: '0.25rem 0.65rem', fontSize: '0.8rem', border: 'none' }}
+                      className={`btn ${histDateMode === 'single' ? 'btn-primary' : 'btn-ghost'}`}
+                      style={{ padding: '0.25rem 0.65rem', fontSize: '0.8rem', borderRadius: '6px' }}
                       onClick={() => setHistDateMode('single')}
                     >
                       Single Date
                     </button>
                     <button
                       type="button"
-                      className={`btn ${histDateMode === 'range' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ padding: '0.25rem 0.65rem', fontSize: '0.8rem', border: 'none' }}
+                      className={`btn ${histDateMode === 'range' ? 'btn-primary' : 'btn-ghost'}`}
+                      style={{ padding: '0.25rem 0.65rem', fontSize: '0.8rem', borderRadius: '6px' }}
                       onClick={() => setHistDateMode('range')}
                     >
                       Custom Range
@@ -474,20 +486,17 @@ export const EmployeeDashboardPage: React.FC = () => {
               const paginatedDailyData = dailyData.slice(startIndex, endIndex);
 
               return (
-                <div className="table-container" style={{ padding: 0, marginBottom: 0, background: '#ffffff', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <div className="table-container" style={{ padding: 0, marginBottom: 0, background: 'var(--panel)', borderRadius: '12px', border: '1px solid var(--border)' }}>
                   <div style={{ overflowX: 'auto' }}>
-                    <table className="data-table" style={{ margin: 0, minWidth: '1050px' }}>
+                    <table className="data-table" style={{ margin: 0, width: '100%' }}>
                       <thead>
                         <tr>
-                          <th>DATE</th>
-                          <th>EMPLOYEE</th>
-                          <th>LOGIN / LOGOUT</th>
-                          <th>STATUS</th>
-                          <th>WORK TASK</th>
-                          <th>BREAK</th>
-                          <th>CALL</th>
-                          <th>IDLE TIME</th>
-                          <th style={{ textAlign: 'center' }}>ACTIONS</th>
+                          <th className="table-sticky-col-date">DATE</th>
+                          <th className="table-sticky-col-emp">EMPLOYEE</th>
+                          <th style={{ minWidth: '130px' }}>LOGIN / LOGOUT</th>
+                          <th style={{ minWidth: '120px' }}>STATUS</th>
+                          <th style={{ minWidth: '280px' }}>ACTIVITY BREAKDOWN</th>
+                          <th style={{ minWidth: '110px', textAlign: 'center' }}>ACTIONS</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -496,10 +505,10 @@ export const EmployeeDashboardPage: React.FC = () => {
 
                           return (
                             <tr key={`${item.employeeId}-${itemDateStr}-${idx}`}>
-                              <td style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent-primary)', whiteSpace: 'nowrap' }}>
+                              <td className="table-sticky-col-date" style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--primary)', whiteSpace: 'nowrap' }}>
                                 {itemDateStr}
                               </td>
-                              <td>
+                              <td className="table-sticky-col-emp">
                                 <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{item.employeeName}</div>
                                 <div style={{ fontSize: '0.775rem', color: 'var(--text-secondary)' }}>
                                   {item.employeeCode} • {item.departmentName}
@@ -527,107 +536,58 @@ export const EmployeeDashboardPage: React.FC = () => {
                                 </span>
                               </td>
 
-                              {/* Work Task Column */}
+                              {/* Activity Breakdown Column */}
                               <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  style={{
-                                    padding: '0.35rem 0.7rem',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 600,
-                                    color: 'var(--accent-primary)',
-                                    borderColor: 'rgba(79, 70, 229, 0.25)',
-                                    background: 'rgba(79, 70, 229, 0.05)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    borderRadius: '6px'
-                                  }}
-                                  onClick={() => openDetailModal('tasks', itemDateStr)}
-                                  title="Click to view Work Tasks log"
-                                >
-                                  <Briefcase size={14} />
-                                  <span>{item.workTaskCount ?? 0}</span>
-                                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>({formatHoursToHM(item.workTaskHours)})</span>
-                                </button>
-                              </td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                  {/* Work Tasks Chip */}
+                                  <button
+                                    type="button"
+                                    className="activity-chip chip-task"
+                                    onClick={() => openDetailModal('tasks', itemDateStr)}
+                                    title={`Work Tasks: ${item.workTaskCount ?? 0} (${formatHoursToHM(item.workTaskHours)}) — Click to view log`}
+                                  >
+                                    <Briefcase size={13} />
+                                    <span>{item.workTaskCount ?? 0}</span>
+                                    <span className="chip-time">({formatHoursToHM(item.workTaskHours)})</span>
+                                  </button>
 
-                              {/* Break Column */}
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  style={{
-                                    padding: '0.35rem 0.7rem',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 600,
-                                    color: 'var(--warning)',
-                                    borderColor: 'rgba(245, 158, 11, 0.25)',
-                                    background: 'rgba(245, 158, 11, 0.05)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    borderRadius: '6px'
-                                  }}
-                                  onClick={() => openDetailModal('breaks', itemDateStr)}
-                                  title="Click to view Breaks log"
-                                >
-                                  <Coffee size={14} />
-                                  <span>{item.breakCount ?? 0}</span>
-                                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>({formatHoursToHM(item.breakHours)})</span>
-                                </button>
-                              </td>
+                                  {/* Break Chip */}
+                                  <button
+                                    type="button"
+                                    className="activity-chip chip-break"
+                                    onClick={() => openDetailModal('breaks', itemDateStr)}
+                                    title={`Breaks: ${item.breakCount ?? 0} (${formatHoursToHM(item.breakHours)}) — Click to view log`}
+                                  >
+                                    <Coffee size={13} />
+                                    <span>{item.breakCount ?? 0}</span>
+                                    <span className="chip-time">({formatHoursToHM(item.breakHours)})</span>
+                                  </button>
 
-                              {/* Call Column */}
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  style={{
-                                    padding: '0.35rem 0.7rem',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 600,
-                                    color: 'var(--info)',
-                                    borderColor: 'rgba(6, 182, 212, 0.25)',
-                                    background: 'rgba(6, 182, 212, 0.05)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    borderRadius: '6px'
-                                  }}
-                                  onClick={() => openDetailModal('support', itemDateStr)}
-                                  title="Click to view Support Calls log"
-                                >
-                                  <PhoneCall size={14} />
-                                  <span>{item.callCount ?? 0}</span>
-                                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>({formatHoursToHM(item.callHours)})</span>
-                                </button>
-                              </td>
+                                  {/* Support / Call Chip */}
+                                  <button
+                                    type="button"
+                                    className="activity-chip chip-call"
+                                    onClick={() => openDetailModal('support', itemDateStr)}
+                                    title={`Support Calls / Activities: ${item.callCount ?? 0} (${formatHoursToHM(item.callHours)}) — Click to view log`}
+                                  >
+                                    <PhoneCall size={13} />
+                                    <span>{item.callCount ?? 0}</span>
+                                    <span className="chip-time">({formatHoursToHM(item.callHours)})</span>
+                                  </button>
 
-                              {/* Idle Time Column */}
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  style={{
-                                    padding: '0.35rem 0.7rem',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 600,
-                                    color: 'var(--text-main)',
-                                    borderColor: 'rgba(107, 114, 128, 0.25)',
-                                    background: 'rgba(107, 114, 128, 0.05)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    borderRadius: '6px'
-                                  }}
-                                  onClick={() => openDetailModal('idles', itemDateStr)}
-                                  title="Click to view Idle Gaps log"
-                                >
-                                  <Clock size={14} />
-                                  <span>{formatHoursToHM(item.idleHours || 0)}</span>
-                                </button>
+                                  {/* Idle Time Chip (if idle time recorded) */}
+                                  {(item.idleHours && item.idleHours > 0) ? (
+                                    <button
+                                      type="button"
+                                      className="activity-chip chip-idle"
+                                      onClick={() => openDetailModal('idles', itemDateStr)}
+                                      title={`Idle Time: ${formatHoursToHM(item.idleHours)} — Click to view idle gaps`}
+                                    >
+                                      <Clock size={13} />
+                                      <span className="chip-time">{formatHoursToHM(item.idleHours)}</span>
+                                    </button>
+                                  ) : null}
+                                </div>
                               </td>
 
                               {/* Actions Column */}
@@ -635,8 +595,9 @@ export const EmployeeDashboardPage: React.FC = () => {
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
-                                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', borderRadius: '6px' }}
                                   onClick={() => openDetailModal('tasks', itemDateStr)}
+                                  title="View full session breakdown and timeline"
                                 >
                                   <Eye size={13} />
                                   <span>View Details</span>
@@ -657,7 +618,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                       alignItems: 'center',
                       padding: '0.85rem 1.25rem',
                       borderTop: '1px solid var(--border-color)',
-                      background: '#fafafa',
+                      background: 'var(--panel-raised)',
                       flexWrap: 'wrap',
                       gap: '0.75rem'
                     }}>
@@ -674,7 +635,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                               padding: '0.25rem 0.5rem',
                               borderRadius: '6px',
                               border: '1px solid var(--border-color)',
-                              background: '#ffffff',
+                              background: 'var(--input)',
                               fontSize: '0.85rem',
                               fontWeight: 600,
                               color: 'var(--text-main)',

@@ -73,7 +73,7 @@ public class CelebrationNotificationService : ICelebrationNotificationService
                 }
             }
 
-            // 2. Company Anniversary Wishes
+            // 2. Work Anniversary Wishes
             if (settings.CompanyAnniversaryWishesEnabled)
             {
                 var annivBaseDate = emp.CompanyAnniversaryDate ?? emp.DateOfJoining;
@@ -127,7 +127,7 @@ public class CelebrationNotificationService : ICelebrationNotificationService
 
         string msg = processedCount > 0
             ? $"Dispatched {processedCount} celebration wish(es) for {date:dd MMM yyyy}: {string.Join(", ", processedEvents)}."
-            : $"Check completed for {date:dd MMM yyyy}. No active employees have a Birthday, Company Anniversary, or Marriage Anniversary matching today's date (or wishes were already dispatched earlier today).";
+            : $"Check completed for {date:dd MMM yyyy}. No active employees have a Birthday, Work Anniversary, or Marriage Anniversary matching today's date (or wishes were already dispatched earlier today).";
 
         return new CelebrationTriggerResultDto
         {
@@ -195,8 +195,8 @@ public class CelebrationNotificationService : ICelebrationNotificationService
         string wishMessage = eventType switch
         {
             "Birthday" => $"Wishing {emp.Name} ({emp.Designation?.Name}) a fantastic Birthday filled with happiness and success!",
-            "CompanyAnniversary" => $"Celebrating {emp.Name} ({emp.Designation?.Name}) for completing {yearsOfService} year(s) of valuable service at RIIMS!",
-            "MarriageAnniversary" => $"Wishing {emp.Name} ({emp.Designation?.Name}) and their spouse a wonderful Marriage Anniversary filled with love and joy!",
+            "CompanyAnniversary" => $"Celebrating {emp.Name} ({emp.Designation?.Name}) for completing {yearsOfService} year(s) of valuable service at Resh and Thosh Technologies!",
+            "MarriageAnniversary" => $"Wishing {emp.Name} ({emp.Designation?.Name}) and their spouse a wonderful Wedding Anniversary filled with love and joy!",
             _ => $"Best wishes to {emp.Name} on this special day!"
         };
 
@@ -205,28 +205,146 @@ public class CelebrationNotificationService : ICelebrationNotificationService
 
         if (sendEmail)
         {
-            await SendCelebrationEmailsAsync(emp, eventType, title, wishMessage, notifyAllEmployees, allActiveEmployees);
+            await SendCelebrationEmailsAsync(emp, eventType, yearsOfService, notifyAllEmployees, allActiveEmployees);
         }
 
         _logger.LogInformation("Successfully dispatched {EventType} wish for {EmployeeName} via channel {Channel} with scope {Scope}.", eventType, emp.Name, channel, recipientScope);
         return true;
     }
 
-    private async Task SendCelebrationEmailsAsync(Employee emp, string eventType, string subject, string messageBody, bool notifyAll, List<Employee> allActive)
+    private async Task SendCelebrationEmailsAsync(
+        Employee emp,
+        string eventType,
+        int? yearsOfService,
+        bool notifyAll,
+        List<Employee> allActive)
     {
-        var recipients = new List<string>();
+        // 1. Prepare other recipients (Admin / Colleagues)
+        var otherRecipients = new List<string>();
 
         if (notifyAll)
         {
-            recipients = allActive.Select(e => e.Email).Where(e => !string.IsNullOrWhiteSpace(e)).Distinct().ToList();
+            // All staff excluding celebrant
+            otherRecipients = allActive
+                .Where(e => e.Id != emp.Id && !string.IsNullOrWhiteSpace(e.Email))
+                .Select(e => e.Email)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
         else
         {
-            if (!string.IsNullOrWhiteSpace(emp.Email)) recipients.Add(emp.Email);
+            // Admin users excluding celebrant
+            var adminRoleIds = await _context.Roles
+                .Where(r => r.Name == "Admin" || r.Name == "Super Admin" || r.Name == "HR Admin")
+                .Select(r => r.Id)
+                .ToListAsync();
+
+            if (adminRoleIds.Count != 0)
+            {
+                var adminUserIds = await _context.UserRoles
+                    .Where(ur => adminRoleIds.Contains(ur.RoleId))
+                    .Select(ur => ur.UserId)
+                    .ToListAsync();
+
+                var adminEmails = await _context.Users
+                    .Where(u => adminUserIds.Contains(u.Id) && u.IsActive && !string.IsNullOrWhiteSpace(u.Email))
+                    .Select(u => u.Email!)
+                    .ToListAsync();
+
+                otherRecipients.AddRange(adminEmails);
+            }
+
+            if (otherRecipients.Count == 0 && (string.IsNullOrWhiteSpace(emp.Email) || !emp.Email.Equals("anitha@reshandthosh.com", StringComparison.OrdinalIgnoreCase)))
+            {
+                otherRecipients.Add("anitha@reshandthosh.com");
+            }
+
+            if (!string.IsNullOrWhiteSpace(emp.Email))
+            {
+                otherRecipients = otherRecipients.Where(e => !e.Equals(emp.Email, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            otherRecipients = otherRecipients.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        if (!recipients.Any()) return;
+        // 2. Dispatch Direct Personal Greeting to Celebrated Employee (Self)
+        if (!string.IsNullOrWhiteSpace(emp.Email))
+        {
+            string selfSubject = eventType switch
+            {
+                "Birthday" => $"🎉 Happy Birthday, {emp.Name}!",
+                "CompanyAnniversary" => $"🏆 Happy {yearsOfService} Year Work Anniversary, {emp.Name}!",
+                "MarriageAnniversary" => $"💍 Happy Wedding Anniversary, {emp.Name}!",
+                _ => $"🎉 Warm Wishes for {emp.Name}!"
+            };
 
+            string selfMessageBody = eventType switch
+            {
+                "Birthday" => $"Dear {emp.Name}, wishing you a fantastic Birthday filled with happiness, good health, and great success! Thank you for being an indispensable part of our team.",
+                "CompanyAnniversary" => $"Dear {emp.Name}, congratulations on completing {yearsOfService} year(s) of dedicated and valuable service at Resh and Thosh Technologies! Thank you for your continued passion, loyalty, and contributions to our success. Wishing you many more milestone achievements with us!",
+                "MarriageAnniversary" => $"Dear {emp.Name}, wishing you and your spouse a joyful and wonderful Wedding Anniversary filled with endless love and happiness!",
+                _ => $"Dear {emp.Name}, warmest wishes to you on this special day!"
+            };
+
+            string selfClosing = "With warmest regards,<br/><strong style=\"color: #111827;\">Management & Team Resh and Thosh Technologies</strong> 🎉✨";
+
+            string selfHtml = BuildCelebrationEmailHtml(emp, eventType, selfSubject, selfMessageBody, selfClosing);
+
+            try
+            {
+                await _emailService.SendEmailAsync(emp.Email, selfSubject, selfHtml);
+                _logger.LogInformation("Sent personal celebration greeting email to {Email}", emp.Email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send personal celebration email to {Email}", emp.Email);
+            }
+        }
+
+        // 3. Dispatch Team Announcement Email to Admins / Colleagues
+        if (otherRecipients.Count != 0)
+        {
+            string teamSubject = eventType switch
+            {
+                "Birthday" => $"🎉 Today is {emp.Name}'s Birthday!",
+                "CompanyAnniversary" => $"🏆 Celebrating {emp.Name}'s {yearsOfService}-Year Work Anniversary!",
+                "MarriageAnniversary" => $"💍 Celebrating {emp.Name}'s Wedding Anniversary!",
+                _ => $"🎉 Celebration Wish for {emp.Name}"
+            };
+
+            string teamMessageBody = eventType switch
+            {
+                "Birthday" => $"Today is {emp.Name}'s ({emp.Designation?.Name}) Birthday! Let's celebrate and make their special day memorable.",
+                "CompanyAnniversary" => $"Celebrating {emp.Name} ({emp.Designation?.Name}) for completing {yearsOfService} year(s) of valuable service at Resh and Thosh Technologies!",
+                "MarriageAnniversary" => $"Wishing {emp.Name} ({emp.Designation?.Name}) and their spouse a wonderful Wedding Anniversary filled with love and joy!",
+                _ => $"Celebrating {emp.Name} on this special day!"
+            };
+
+            string teamClosing = "Join us in extending our warmest wishes! 🎉✨";
+
+            string teamHtml = BuildCelebrationEmailHtml(emp, eventType, teamSubject, teamMessageBody, teamClosing);
+
+            foreach (var email in otherRecipients)
+            {
+                try
+                {
+                    await _emailService.SendEmailAsync(email, teamSubject, teamHtml);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send celebration announcement email to {Email}", email);
+                }
+            }
+        }
+    }
+
+    private string BuildCelebrationEmailHtml(
+        Employee emp,
+        string eventType,
+        string headerTitle,
+        string messageBody,
+        string closingMessage)
+    {
         // Theme palette based on celebration type
         string primaryColor = eventType switch
         {
@@ -274,12 +392,12 @@ public class CelebrationNotificationService : ICelebrationNotificationService
         string desigName = emp.Designation?.Name ?? "Team Member";
         string deptName = emp.Department?.Name ?? "RIIMS";
 
-        string htmlTemplate = $@"<!DOCTYPE html PUBLIC ""-//W3C//DTD XHTML 1.0 Transitional//EN"" ""http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"">
+        return $@"<!DOCTYPE html PUBLIC ""-//W3C//DTD XHTML 1.0 Transitional//EN"" ""http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"">
 <html xmlns=""http://www.w3.org/1999/xhtml"" xmlns:v=""urn:schemas-microsoft-microsoft-com:vml"" xmlns:o=""urn:schemas-microsoft-microsoft-com:office:office"">
 <head>
     <meta http-equiv=""Content-Type"" content=""text/html; charset=UTF-8"" />
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
-    <title>{subject}</title>
+    <title>{headerTitle}</title>
     <!--[if mso]>
     <xml>
         <o:OfficeDocumentSettings>
@@ -316,7 +434,7 @@ public class CelebrationNotificationService : ICelebrationNotificationService
                                 <tr>
                                     <td align=""center"" style=""padding: 32px 24px;"">
                                         <h1 style=""margin: 0; font-family: 'Segoe UI', Arial, sans-serif; font-size: 22px; line-height: 28px; font-weight: 800; color: #ffffff; text-align: center; letter-spacing: -0.3px;"">
-                                            {subject}
+                                            {headerTitle}
                                         </h1>
                                     </td>
                                 </tr>
@@ -392,7 +510,7 @@ public class CelebrationNotificationService : ICelebrationNotificationService
                                 <tr>
                                     <td align=""center"" style=""padding-bottom: 8px;"">
                                         <p style=""margin: 0; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; line-height: 22px; color: #6b7280; text-align: center;"">
-                                            Join us in extending our warmest wishes! 🎉✨
+                                            {closingMessage}
                                         </p>
                                     </td>
                                 </tr>
@@ -405,7 +523,7 @@ public class CelebrationNotificationService : ICelebrationNotificationService
                     <tr>
                         <td align=""center"" bgcolor=""#f9fafb"" style=""background-color: #f9fafb; padding: 18px 24px; border-top: 1px solid #f3f4f6;"">
                             <p style=""margin: 0; font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; line-height: 16px; color: #9ca3af; text-align: center;"">
-                                RIIMS V2 Employee Engagement & Celebration System
+                                RIMS Employee Engagement & Celebration System
                             </p>
                         </td>
                     </tr>
@@ -416,18 +534,6 @@ public class CelebrationNotificationService : ICelebrationNotificationService
     </table>
 </body>
 </html>";
-
-        foreach (var email in recipients)
-        {
-            try
-            {
-                await _emailService.SendEmailAsync(email, subject, htmlTemplate);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send celebration email to {Email}", email);
-            }
-        }
     }
 
     public async Task<List<CelebrationFeedDto>> GetTodayCelebrationsAsync()

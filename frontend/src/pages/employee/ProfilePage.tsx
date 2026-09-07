@@ -151,16 +151,16 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <div className="page-container" style={{ padding: '1.75rem', maxWidth: '1200px', margin: '0 auto' }}>
-      
+
       {/* Header Banner */}
       <div style={{
-        background: '#ffffff',
+        background: 'var(--panel)',
         borderRadius: 'var(--radius-lg)',
         padding: '2rem 2rem',
         position: 'relative',
         overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-        border: '1px solid var(--border-color)',
+        boxShadow: 'var(--shadow-sm)',
+        border: '1px solid var(--border)',
         marginBottom: '2rem'
       }}>
         <div style={{
@@ -193,7 +193,7 @@ export const ProfilePage: React.FC = () => {
 
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <h1 style={{ fontSize: '1.65rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: '#111827' }}>
+                <h1 style={{ fontSize: '1.65rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
                   {profile.name}
                 </h1>
                 <span style={{
@@ -204,9 +204,9 @@ export const ProfilePage: React.FC = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.35rem',
-                  backgroundColor: profile.isActive ? '#ecfdf5' : '#fef2f2',
-                  color: profile.isActive ? '#059669' : '#dc2626',
-                  border: `1px solid ${profile.isActive ? '#a7f3d0' : '#fecaca'}`
+                  backgroundColor: profile.isActive ? 'var(--success-bg)' : 'var(--danger-bg)',
+                  color: profile.isActive ? 'var(--success-text)' : 'var(--danger-text)',
+                  border: `1px solid ${profile.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
                 }}>
                   {profile.isActive ? <CheckCircle size={13} /> : <XCircle size={13} />}
                   {profile.isActive ? 'Active Status' : 'Inactive Status'}
@@ -218,7 +218,7 @@ export const ProfilePage: React.FC = () => {
                 <span>•</span>
                 <span>{profile.departmentName}</span>
                 <span>•</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: '#f3f4f6', color: 'var(--text-main)', padding: '0.15rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'var(--panel-raised)', color: 'var(--text-main)', padding: '0.15rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700, border: '1px solid var(--border)' }}>
                   <Hash size={13} />
                   {profile.employeeCode}
                 </span>
@@ -227,10 +227,10 @@ export const ProfilePage: React.FC = () => {
           </div>
 
           <div style={{
-            background: '#f9fafb',
+            background: 'var(--panel-raised)',
             borderRadius: 'var(--radius-md)',
             padding: '0.85rem 1.25rem',
-            border: '1px solid var(--border-color)',
+            border: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             gap: '0.85rem'
@@ -241,7 +241,7 @@ export const ProfilePage: React.FC = () => {
                 Company
               </div>
               <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                {profile.companyName || 'RNT Technologies'}
+                {profile.companyName || 'Resh and Thosh Technologies Pvt. Ltd'}
               </div>
             </div>
           </div>
@@ -250,7 +250,7 @@ export const ProfilePage: React.FC = () => {
 
       {/* Main Profile Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem' }}>
-        
+
         {/* Card 1: Primary Account & Contact Details */}
         <div style={{
           background: 'var(--bg-card)',
@@ -331,7 +331,7 @@ export const ProfilePage: React.FC = () => {
             <DetailRow
               icon={<Building2 size={17} />}
               label="Company Name"
-              value={profile.companyName || 'RNT Technologies'}
+              value={profile.companyName || 'Resh and Thosh Technologies Pvt. Ltd'}
             />
             <DetailRow
               icon={<Briefcase size={17} />}

@@ -222,22 +222,22 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
           padding: '0.55rem 0.85rem',
           fontSize: '0.8125rem',
           fontFamily: 'inherit',
-          background: '#ffffff',
+          background: 'var(--input)',
           border: error
             ? '1px solid var(--danger)'
             : isOpen
-            ? '1px solid #E8873C'
-            : '1px solid #e5e7eb',
+            ? '1px solid var(--primary)'
+            : '1px solid var(--border)',
           borderRadius: 'var(--radius-sm)',
-          color: value ? '#111827' : '#9ca3af',
+          color: value ? 'var(--text-main)' : 'var(--text-faint)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.55 : 1,
           outline: 'none',
-          boxShadow: isOpen ? '0 0 0 3px rgba(232, 135, 60, 0.15)' : '0 1px 2px rgba(0, 0, 0, 0.04)',
-          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+          boxShadow: isOpen ? 'var(--shadow-glow-primary)' : 'var(--shadow-xs)',
+          transition: 'border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease',
         }}
       >
         <span>{value ? value : placeholder}</span>
@@ -249,7 +249,7 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                 handleClear();
               }}
               style={{
-                color: '#9ca3af',
+                color: 'var(--text-muted)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -263,7 +263,7 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
           <CalendarIcon
             size={16}
             style={{
-              color: isOpen ? '#E8873C' : '#6b7280',
+              color: isOpen ? 'var(--primary)' : 'var(--text-muted)',
               transition: 'color 0.15s ease',
             }}
           />
@@ -281,10 +281,10 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
               left: `${coords.left}px`,
               zIndex: 99999,
               width: '280px',
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
               borderRadius: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              boxShadow: 'var(--shadow-lg)',
               padding: '0.85rem',
               userSelect: 'none',
               animation: 'fadeIn 0.15s ease-out',
@@ -297,10 +297,10 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                 disabled={isPrevMonthDisabled}
                 onClick={handlePrevMonth}
                 style={{
-                  background: '#f3f4f6',
-                  border: 'none',
+                  background: 'var(--panel-raised)',
+                  border: '1px solid var(--border)',
                   borderRadius: '6px',
-                  color: isPrevMonthDisabled ? '#d1d5db' : '#374151',
+                  color: isPrevMonthDisabled ? 'var(--text-faint)' : 'var(--text-main)',
                   padding: '0.3rem',
                   cursor: isPrevMonthDisabled ? 'not-allowed' : 'pointer',
                   opacity: isPrevMonthDisabled ? 0.4 : 1,
@@ -311,7 +311,7 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                 <ChevronLeft size={16} />
               </button>
 
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
                 {monthNames[viewMonth]} {viewYear}
               </span>
 
@@ -320,10 +320,10 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                 disabled={isNextMonthDisabled}
                 onClick={handleNextMonth}
                 style={{
-                  background: '#f3f4f6',
-                  border: 'none',
+                  background: 'var(--panel-raised)',
+                  border: '1px solid var(--border)',
                   borderRadius: '6px',
-                  color: isNextMonthDisabled ? '#d1d5db' : '#374151',
+                  color: isNextMonthDisabled ? 'var(--text-faint)' : 'var(--text-main)',
                   padding: '0.3rem',
                   cursor: isNextMonthDisabled ? 'not-allowed' : 'pointer',
                   opacity: isNextMonthDisabled ? 0.4 : 1,
@@ -343,7 +343,7 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#E8873C',
+                  color: 'var(--primary)',
                   fontSize: '0.725rem',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -358,7 +358,7 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#6b7280',
+                  color: 'var(--text-muted)',
                   fontSize: '0.725rem',
                   cursor: 'pointer',
                   padding: 0,
@@ -379,7 +379,7 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
               }}
             >
               {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-                <span key={d} style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280' }}>
+                <span key={d} style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
                   {d}
                 </span>
               ))}
@@ -413,20 +413,20 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                       fontWeight: isSelected ? 600 : cell.isCurrentMonth ? 500 : 400,
                       borderRadius: '8px',
                       border: isSelected
-                        ? '1px solid #E8873C'
+                        ? '1px solid var(--primary)'
                         : isToday && cell.isCurrentMonth
-                        ? '1px solid #E8873C'
+                        ? '1px solid var(--primary)'
                         : '1px solid transparent',
                       backgroundColor: isSelected
-                        ? '#fff4e6'
+                        ? 'var(--primary-tint)'
                         : 'transparent',
                       color: isSelected
-                        ? '#E8873C'
+                        ? 'var(--primary)'
                         : isDisabled
-                        ? '#d1d5db'
+                        ? 'var(--text-faint)'
                         : cell.isCurrentMonth
-                        ? '#111827'
-                        : '#d1d5db',
+                        ? 'var(--text-main)'
+                        : 'var(--text-faint)',
                       cursor: isDisabled ? 'not-allowed' : 'pointer',
                       opacity: isDisabled ? 0.35 : 1,
                       pointerEvents: isDisabled ? 'none' : 'auto',
@@ -438,16 +438,16 @@ export const GlassDatePicker: React.FC<GlassDatePickerProps> = ({
                     }}
                     onMouseEnter={(e) => {
                       if (!isDisabled && !isSelected) {
-                        e.currentTarget.style.backgroundColor = '#f3f4f6';
-                        e.currentTarget.style.color = '#111827';
+                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                        e.currentTarget.style.color = 'var(--text-main)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isDisabled && !isSelected) {
                         e.currentTarget.style.backgroundColor = 'transparent';
                         e.currentTarget.style.color = cell.isCurrentMonth
-                          ? '#111827'
-                          : '#d1d5db';
+                          ? 'var(--text-main)'
+                          : 'var(--text-faint)';
                       }
                     }}
                   >

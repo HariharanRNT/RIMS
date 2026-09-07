@@ -35,6 +35,13 @@ public class AttendanceCalendarController : ControllerBase
         return Ok(ApiResponse<MonthCalendarStatusDto>.SuccessResponse(result));
     }
 
+    [HttpGet("{year:int}/{month:int}/access-validation")]
+    public async Task<IActionResult> GetAccessValidation(int year, int month)
+    {
+        var result = await _service.ValidateMonthAccessRulesAsync(year, month);
+        return Ok(ApiResponse<MonthAccessValidationDto>.SuccessResponse(result));
+    }
+
     [HttpPost("generate")]
     [RequirePermission("AttendanceCalendar.Manage")]
     public async Task<IActionResult> GenerateCalendar([FromBody] GenerateCalendarRequestDto dto)

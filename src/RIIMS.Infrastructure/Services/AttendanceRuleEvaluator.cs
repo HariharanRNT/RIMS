@@ -125,17 +125,34 @@ public static class AttendanceRuleEvaluator
         // 4 & 5. First Login & Expected Login Time
         if (!firstLoginTime.HasValue)
         {
+            var nowIst = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, IstTimeZone);
+            var todayIstDate = DateOnly.FromDateTime(nowIst);
+
+            // Future working days in the month are upcoming (do not count as absent/leave yet unless approved leave is present)
+            if (date > todayIstDate)
+            {
+                result.Status = result.IsHalfDayLeave ? "Upcoming (Half-Day Leave)" : "Upcoming";
+                result.PresentDaysCount = 0.0m;
+                result.LeaveDaysCount = result.IsHalfDayLeave ? 0.5m : 0.0m;
+                result.AbsentLopDaysCount = 0.0m;
+                return result;
+            }
+
             if (result.IsHalfDayLeave)
             {
-                result.Status = result.HalfDayType == HalfDayType.FirstHalf ? "First Half Leave (No Second Half Login)" : "Second Half Leave (No First Half Login)";
+                result.Status = result.HalfDayType == HalfDayType.FirstHalf
+                    ? "First Half Leave (No Second Half Login)"
+                    : "Second Half Leave (No First Half Login)";
                 result.PresentDaysCount = 0.0m;
-                result.AbsentLopDaysCount = 0.5m;
+                result.LeaveDaysCount = 1.0m; // 0.5 approved leave + 0.5 absent other half
+                result.AbsentLopDaysCount = 0.0m; // LeaveLopCalculator determines LOP based on monthly allowed leave
             }
             else
             {
                 result.Status = "Absent";
                 result.PresentDaysCount = 0.0m;
-                result.AbsentLopDaysCount = 1.0m;
+                result.LeaveDaysCount = 1.0m; // Absent working day contributes +1 to Leave Count
+                result.AbsentLopDaysCount = 0.0m; // LeaveLopCalculator determines LOP based on monthly allowed leave
             }
             return result;
         }
@@ -218,7 +235,7 @@ public static class AttendanceRuleEvaluator
             result.IsHalfDayAttendance = true;
             result.IsLateLogin = false;
             result.PresentDaysCount = 0.5m;
-            result.AbsentLopDaysCount = 0.5m;
+            result.AbsentLopDaysCount = 0.0m;
             result.Status = "HalfDay Attendance";
         }
 

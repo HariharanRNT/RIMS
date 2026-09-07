@@ -103,7 +103,16 @@ public class CreateEmployeeRequestValidator : AbstractValidator<CreateEmployeeRe
             .NotEmpty().WithMessage("Date of joining is required.")
             .Must(date => date.Date <= DateTime.UtcNow.Date).WithMessage("Date of joining cannot be in the future.");
 
-        // 13. Statutory Identifiers (PF, PAN, ESI, Aadhaar - Max 25 chars)
+        // 13. Date of Birth
+        RuleFor(x => x.DateOfBirth)
+            .Must(d => !d.HasValue || d.Value.Date <= DateTime.UtcNow.Date)
+            .WithMessage("Date of birth cannot be in the future.")
+            .Must(d => !d.HasValue || d.Value.Date <= DateTime.UtcNow.Date.AddYears(-18))
+            .WithMessage("Employee must be at least 18 years old.")
+            .Must(d => !d.HasValue || d.Value.Date >= DateTime.UtcNow.Date.AddYears(-75))
+            .WithMessage("Employee age cannot exceed 75 years.");
+
+        // 14. Statutory Identifiers (PF, PAN, ESI, Aadhaar - Max 25 chars)
         RuleFor(x => x.PfNumber)
             .MaximumLength(25).WithMessage("PF Number must be 25 characters or less.");
 
@@ -187,6 +196,14 @@ public class UpdateEmployeeRequestValidator : AbstractValidator<UpdateEmployeeRe
         RuleFor(x => x.DateOfJoining)
             .NotEmpty().WithMessage("Date of joining is required.")
             .Must(date => date.Date <= DateTime.UtcNow.Date).WithMessage("Date of joining cannot be in the future.");
+
+        RuleFor(x => x.DateOfBirth)
+            .Must(d => !d.HasValue || d.Value.Date <= DateTime.UtcNow.Date)
+            .WithMessage("Date of birth cannot be in the future.")
+            .Must(d => !d.HasValue || d.Value.Date <= DateTime.UtcNow.Date.AddYears(-18))
+            .WithMessage("Employee must be at least 18 years old.")
+            .Must(d => !d.HasValue || d.Value.Date >= DateTime.UtcNow.Date.AddYears(-75))
+            .WithMessage("Employee age cannot exceed 75 years.");
 
         RuleFor(x => x.PfNumber)
             .MaximumLength(25).WithMessage("PF Number must be 25 characters or less.");

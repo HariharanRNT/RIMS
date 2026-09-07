@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ConfirmProvider } from './contexts/ConfirmContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { EmployeeLayout } from './components/layout/EmployeeLayout';
@@ -44,9 +45,10 @@ import { TaskAllocationPage } from './pages/admin/tasks/TaskAllocationPage';
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <ConfirmProvider>
-        <BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <ConfirmProvider>
+          <BrowserRouter>
           <Routes>
           {/* Public / Auth */}
           <Route path="/login" element={<LoginPage />} />
@@ -64,13 +66,20 @@ export const App: React.FC = () => {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute allowedRoles={['Admin']}>
+              <ProtectedRoute>
                 <AdminLayout />
               </ProtectedRoute>
             }
           >
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route
+              path="dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['Admin']}>
+                  <AdminDashboardPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="profile" element={<ProfilePage />} />
             <Route
               path="attendance-permissions"
@@ -254,6 +263,7 @@ export const App: React.FC = () => {
       </BrowserRouter>
       </ConfirmProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 };
 

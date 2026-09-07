@@ -14,4 +14,5 @@ public interface IAttendanceCalendarService
     Task<bool> IsWorkingDayForEmployeeAsync(DateOnly date, int employeeId);
     Task<List<EmployeeDailyAttendanceSummaryDto>> GetEmployeeMonthlyAttendanceAsync(int employeeId, int year, int month);
     Task<EmployeeMonthlyAttendanceReportDto> GetEmployeeMonthlyAttendanceReportAsync(int employeeId, int year, int month);
+    Task<MonthAccessValidationDto> ValidateMonthAccessRulesAsync(int year, int month);
 }

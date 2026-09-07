@@ -3,6 +3,7 @@ using RIIMS.Application.DTOs.Permission;
 using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
 using RIIMS.Domain.Enums;
+using Microsoft.Extensions.Configuration;
 using RIIMS.Infrastructure.Data;
 
 namespace RIIMS.Infrastructure.Services;
@@ -11,11 +12,13 @@ public class PermissionService : IPermissionService
 {
     private readonly RiimsDbContext _context;
     private readonly IEmailService _emailService;
+    private readonly IConfiguration? _configuration;
 
-    public PermissionService(RiimsDbContext context, IEmailService emailService)
+    public PermissionService(RiimsDbContext context, IEmailService emailService, IConfiguration? configuration = null)
     {
         _context = context;
         _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task<PermissionRequestDto> SubmitPermissionAsync(int employeeId, CreatePermissionRequest request)
@@ -56,24 +59,37 @@ public class PermissionService : IPermissionService
 
             if (emp == null) return;
 
-            var adminRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+            var adminRoles = await _context.Roles
+                .Where(r => r.Name == "Admin" || r.Name == "Super Admin")
+                .Select(r => r.Id)
+                .ToListAsync();
+
             var adminEmails = new List<string>();
-            if (adminRole != null)
+            if (adminRoles.Any())
             {
                 var adminUserIds = await _context.UserRoles
-                    .Where(ur => ur.RoleId == adminRole.Id)
+                    .Where(ur => adminRoles.Contains(ur.RoleId))
                     .Select(ur => ur.UserId)
                     .ToListAsync();
 
                 adminEmails = await _context.Users
-                    .Where(u => adminUserIds.Contains(u.Id) && !string.IsNullOrEmpty(u.Email))
+                    .Where(u => adminUserIds.Contains(u.Id) && u.IsActive && !string.IsNullOrEmpty(u.Email))
                     .Select(u => u.Email!)
                     .ToListAsync();
             }
 
-            if (adminEmails.Count == 0) adminEmails.Add("admin@riims.local");
+            // Remove any local dummy domains
+            adminEmails = adminEmails
+                .Where(e => !e.EndsWith("@riims.local", StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
-            if (emp.ReportingPerson != null && !string.IsNullOrEmpty(emp.ReportingPerson.Email) && !adminEmails.Contains(emp.ReportingPerson.Email))
+            var defaultAdminEmail = _configuration?["AdminEmail"] ?? "anitha@reshandthosh.com";
+            if (!string.IsNullOrWhiteSpace(defaultAdminEmail) && !adminEmails.Contains(defaultAdminEmail, StringComparer.OrdinalIgnoreCase))
+            {
+                adminEmails.Add(defaultAdminEmail);
+            }
+
+            if (emp.ReportingPerson != null && !string.IsNullOrEmpty(emp.ReportingPerson.Email) && !adminEmails.Contains(emp.ReportingPerson.Email, StringComparer.OrdinalIgnoreCase))
             {
                 adminEmails.Add(emp.ReportingPerson.Email);
             }
@@ -96,7 +112,7 @@ public class PermissionService : IPermissionService
                     </div>
 
                     <div style=""text-align: center; margin-top: 30px;"">
-                        <a href=""http://localhost:3000/admin/approvals"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Review & Approve Request</a>
+                        <a href=""{(_configuration?["AppUrl"] ?? "http://10.60.121.234:99").TrimEnd('/')}/admin/approvals"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Review & Approve Request</a>
                     </div>
                 </div>
                 <div style=""background: #f1f5f9; padding: 15px; text-align: center; font-size: 12px; color: #64748b;"">

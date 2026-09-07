@@ -38,9 +38,16 @@ public class MonthlyEmployeeReportController : ControllerBase
             return BadRequest(ApiResponse<string>.FailResponse("Invalid year or month specified."));
         }
 
-        var report = await _reportService.GetMonthlyReportAsync(
-            year, month, page, pageSize, search, departmentId, designationId, lop, salary, employeeId);
-        return Ok(ApiResponse<PagedResult<MonthlyEmployeePayrollReportDto>>.SuccessResponse(report, "Monthly employee payroll report fetched successfully."));
+        try
+        {
+            var report = await _reportService.GetMonthlyReportAsync(
+                year, month, page, pageSize, search, departmentId, designationId, lop, salary, employeeId);
+            return Ok(ApiResponse<PagedResult<MonthlyEmployeePayrollReportDto>>.SuccessResponse(report, "Monthly employee payroll report fetched successfully."));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<string>.FailResponse(ex.Message));
+        }
     }
 
     [HttpGet("export")]
@@ -54,13 +61,20 @@ public class MonthlyEmployeeReportController : ControllerBase
             return BadRequest("Invalid year or month specified.");
         }
 
-        var excelBytes = await _reportService.GenerateExcelReportAsync(year, month);
-        string monthName = new DateTime(year, month, 1).ToString("MMMM");
-        string fileName = $"Monthly_Payroll_Report_{monthName}_{year}.xlsx";
+        try
+        {
+            var excelBytes = await _reportService.GenerateExcelReportAsync(year, month);
+            string monthName = new DateTime(year, month, 1).ToString("MMMM");
+            string fileName = $"Monthly_Payroll_Report_{monthName}_{year}.xlsx";
 
-        return File(
-            excelBytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            fileName);
+            return File(
+                excelBytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<string>.FailResponse(ex.Message));
+        }
     }
 }

@@ -34,4 +34,5 @@ public class TeamTaskQueryDto
     public string? SortBy { get; set; }
     public string? SortDirection { get; set; } // "asc" or "desc"
     public string? SmartView { get; set; }
+    public bool? IsExceededDuration { get; set; }
 }

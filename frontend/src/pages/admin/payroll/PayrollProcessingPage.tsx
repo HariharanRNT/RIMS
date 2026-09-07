@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import apiClient from '../../../api/client';
-import { Play, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Play, AlertCircle, CheckCircle2, Calendar, Lock } from 'lucide-react';
+import { attendanceCalendarApi } from '../../../api/attendanceCalendarApi';
+import type { MonthAccessValidationDto } from '../../../api/attendanceCalendarApi';
 
 interface PayslipItem {
   id: number;
@@ -47,6 +50,39 @@ export const PayrollProcessingPage: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [accessValidation, setAccessValidation] = useState<MonthAccessValidationDto | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState(false);
+
+  const checkAccessValidation = async () => {
+    setCheckingAccess(true);
+    try {
+      const data = await attendanceCalendarApi.getAccessValidation(year, month);
+      setAccessValidation(data);
+    } catch {
+      // Fallback client-side check if API is unreachable
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      const isEnded = currentYear > year || (currentYear === year && currentMonth > month);
+      setAccessValidation({
+        year,
+        month,
+        monthName: months.find(m => m.id === month)?.name || `Month ${month}`,
+        isMonthEnded: isEnded,
+        nextYear: month === 12 ? year + 1 : year,
+        nextMonth: month === 12 ? 1 : month + 1,
+        nextMonthName: months.find(m => m.id === (month === 12 ? 1 : month + 1))?.name || '',
+        isNextMonthPublished: false,
+        canProcessPayroll: false,
+        canGenerateReport: false,
+        reasonMessage: !isEnded
+          ? 'Payroll processing is disabled because the selected month has not completely ended.'
+          : "The next month's Monthly Attendance Calendar must be published before processing payroll."
+      });
+    } finally {
+      setCheckingAccess(false);
+    }
+  };
 
   const fetchSummary = async () => {
     setLoading(true);
@@ -64,9 +100,15 @@ export const PayrollProcessingPage: React.FC = () => {
 
   useEffect(() => {
     fetchSummary();
+    checkAccessValidation();
   }, [month, year]);
 
   const handleProcessPayroll = async () => {
+    if (accessValidation && !accessValidation.canProcessPayroll) {
+      setError(accessValidation.reasonMessage || 'Cannot process payroll for this month.');
+      return;
+    }
+
     setProcessing(true);
     setMsg('');
     setError('');
@@ -95,6 +137,9 @@ export const PayrollProcessingPage: React.FC = () => {
   const getBasic = (p: PayslipItem) => p.basicPay ?? p.totalSalary ?? 0;
   const getNet = (p: PayslipItem) => p.netPay ?? 0;
 
+  const canProcess = accessValidation ? accessValidation.canProcessPayroll : false;
+  const selectedMonthName = months.find(m => m.id === month)?.name || `Month ${month}`;
+
   return (
     <div>
       <div className="header">
@@ -108,13 +153,63 @@ export const PayrollProcessingPage: React.FC = () => {
         <button
           className="btn btn-primary"
           onClick={handleProcessPayroll}
-          disabled={processing}
-          style={{ padding: '0.65rem 1.2rem' }}
+          disabled={!canProcess || processing || checkingAccess}
+          title={!canProcess ? accessValidation?.reasonMessage || 'Processing disabled for this month' : `Process payroll for ${selectedMonthName} ${year}`}
+          style={{
+            padding: '0.65rem 1.2rem',
+            opacity: !canProcess ? 0.6 : 1,
+            cursor: !canProcess ? 'not-allowed' : 'pointer'
+          }}
         >
-          <Play size={18} />
+          {!canProcess ? <Lock size={18} /> : <Play size={18} />}
           <span>{processing ? 'Processing...' : `Process Payroll (${month}/${year})`}</span>
         </button>
       </div>
+
+      {/* Access Rule Validation Warning Alert */}
+      {accessValidation && !accessValidation.canProcessPayroll && (
+        <div
+          style={{
+            background: 'var(--warning-bg, rgba(245, 158, 11, 0.12))',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            color: 'var(--warning-text, #d97706)',
+            padding: '0.9rem 1.2rem',
+            borderRadius: 'var(--radius-md, 8px)',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.75rem'
+          }}
+        >
+          <AlertCircle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ flex: 1, fontSize: '0.875rem' }}>
+            <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+              Payroll Processing Disabled for {selectedMonthName} {year}
+            </div>
+            <div>{accessValidation.reasonMessage}</div>
+            {!accessValidation.isNextMonthPublished && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <Link
+                  to="/admin/attendance-calendar"
+                  className="btn btn-sm btn-outline"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.3rem 0.75rem',
+                    fontSize: '0.8rem',
+                    borderColor: 'rgba(245, 158, 11, 0.5)',
+                    color: 'inherit'
+                  }}
+                >
+                  <Calendar size={14} />
+                  <span>Go to Monthly Calendar to Publish {accessValidation.nextMonthName} {accessValidation.nextYear}</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {msg && (
         <div style={{

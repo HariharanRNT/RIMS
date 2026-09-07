@@ -1,0 +1,746 @@
+{
+  "info": {
+    "name": "RIIMS V2 - Complete API Collection",
+    "_postman_id": "a918237b-9524-4f47-a841-8c44c5f94e21",
+    "description": "Comprehensive Postman collection for all RIIMS V2 REST API endpoints with automatic Bearer token extraction upon login.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "bearerToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{bearerToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01. Authentication & Users",
+      "item": [
+        {
+          "name": "Login (Auto-saves Bearer Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.data && jsonData.data.token) {",
+                  "    pm.collectionVariables.set('bearerToken', jsonData.data.token);",
+                  "    console.log('Saved bearerToken:', jsonData.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@riims.local\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["Auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile (/me)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["Auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Password123!\",\n  \"newPassword\": \"NewSecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["Auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "Forgot Password (Request Reset Link)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"hariharan@reshandthosh.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["Auth", "forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "List All Admin Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Users",
+              "host": ["{{baseUrl}}"],
+              "path": ["Users"]
+            }
+          }
+        },
+        {
+          "name": "Create Administrator User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"hradmin@riims.local\",\n  \"email\": \"hradmin@riims.local\",\n  \"password\": \"Password123!\",\n  \"employeeId\": 1,\n  \"roles\": [\"HR Admin\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Users",
+              "host": ["{{baseUrl}}"],
+              "path": ["Users"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Employees & Organization",
+      "item": [
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Employees",
+              "host": ["{{baseUrl}}"],
+              "path": ["Employees"]
+            }
+          }
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Employees/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["Employees", "1"]
+            }
+          }
+        },
+        {
+          "name": "Get All Departments",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["Departments"]
+            }
+          }
+        },
+        {
+          "name": "Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Engineering\",\n  \"description\": \"Software & Product Development\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["Departments"]
+            }
+          }
+        },
+        {
+          "name": "Get All Designations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Designations",
+              "host": ["{{baseUrl}}"],
+              "path": ["Designations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Attendance & Calendar",
+      "item": [
+        {
+          "name": "Punch In / Login",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/Attendance/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["Attendance", "login"]
+            }
+          }
+        },
+        {
+          "name": "Punch Out / Logout",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/Attendance/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["Attendance", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Get Attendance by Employee ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Attendance/1?date=2026-08-27",
+              "host": ["{{baseUrl}}"],
+              "path": ["Attendance", "1"],
+              "query": [
+                { "key": "date", "value": "2026-08-27" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Permission Summary",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Attendance/permission-summary/1?month=8&year=2026",
+              "host": ["{{baseUrl}}"],
+              "path": ["Attendance", "permission-summary", "1"],
+              "query": [
+                { "key": "month", "value": "8" },
+                { "key": "year", "value": "2026" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Monthly Attendance Calendar",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/AttendanceCalendar?month=8&year=2026",
+              "host": ["{{baseUrl}}"],
+              "path": ["AttendanceCalendar"],
+              "query": [
+                { "key": "month", "value": "8" },
+                { "key": "year", "value": "2026" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Tasks & Work Management",
+      "item": [
+        {
+          "name": "Get Active Running Task",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Tasks/active",
+              "host": ["{{baseUrl}}"],
+              "path": ["Tasks", "active"]
+            }
+          }
+        },
+        {
+          "name": "Start New Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": 1,\n  \"clientId\": 1,\n  \"moduleName\": \"Authentication Module\",\n  \"description\": \"Implementing Postman Collection and JWT endpoints\",\n  \"plannedHours\": 2,\n  \"plannedMinutes\": 30,\n  \"priority\": \"High\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Tasks/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["Tasks", "start"]
+            }
+          }
+        },
+        {
+          "name": "Pause Running Task",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/Tasks/1/pause",
+              "host": ["{{baseUrl}}"],
+              "path": ["Tasks", "1", "pause"]
+            }
+          }
+        },
+        {
+          "name": "Resume Task",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/Tasks/1/resume",
+              "host": ["{{baseUrl}}"],
+              "path": ["Tasks", "1", "resume"]
+            }
+          }
+        },
+        {
+          "name": "Complete Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Completed task testing and verified successfully.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Tasks/1/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["Tasks", "1", "complete"]
+            }
+          }
+        },
+        {
+          "name": "List Employee Tasks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["Tasks"]
+            }
+          }
+        },
+        {
+          "name": "Assign Task to Employee (Manager/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": 1,\n  \"productId\": 1,\n  \"clientId\": 1,\n  \"moduleName\": \"Dashboard Redesign\",\n  \"description\": \"Implement modern cards and responsive grid\",\n  \"plannedHours\": 4,\n  \"plannedMinutes\": 0,\n  \"priority\": \"High\",\n  \"instructions\": \"Make sure it collapses gracefully on mobile\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Tasks/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["Tasks", "assign"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Breaks & Support Activities",
+      "item": [
+        {
+          "name": "Get Break Types",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/BreakTypes",
+              "host": ["{{baseUrl}}"],
+              "path": ["BreakTypes"]
+            }
+          }
+        },
+        {
+          "name": "Start Break",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"breakTypeId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Breaks/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["Breaks", "start"]
+            }
+          }
+        },
+        {
+          "name": "Stop Break",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/Breaks/stop",
+              "host": ["{{baseUrl}}"],
+              "path": ["Breaks", "stop"]
+            }
+          }
+        },
+        {
+          "name": "Get Support Activity Types",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/SupportActivityTypes",
+              "host": ["{{baseUrl}}"],
+              "path": ["SupportActivityTypes"]
+            }
+          }
+        },
+        {
+          "name": "Start Support Activity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supportActivityTypeId\": 1,\n  \"productId\": 1,\n  \"clientId\": 1,\n  \"description\": \"Assisting client with demo configuration\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Support/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["Support", "start"]
+            }
+          }
+        },
+        {
+          "name": "Stop Support Activity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Demo call completed. Client satisfied with walkthrough.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Support/stop",
+              "host": ["{{baseUrl}}"],
+              "path": ["Support", "stop"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Leaves & Permissions",
+      "item": [
+        {
+          "name": "Get Leave Types",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/LeaveTypes",
+              "host": ["{{baseUrl}}"],
+              "path": ["LeaveTypes"]
+            }
+          }
+        },
+        {
+          "name": "Submit Leave Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leaveTypeId\": 1,\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-09-02\",\n  \"reason\": \"Personal family commitment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Leaves",
+              "host": ["{{baseUrl}}"],
+              "path": ["Leaves"]
+            }
+          }
+        },
+        {
+          "name": "Submit Permission Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissionDate\": \"2026-08-28\",\n  \"permissionMinutes\": 60,\n  \"reason\": \"Doctor consultation\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["Permissions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Reports & Dashboard",
+      "item": [
+        {
+          "name": "Admin Dashboard Metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Reports/admin-dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["Reports", "admin-dashboard"]
+            }
+          }
+        },
+        {
+          "name": "Employee Dashboard Metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Reports/employee-dashboard/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["Reports", "employee-dashboard", "1"]
+            }
+          }
+        },
+        {
+          "name": "Daily Production / Performance Report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Reports/daily-production?startDate=2026-08-01&endDate=2026-08-27",
+              "host": ["{{baseUrl}}"],
+              "path": ["Reports", "daily-production"],
+              "query": [
+                { "key": "startDate", "value": "2026-08-01" },
+                { "key": "endDate", "value": "2026-08-27" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Daily Performance Excel Report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Reports/export-daily-production?startDate=2026-08-01&endDate=2026-08-27",
+              "host": ["{{baseUrl}}"],
+              "path": ["Reports", "export-daily-production"],
+              "query": [
+                { "key": "startDate", "value": "2026-08-01" },
+                { "key": "endDate", "value": "2026-08-27" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Daily Activity Timeline",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Timeline/1?date=2026-08-27",
+              "host": ["{{baseUrl}}"],
+              "path": ["Timeline", "1"],
+              "query": [
+                { "key": "date", "value": "2026-08-27" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Settings & Celebrations",
+      "item": [
+        {
+          "name": "Get All System Settings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["Settings"]
+            }
+          }
+        },
+        {
+          "name": "Update System Settings (Bulk)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"key\": \"GraceMinutes\",\n    \"value\": \"15\",\n    \"description\": \"Grace period in minutes\"\n  },\n  {\n    \"key\": \"BirthdayWishesEnabled\",\n    \"value\": \"true\",\n    \"description\": \"Enable Birthday Wishes\"\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["Settings"]
+            }
+          }
+        },
+        {
+          "name": "Get Today Celebrations Feed",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Celebration/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["Celebration", "today"]
+            }
+          }
+        },
+        {
+          "name": "Test Run Celebration Wishes Dispatch Now",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/Celebration/trigger?force=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["Celebration", "trigger"],
+              "query": [
+                { "key": "force", "value": "true" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Products & Clients",
+      "item": [
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Products",
+              "host": ["{{baseUrl}}"],
+              "path": ["Products"]
+            }
+          }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"RIIMS Enterprise\",\n  \"description\": \"Resource & Attendance Tracking Software\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/Products",
+              "host": ["{{baseUrl}}"],
+              "path": ["Products"]
+            }
+          }
+        },
+        {
+          "name": "Get All Clients",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Clients",
+              "host": ["{{baseUrl}}"],
+              "path": ["Clients"]
+            }
+          }
+        },
+        {
+          "name": "Get Clients for Product",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/ProductClientMappings/product/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["ProductClientMappings", "product", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Roles & Permissions (RBAC)",
+      "item": [
+        {
+          "name": "Get All Roles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/Roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["Roles"]
+            }
+          }
+        },
+        {
+          "name": "Get All System Permissions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/AppPermissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["AppPermissions"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

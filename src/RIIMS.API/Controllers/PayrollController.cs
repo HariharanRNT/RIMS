@@ -25,8 +25,15 @@ public class PayrollController : ControllerBase
     [RequirePermission("Payroll.Generate")]
     public async Task<IActionResult> Process([FromBody] ProcessPayrollRequest request)
     {
-        var result = await _service.ProcessMonthlyPayrollAsync(request.Month, request.Year);
-        return Ok(ApiResponse<PayrollSummaryDto>.SuccessResponse(result));
+        try
+        {
+            var result = await _service.ProcessMonthlyPayrollAsync(request.Month, request.Year);
+            return Ok(ApiResponse<PayrollSummaryDto>.SuccessResponse(result));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse.FailResponse(ex.Message));
+        }
     }
 
     [HttpGet("summary")]

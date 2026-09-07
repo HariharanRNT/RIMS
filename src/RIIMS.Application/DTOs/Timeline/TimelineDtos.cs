@@ -4,6 +4,8 @@ public class ActivityTimelineDto
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
+    public string? EmployeeName { get; set; }
+    public string? EmployeeCode { get; set; }
     public string ActivityType { get; set; } = string.Empty;
     public string RefTable { get; set; } = string.Empty;
     public int RefId { get; set; }

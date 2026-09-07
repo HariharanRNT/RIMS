@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import apiClient from '../../api/client';
-import { Search, Clock, Calendar, AlertTriangle, Settings, ExternalLink, CheckCircle2, PartyPopper } from 'lucide-react';
+import { Search, Clock, Calendar, AlertTriangle, Settings, ExternalLink, CheckCircle2, PartyPopper, Bell, X } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 export const Navbar: React.FC = () => {
   const { user, role } = useAuth();
@@ -13,11 +14,45 @@ export const Navbar: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const notificationContainerRef = useRef<HTMLDivElement>(null);
+  const bellButtonRef = useRef<HTMLButtonElement>(null);
+
   // Preference Filters
   const [prefLeave, setPrefLeave] = useState(true);
   const [prefPermission, setPrefPermission] = useState(true);
   const [prefLateLogin, setPrefLateLogin] = useState(true);
   const [showPrefs, setShowPrefs] = useState(false);
+
+  // Close notification dropdown on outside click or Escape key
+  useEffect(() => {
+    if (!showNotifications) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (
+        notificationContainerRef.current &&
+        !notificationContainerRef.current.contains(event.target as Node)
+      ) {
+        setShowNotifications(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowNotifications(false);
+        bellButtonRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showNotifications]);
 
   useEffect(() => {
     const updateClock = () => {
@@ -169,14 +204,18 @@ export const Navbar: React.FC = () => {
       </div>
 
       {/* Notification Bell */}
-      <div style={{ position: 'relative' }}>
-        <div
-          className={`bell ${calculatedUnreadCount > 0 ? 'has-unread' : ''}`}
+      <div ref={notificationContainerRef} style={{ position: 'relative' }}>
+        <button
+          ref={bellButtonRef}
+          type="button"
+          className={`bell ${calculatedUnreadCount > 0 ? 'has-unread' : ''} ${showNotifications ? 'is-active' : ''}`}
           onClick={() => setShowNotifications(!showNotifications)}
-          title="Notifications & Alerts"
+          title={showNotifications ? "Close notifications" : "Notifications & Alerts"}
+          aria-expanded={showNotifications}
+          aria-label="Notifications & Alerts"
         >
-          🔔
-        </div>
+          <Bell size={18} fill={showNotifications ? 'currentColor' : 'none'} />
+        </button>
 
         {/* Notifications Dropdown Panel */}
         {showNotifications && (
@@ -194,70 +233,101 @@ export const Navbar: React.FC = () => {
             animation: 'fadeIn 0.15s ease-out'
           }}>
             {/* Header Bar */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '0.65rem',
-                borderBottom: '1px solid #f0f0f0',
-                paddingBottom: '0.55rem',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111827' }}>
-                    {role === 'Admin' ? 'Admin Alerts & Requests' : 'Follow-Up Reminders'}
-                  </span>
-                  {role === 'Admin' && (
-                    <button
-                      type="button"
-                      onClick={() => setShowPrefs(!showPrefs)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: showPrefs ? '#E8873C' : '#9ca3af',
-                        cursor: 'pointer',
-                        padding: '2px',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                      title="Notification Preferences"
-                    >
-                      <Settings size={14} />
-                    </button>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {role === 'Admin' && (
-                    <button
-                      type="button"
-                      onClick={handleClearAll}
-                      style={{
-                        background: '#fff4e6',
-                        border: '1px solid #fed7aa',
-                        borderRadius: '6px',
-                        color: '#E8873C',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: '0.2rem 0.5rem',
-                        transition: 'all 0.15s ease',
-                      }}
-                      title="Mark all notifications as read and clear from view"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                  <span className={`badge ${calculatedUnreadCount > 0 ? 'badge-warning' : 'badge-neutral'}`} style={{ fontSize: '0.675rem' }}>
-                    {calculatedUnreadCount} New
-                  </span>
-                </div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '0.65rem',
+              borderBottom: '1px solid var(--border-soft)',
+              paddingBottom: '0.55rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                  {role === 'Admin' ? 'Admin Alerts & Requests' : 'Follow-Up Reminders'}
+                </span>
+                {role === 'Admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPrefs(!showPrefs)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: showPrefs ? 'var(--primary)' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Notification Preferences"
+                  >
+                    <Settings size={14} />
+                  </button>
+                )}
               </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {role === 'Admin' && calculatedUnreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    style={{
+                      background: 'var(--primary-tint)',
+                      border: '1px solid rgba(232, 135, 60, 0.3)',
+                      borderRadius: '6px',
+                      color: 'var(--primary)',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: '0.2rem 0.5rem',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="Mark all notifications as read and clear from view"
+                  >
+                    Clear All
+                  </button>
+                )}
+                <span className={`badge ${calculatedUnreadCount > 0 ? 'badge-warning' : 'badge-neutral'}`} style={{ fontSize: '0.675rem' }}>
+                  {calculatedUnreadCount} New
+                </span>
+
+                {/* Panel-Level Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowNotifications(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '3px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '6px',
+                    marginLeft: '2px',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = 'var(--text-main)';
+                    e.currentTarget.style.background = 'var(--bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                    e.currentTarget.style.background = 'none';
+                  }}
+                  title="Close notifications panel"
+                  aria-label="Close notifications panel"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
 
               {/* Preferences Filter Panel */}
               {showPrefs && role === 'Admin' && (
                 <div style={{
-                  background: '#f9fafb',
-                  border: '1px solid #e5e7eb',
+                  background: 'var(--panel-raised)',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
                   padding: '0.5rem 0.65rem',
                   marginBottom: '0.65rem',
@@ -266,16 +336,16 @@ export const Navbar: React.FC = () => {
                   flexDirection: 'column',
                   gap: '0.35rem',
                 }}>
-                  <div style={{ fontWeight: 600, color: '#6b7280', fontSize: '0.7rem' }}>Filter Alerts:</div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#374151', cursor: 'pointer' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-dim)', fontSize: '0.7rem' }}>Filter Alerts:</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-main)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={prefLeave} onChange={(e) => setPrefLeave(e.target.checked)} style={{ accentColor: '#E8873C' }} />
                     <span>Leave Requests</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#374151', cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-main)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={prefPermission} onChange={(e) => setPrefPermission(e.target.checked)} style={{ accentColor: '#E8873C' }} />
                     <span>Permission Requests</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#374151', cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-main)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={prefLateLogin} onChange={(e) => setPrefLateLogin(e.target.checked)} style={{ accentColor: '#EF4444' }} />
                     <span>Late Login Alerts</span>
                   </label>
@@ -285,9 +355,9 @@ export const Navbar: React.FC = () => {
               {/* Action Error Banner */}
               {actionError && (
                 <div style={{
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#dc2626',
+                  background: 'var(--danger-bg)',
+                  border: '1px solid rgba(216, 64, 74, 0.3)',
+                  color: 'var(--danger-text)',
                   borderRadius: '6px',
                   padding: '0.4rem 0.6rem',
                   fontSize: '0.725rem',
@@ -305,20 +375,20 @@ export const Navbar: React.FC = () => {
                     width: '42px',
                     height: '42px',
                     borderRadius: '50%',
-                    background: '#ecfdf5',
-                    border: '1px solid #a7f3d0',
+                    background: 'var(--success-bg)',
+                    border: '1px solid rgba(21, 154, 99, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     margin: '0 auto 0.75rem auto',
-                    color: '#059669'
+                    color: 'var(--success)',
                   }}>
                     <CheckCircle2 size={22} />
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111827', marginBottom: '0.25rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '0.25rem' }}>
                     You're all caught up!
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: 1.4 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
                     {role === 'Admin' ? 'No new notifications — all requests & alerts cleared.' : 'No pending follow-up reminders.'}
                   </div>
                 </div>
@@ -332,8 +402,8 @@ export const Navbar: React.FC = () => {
                         style={{
                           padding: '0.6rem 0.75rem',
                           borderRadius: '10px',
-                          background: '#fff7ed',
-                          border: '1px solid #fed7aa',
+                          background: 'var(--primary-tint)',
+                          border: '1px solid rgba(232, 135, 60, 0.25)',
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                           display: 'flex',
@@ -344,21 +414,21 @@ export const Navbar: React.FC = () => {
                       >
                         {/* Icon */}
                         <div style={{ marginTop: '2px', flexShrink: 0 }}>
-                          {item.category === 'LeaveRequest' && <Calendar size={15} style={{ color: '#E8873C' }} />}
-                          {item.category === 'PermissionRequest' && <Clock size={15} style={{ color: '#E8873C' }} />}
-                          {item.category === 'LateLogin' && <AlertTriangle size={15} style={{ color: '#EF4444' }} />}
-                          {item.category === 'Celebration' && <PartyPopper size={15} style={{ color: '#8B5CF6' }} />}
+                          {item.category === 'LeaveRequest' && <Calendar size={15} style={{ color: 'var(--primary)' }} />}
+                          {item.category === 'PermissionRequest' && <Clock size={15} style={{ color: 'var(--primary)' }} />}
+                          {item.category === 'LateLogin' && <AlertTriangle size={15} style={{ color: 'var(--danger)' }} />}
+                          {item.category === 'Celebration' && <PartyPopper size={15} style={{ color: 'var(--violet)' }} />}
                         </div>
 
                         {/* Text */}
                         <div style={{ flex: 1, paddingRight: '1rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.15rem' }}>
-                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#111827' }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-main)' }}>
                               {item.title}
                             </span>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#E8873C', display: 'inline-block', marginLeft: '6px' }} />
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)', display: 'inline-block', marginLeft: '6px' }} />
                           </div>
-                          <p style={{ fontSize: '0.74rem', color: '#4b5563', margin: 0, lineHeight: 1.35 }}>
+                          <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
                             {item.message}
                           </p>
                         </div>
@@ -370,7 +440,7 @@ export const Navbar: React.FC = () => {
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: '#9ca3af',
+                            color: 'var(--text-muted)',
                             fontSize: '0.8rem',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -379,8 +449,8 @@ export const Navbar: React.FC = () => {
                             borderRadius: '4px',
                             transition: 'color 0.12s ease',
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--danger)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
                           title="Dismiss notification"
                         >
                           ✕
@@ -395,19 +465,19 @@ export const Navbar: React.FC = () => {
                         style={{
                           padding: '0.5rem 0.65rem',
                           borderRadius: 'var(--radius-sm)',
-                          background: '#f9fafb',
-                          border: '1px solid #e5e7eb',
+                          background: 'var(--panel-raised)',
+                          border: '1px solid var(--border)',
                           cursor: 'pointer',
                           transition: 'background-color 0.12s ease'
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.775rem', fontWeight: 600 }}>
-                          <span style={{ color: '#111827' }}>{item.productName}</span>
-                          <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.7rem' }}>
+                          <span style={{ color: 'var(--text-main)' }}>{item.productName}</span>
+                          <span style={{ color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.7rem' }}>
                             <Calendar size={11} /> {new Date(item.followUpDate).toLocaleDateString()}
                           </span>
                         </div>
-                        <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.15rem' }}>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
                           Client: {item.clientCompanyName}
                         </p>
                       </div>
@@ -419,7 +489,7 @@ export const Navbar: React.FC = () => {
               {/* Panel Footer */}
               {role === 'Admin' && (
                 <div style={{
-                  borderTop: '1px solid #f0f0f0',
+                  borderTop: '1px solid var(--border-soft)',
                   paddingTop: '0.5rem',
                   marginTop: '0.5rem',
                   textAlign: 'center',
@@ -433,7 +503,7 @@ export const Navbar: React.FC = () => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#E8873C',
+                      color: 'var(--primary)',
                       fontSize: '0.775rem',
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -451,21 +521,23 @@ export const Navbar: React.FC = () => {
           )}
         </div>
 
-        {/* User Profile */}
-      {/* Profile Chip */}
-      <div
-        className="who-chip"
-        onClick={() => navigate(role === 'Admin' ? '/admin/profile' : '/profile')}
-        title="View My Profile"
-      >
-        <div>
-          <div className="n">{formatDisplayName(user?.employeeName, user?.role)}</div>
-          <div className="r">{role || 'Admin'}</div>
+        {/* Theme Selector */}
+        <ThemeToggle variant="dropdown" />
+
+        {/* User Profile Chip */}
+        <div
+          className="who-chip"
+          onClick={() => navigate(role === 'Admin' ? '/admin/profile' : '/profile')}
+          title="View My Profile"
+        >
+          <div>
+            <div className="n">{formatDisplayName(user?.employeeName, user?.role)}</div>
+            <div className="r">{role || 'Admin'}</div>
+          </div>
+          <div className="avatar">
+            {getInitials(user?.employeeName)}
+          </div>
         </div>
-        <div className="avatar">
-          {getInitials(user?.employeeName)}
-        </div>
-      </div>
     </div>
   );
 };

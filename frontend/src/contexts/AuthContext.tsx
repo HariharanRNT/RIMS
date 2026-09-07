@@ -24,6 +24,9 @@ interface AuthContextType {
   permissions: string[];
   isSuperAdmin: boolean;
   isAdmin: boolean;
+  isEmployee: boolean;
+  isPureAdmin: boolean;
+  hasAdminPrivilege: boolean;
   mustChangePassword: boolean;
   updateMustChangePassword: (val: boolean) => void;
   hasPermission: (permission: string) => boolean;
@@ -93,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      if (user?.role === 'Employee' || (user?.roles && user.roles.includes('Employee') && user.roles.length === 1)) {
+      if (user?.role === 'Employee' || (user?.roles && user.roles.includes('Employee'))) {
         await apiClient.post('/attendance/logout');
       }
     } catch {
@@ -115,17 +118,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const userRoles = user?.roles || (user?.role ? [user.role] : []);
   const userPermissions = user?.permissions || [];
+
+  const isEmployee = userRoles.some(r => r.toLowerCase() === 'employee');
+
   const isSuperAdmin = Boolean(
     user?.isSuperAdmin ||
-    userRoles.some(r => r.toLowerCase() === 'super admin' || r.toLowerCase() === 'admin') ||
+    userRoles.some(r => r.toLowerCase() === 'super admin' || r.toLowerCase() === 'system admin') ||
     user?.role?.toLowerCase() === 'admin' ||
-    user?.role?.toLowerCase() === 'super admin'
+    user?.role?.toLowerCase() === 'super admin' ||
+    user?.role?.toLowerCase() === 'system admin'
   );
-  const isAdmin = Boolean(
+
+  // Pure Admin: user who is Super Admin, or has Admin role and does NOT have the Employee role
+  const isPureAdmin = Boolean(
     isSuperAdmin ||
+    ((userRoles.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'super admin' || r.toLowerCase() === 'system admin') || user?.role?.toLowerCase() === 'admin') && !isEmployee)
+  );
+
+  const hasAdminPrivilege = Boolean(
+    isPureAdmin ||
     userRoles.some(r => r.toLowerCase().endsWith('admin') || r.toLowerCase() === 'admin') ||
     user?.role?.toLowerCase().endsWith('admin')
   );
+
+  // For Admin Layout & Root Admin routing, only pure administrators belong directly to Admin Portal
+  const isAdmin = isPureAdmin;
 
   const hasRole = useCallback((roleName: string): boolean => {
     if (isSuperAdmin && roleName !== 'Employee') return true;
@@ -156,6 +173,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         permissions: userPermissions,
         isSuperAdmin,
         isAdmin,
+        isEmployee,
+        isPureAdmin,
+        hasAdminPrivilege,
         mustChangePassword: user?.mustChangePassword || false,
         updateMustChangePassword,
         hasPermission,

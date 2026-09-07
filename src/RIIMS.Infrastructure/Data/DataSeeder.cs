@@ -20,7 +20,7 @@ public static class DataSeeder
             await context.Database.EnsureCreatedAsync();
         }
 
-        // Ensure EmployeeSessions table exists
+        // Ensure auxiliary tables (EmployeeSessions, PasswordResetTokens, AdminNotificationReads) exist
         try
         {
             await context.Database.ExecuteSqlRawAsync(@"
@@ -36,6 +36,7 @@ public static class DataSeeder
                         [LastSeenAt] DATETIME2 NOT NULL,
                         [ExpiresAt] DATETIME2 NOT NULL,
                         [LogoutTime] DATETIME2 NULL,
+                        [AllowedEndTime] DATETIME2 NULL,
                         [IsActive] BIT NOT NULL DEFAULT 1,
                         [DeviceInfo] NVARCHAR(512) NULL,
                         [CreatedBy] INT NULL,
@@ -59,6 +60,45 @@ public static class DataSeeder
                     BEGIN
                         ALTER TABLE [dbo].[EmployeeSessions] ADD [CreatedBy] INT NULL;
                     END
+                    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[EmployeeSessions]') AND name = 'AllowedEndTime')
+                    BEGIN
+                        ALTER TABLE [dbo].[EmployeeSessions] ADD [AllowedEndTime] DATETIME2 NULL;
+                    END
+                END;
+
+                IF OBJECT_ID(N'[dbo].[PasswordResetTokens]') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[PasswordResetTokens] (
+                        [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [UserId] INT NOT NULL,
+                        [TokenHash] NVARCHAR(450) NOT NULL,
+                        [ExpiresAt] DATETIME2 NOT NULL,
+                        [IsUsed] BIT NOT NULL DEFAULT 0,
+                        [UsedAt] DATETIME2 NULL,
+                        [CreatedByIp] NVARCHAR(MAX) NULL,
+                        [IsActive] BIT NOT NULL DEFAULT 1,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2 NOT NULL,
+                        [CreatedBy] INT NULL
+                    );
+
+                    CREATE INDEX [IX_PasswordResetTokens_UserId_IsUsed] ON [dbo].[PasswordResetTokens] ([UserId], [IsUsed]);
+                    CREATE INDEX [IX_PasswordResetTokens_TokenHash_IsUsed_ExpiresAt] ON [dbo].[PasswordResetTokens] ([TokenHash], [IsUsed], [ExpiresAt]);
+                END;
+
+                IF OBJECT_ID(N'[dbo].[AdminNotificationReads]') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[AdminNotificationReads] (
+                        [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [NotificationKey] NVARCHAR(450) NOT NULL,
+                        [ReadAt] DATETIME2 NOT NULL,
+                        [IsActive] BIT NOT NULL DEFAULT 1,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2 NOT NULL,
+                        [CreatedBy] INT NULL
+                    );
+
+                    CREATE UNIQUE INDEX [IX_AdminNotificationReads_NotificationKey] ON [dbo].[AdminNotificationReads] ([NotificationKey]);
                 END;
             ");
         }
@@ -262,7 +302,7 @@ public static class DataSeeder
             },
             ["Employee"] = new[]
             {
-                "Leave.Create", "Task.View", "AttendanceCalendar.View"
+                "Leave.Create", "AttendanceCalendar.View"
             },
             ["Admin"] = permissionDefinitions.Select(p => p.Code).ToArray()
         };
@@ -274,6 +314,21 @@ public static class DataSeeder
             var existingRolePerms = await context.RolePermissions
                 .Where(rp => rp.RoleId == role.Id)
                 .ToListAsync();
+
+            var targetPermIds = permCodes
+                .Where(c => permissionDict.ContainsKey(c))
+                .Select(c => permissionDict[c].Id)
+                .ToHashSet();
+
+            // Synchronize system roles: remove obsolete permissions that are no longer assigned
+            if (role.IsSystemRole)
+            {
+                var permsToRemove = existingRolePerms.Where(rp => !targetPermIds.Contains(rp.PermissionId)).ToList();
+                if (permsToRemove.Any())
+                {
+                    context.RolePermissions.RemoveRange(permsToRemove);
+                }
+            }
 
             var existingPermIds = existingRolePerms.Select(rp => rp.PermissionId).ToHashSet();
 
@@ -295,19 +350,29 @@ public static class DataSeeder
         await context.SaveChangesAsync();
 
         // 4. Department & Designation for Admin
-        var adminDept = await context.Departments.FirstOrDefaultAsync(d => d.Name == "Administration");
+        var adminDept = await context.Departments.IgnoreQueryFilters().FirstOrDefaultAsync(d => d.Name == "Administration");
         if (adminDept == null)
         {
-            adminDept = new Department { Name = "Administration" };
+            adminDept = new Department { Name = "Administration", IsActive = true };
             context.Departments.Add(adminDept);
             await context.SaveChangesAsync();
         }
+        else if (!adminDept.IsActive)
+        {
+            adminDept.IsActive = true;
+            await context.SaveChangesAsync();
+        }
 
-        var adminDesig = await context.Designations.FirstOrDefaultAsync(d => d.Name == "System Administrator");
+        var adminDesig = await context.Designations.IgnoreQueryFilters().FirstOrDefaultAsync(d => d.Name == "System Administrator");
         if (adminDesig == null)
         {
-            adminDesig = new Designation { Name = "System Administrator" };
+            adminDesig = new Designation { Name = "System Administrator", IsActive = true };
             context.Designations.Add(adminDesig);
+            await context.SaveChangesAsync();
+        }
+        else if (!adminDesig.IsActive)
+        {
+            adminDesig.IsActive = true;
             await context.SaveChangesAsync();
         }
 
@@ -331,8 +396,48 @@ public static class DataSeeder
         }
         await context.SaveChangesAsync();
 
-        // 5. Admin Employee & Identity User (admin@riims.local) -> Super Admin
-        var adminEmail = "admin@riims.local";
+        // 5. Admin Employee & Identity User (anitha@reshandthosh.com) -> Super Admin
+        var adminEmail = "anitha@reshandthosh.com";
+
+        // Migrate old dummy user if exists
+        var oldAdminUser = await userManager.FindByEmailAsync("admin@riims.local");
+        var existingAdminUser = await userManager.FindByEmailAsync(adminEmail);
+        if (oldAdminUser != null)
+        {
+            if (existingAdminUser != null && existingAdminUser.Id != oldAdminUser.Id)
+            {
+                await userManager.DeleteAsync(oldAdminUser);
+            }
+            else if (existingAdminUser == null)
+            {
+                oldAdminUser.Email = adminEmail;
+                oldAdminUser.UserName = adminEmail;
+                oldAdminUser.NormalizedEmail = adminEmail.ToUpperInvariant();
+                oldAdminUser.NormalizedUserName = adminEmail.ToUpperInvariant();
+                await userManager.UpdateAsync(oldAdminUser);
+            }
+        }
+
+        var oldAdminEmp = await context.Employees
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(e => e.Email == "admin@riims.local");
+        if (oldAdminEmp != null)
+        {
+            var existingAdminEmp = await context.Employees
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(e => e.Email == adminEmail);
+            if (existingAdminEmp != null && existingAdminEmp.Id != oldAdminEmp.Id)
+            {
+                oldAdminEmp.IsActive = false;
+                await context.SaveChangesAsync();
+            }
+            else if (existingAdminEmp == null)
+            {
+                oldAdminEmp.Email = adminEmail;
+                await context.SaveChangesAsync();
+            }
+        }
+
         var adminEmp = await context.Employees
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(e => e.Email == adminEmail || e.EmployeeCode == "EMP-001");
@@ -342,7 +447,7 @@ public static class DataSeeder
             adminEmp = new Employee
             {
                 EmployeeCode = "EMP-001",
-                Name = "System Admin",
+                Name = "Anitha (Admin)",
                 Email = adminEmail,
                 DepartmentId = adminDept.Id,
                 DesignationId = adminDesig.Id,
@@ -376,6 +481,10 @@ public static class DataSeeder
             if (!await userManager.IsInRoleAsync(adminUser, "Super Admin"))
             {
                 await userManager.AddToRoleAsync(adminUser, "Super Admin");
+            }
+            if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
+            {
+                await userManager.AddToRoleAsync(adminUser, "Admin");
             }
         }
 
@@ -427,14 +536,30 @@ public static class DataSeeder
             }
         }
 
-        // 5c. Automatically migrate all existing users and ensure IsActive = true
+        // 5c. Automatically migrate all existing users and ensure IsActive = true and EmployeeId is valid
         var allUsers = await userManager.Users.ToListAsync();
+        var defaultEmp = await context.Employees.IgnoreQueryFilters().FirstOrDefaultAsync();
         foreach (var u in allUsers)
         {
             if (!u.IsActive)
             {
                 u.IsActive = true;
                 await userManager.UpdateAsync(u);
+            }
+
+            if (u.EmployeeId == null || u.EmployeeId <= 0)
+            {
+                var matchedEmp = await context.Employees.IgnoreQueryFilters().FirstOrDefaultAsync(e => e.Email == u.Email);
+                if (matchedEmp != null)
+                {
+                    u.EmployeeId = matchedEmp.Id;
+                    await userManager.UpdateAsync(u);
+                }
+                else if (defaultEmp != null)
+                {
+                    u.EmployeeId = defaultEmp.Id;
+                    await userManager.UpdateAsync(u);
+                }
             }
 
             var uRoles = await userManager.GetRolesAsync(u);
@@ -472,23 +597,43 @@ public static class DataSeeder
 
             ("MarriageAnniversaryWishesEnabled", "true", "Enable automatic Marriage Anniversary wishes"),
             ("MarriageAnniversaryWishesChannel", "Both", "Delivery channel for Marriage Anniversary wishes: RIIMS, Email, or Both"),
-            ("MarriageAnniversaryWishesNotifyAllEmployees", "false", "Broadcast Marriage Anniversary wishes to all active employees")
+            ("MarriageAnniversaryWishesNotifyAllEmployees", "false", "Broadcast Marriage Anniversary wishes to all active employees"),
+
+            // Task Reminder Notification Settings
+            ("TaskReminderFirstMinutes", "30", "Minutes before planned end time for first reminder notification"),
+            ("TaskReminderSecondMinutes", "15", "Minutes before planned end time for second reminder notification"),
+            ("TaskReminderCompletionEnabled", "true", "Enable notification when planned task duration is fully reached"),
+
+            // Idle Time Notification Settings
+            ("IdleNotificationEnabled", "true", "Enable repeating notification alert when employee is continuously idle"),
+            ("IdleThresholdMinutes", "5", "Minutes of continuous idle before first alert"),
+            ("IdleRepeatIntervalMinutes", "5", "Minutes between repeat alerts while employee remains idle")
         };
 
+        var allDbSettings = await context.SystemSettings.IgnoreQueryFilters().ToListAsync();
         foreach (var setting in defaultSettings)
         {
-            if (!await context.SystemSettings.AnyAsync(s => s.Key == setting.Key))
+            var existing = allDbSettings.FirstOrDefault(s => string.Equals(s.Key.Trim(), setting.Key.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
             {
-                context.SystemSettings.Add(new SystemSetting
+                var newSetting = new SystemSetting
                 {
                     Key = setting.Key,
                     Value = setting.Value,
-                    Description = setting.Description
-                });
+                    Description = setting.Description,
+                    IsActive = true
+                };
+                context.SystemSettings.Add(newSetting);
+                allDbSettings.Add(newSetting);
+            }
+            else if (!existing.IsActive)
+            {
+                existing.IsActive = true;
             }
         }
 
         // 5. Break Types
+        var allDbBreaks = await context.BreakTypes.IgnoreQueryFilters().ToListAsync();
         var defaultBreakTypes = new (string Name, int AllowedMinutes)[]
         {
             ("Bio Break", 5),
@@ -500,41 +645,59 @@ public static class DataSeeder
 
         foreach (var b in defaultBreakTypes)
         {
-            var existing = await context.BreakTypes.FirstOrDefaultAsync(x => x.Name == b.Name);
+            var existing = allDbBreaks.FirstOrDefault(x => string.Equals(x.Name.Trim(), b.Name.Trim(), StringComparison.OrdinalIgnoreCase));
             if (existing == null)
             {
-                context.BreakTypes.Add(new BreakType { Name = b.Name, AllowedMinutes = b.AllowedMinutes });
+                var newBt = new BreakType { Name = b.Name, AllowedMinutes = b.AllowedMinutes, IsActive = true };
+                context.BreakTypes.Add(newBt);
+                allDbBreaks.Add(newBt);
             }
-            else if (existing.AllowedMinutes <= 0)
+            else
             {
-                existing.AllowedMinutes = b.AllowedMinutes;
+                existing.IsActive = true;
+                if (existing.AllowedMinutes <= 0) existing.AllowedMinutes = b.AllowedMinutes;
             }
         }
 
         // Ensure any other break types have a valid positive AllowedMinutes
-        var unconfiguredBreaks = await context.BreakTypes.Where(x => x.AllowedMinutes <= 0).ToListAsync();
-        foreach (var ub in unconfiguredBreaks)
+        foreach (var ub in allDbBreaks.Where(x => x.AllowedMinutes <= 0))
         {
             ub.AllowedMinutes = 15;
         }
 
         // 6. Support Activity Types
+        var allDbSupportTypes = await context.SupportActivityTypes.IgnoreQueryFilters().ToListAsync();
         string[] supportTypes = { "Support Call", "Call", "Meeting", "Discussion", "Demo" };
         foreach (var s in supportTypes)
         {
-            if (!await context.SupportActivityTypes.AnyAsync(x => x.Name == s))
+            var existing = allDbSupportTypes.FirstOrDefault(x => string.Equals(x.Name.Trim(), s.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
             {
-                context.SupportActivityTypes.Add(new SupportActivityType { Name = s });
+                var newSt = new SupportActivityType { Name = s, IsActive = true };
+                context.SupportActivityTypes.Add(newSt);
+                allDbSupportTypes.Add(newSt);
+            }
+            else if (!existing.IsActive)
+            {
+                existing.IsActive = true;
             }
         }
 
         // 7. Leave Types
+        var allDbLeaveTypes = await context.LeaveTypes.IgnoreQueryFilters().ToListAsync();
         string[] leaveTypes = { "Casual Leave", "Sick Leave", "Earned Leave" };
         foreach (var l in leaveTypes)
         {
-            if (!await context.LeaveTypes.AnyAsync(x => x.Name == l))
+            var existing = allDbLeaveTypes.FirstOrDefault(x => string.Equals(x.Name.Trim(), l.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
             {
-                context.LeaveTypes.Add(new LeaveType { Name = l });
+                var newLt = new LeaveType { Name = l, IsActive = true };
+                context.LeaveTypes.Add(newLt);
+                allDbLeaveTypes.Add(newLt);
+            }
+            else if (!existing.IsActive)
+            {
+                existing.IsActive = true;
             }
         }
 

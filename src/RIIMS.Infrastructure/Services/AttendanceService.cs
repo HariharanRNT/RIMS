@@ -41,13 +41,43 @@ public class AttendanceService : IAttendanceService
         var now = DateTime.UtcNow;
         var nowIst = TimeZoneInfo.ConvertTimeFromUtc(now, IstTimeZone);
 
-        // Close any previous unclosed attendance (concurrent session handling)
-        var openAttendance = await _context.AttendanceLogs
-            .FirstOrDefaultAsync(a => a.EmployeeId == employeeId && a.LogoutTime == null);
+        // ── IST WorkDate is the single source of truth for "today" ──────────
+        // All date comparisons below use this value so midnight-IST edge cases
+        // are handled consistently across the whole method.
+        var workDate = DateOnly.FromDateTime(nowIst.Date);
 
-        if (openAttendance != null)
+        // ── LAYER 1: Close any previous unclosed attendance from a DIFFERENT
+        //    day (previous-day open session from a missed logout).
+        //    We intentionally do NOT close today's open record here — we check
+        //    for it below and return it idempotently instead of creating a new one.
+        var staleOpenAttendance = await _context.AttendanceLogs
+            .FirstOrDefaultAsync(a => a.EmployeeId == employeeId
+                                   && a.LogoutTime == null
+                                   && a.WorkDate < workDate);
+
+        if (staleOpenAttendance != null)
         {
-            openAttendance.LogoutTime = now;
+            // Auto-close yesterday's open record at its start time (zero duration)
+            staleOpenAttendance.LogoutTime = staleOpenAttendance.LoginTime;
+        }
+
+        // ── LAYER 2: Application-level idempotency guard ─────────────────────
+        // Check if an open record for TODAY's WorkDate already exists.
+        // If so — the employee is already logged in (or a concurrent request
+        // already created the record). Return the existing record immediately.
+        var existingOpenToday = await _context.AttendanceLogs
+            .FirstOrDefaultAsync(a => a.EmployeeId == employeeId
+                                   && a.LogoutTime == null
+                                   && a.WorkDate == workDate);
+
+        if (existingOpenToday != null)
+        {
+            // Save the stale-close if there was one, then return the existing record.
+            if (staleOpenAttendance != null)
+                await _context.SaveChangesAsync();
+
+            var settings0 = await _settingService.GetTypedSettingsAsync();
+            return await BuildAttendanceDtoAsync(existingOpenToday, settings0);
         }
 
         // Fetch strongly-typed system settings
@@ -56,15 +86,13 @@ public class AttendanceService : IAttendanceService
         var officeStart = settings.OfficeStartTime;
         var graceEnd = officeStart.Add(TimeSpan.FromMinutes(settings.GraceMinutes));
         var loginTimeOfDay = nowIst.TimeOfDay;
-        // Check if an AttendanceLog for this employee already exists on today's WorkDate (in IST)
-        var todayLogs = await _context.AttendanceLogs
-            .Where(a => a.EmployeeId == employeeId)
-            .ToListAsync();
 
-        var existingTodayLog = todayLogs
-            .Where(a => TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone).Date == nowIst.Date)
+        // Check if an AttendanceLog for this employee already exists on today's WorkDate (in IST)
+        // This is for the "Daily First Login Rule" — a same-day re-login after a voluntary logout.
+        var existingTodayLog = await _context.AttendanceLogs
+            .Where(a => a.EmployeeId == employeeId && a.WorkDate == workDate)
             .OrderBy(a => a.LoginTime)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync();
 
         // Daily First Login Rule: Only the earliest valid login event of the day is evaluated for late login.
         // Subsequent login events after a logout on the same date are break returns / additional sessions and MUST NEVER be marked late.
@@ -79,7 +107,6 @@ public class AttendanceService : IAttendanceService
         }
         else
         {
-            var todayDate = DateOnly.FromDateTime(nowIst.Date);
             var todayLeave = await _context.LeaveRequests
                 .FirstOrDefaultAsync(l => l.EmployeeId == employeeId &&
                                           l.Status == RequestStatus.Approved &&
@@ -89,19 +116,51 @@ public class AttendanceService : IAttendanceService
             var todayPermission = await _context.PermissionRequests
                 .FirstOrDefaultAsync(p => p.EmployeeId == employeeId &&
                                           p.Status == RequestStatus.Approved &&
-                                          p.RequestDate.Date == nowIst.Date);
+                                          p.RequestDate.Date == workDate.ToDateTime(TimeOnly.MinValue));
+
+            // Auto-Permission Offset (Blueprint §6 Rule 13 / Scenario 17):
+            // If no pre-approved PermissionRequest exists for today, but login is late
+            // (after graceEnd 10:15) and within the permission window (<= PermissionEndTime 11:00),
+            // check if the employee has unused monthly permission budget available.
+            var permissionEndTime = officeStart.Add(TimeSpan.FromHours((double)settings.PermissionHours));
+            if (todayPermission == null && loginTimeOfDay > graceEnd && loginTimeOfDay <= permissionEndTime)
+            {
+                var monthStart = new DateTime(nowIst.Year, nowIst.Month, 1);
+                var monthEnd = monthStart.AddMonths(1);
+
+                var approvedPermsCount = await _context.PermissionRequests
+                    .CountAsync(p => p.EmployeeId == employeeId &&
+                                     p.Status == RequestStatus.Approved &&
+                                     p.RequestDate >= monthStart && p.RequestDate < monthEnd);
+
+                var monthStartDateOnly = DateOnly.FromDateTime(monthStart);
+                var monthEndDateOnly = DateOnly.FromDateTime(monthEnd);
+
+                var markedPermsCount = await _context.AttendanceLogs
+                    .CountAsync(a => a.EmployeeId == employeeId &&
+                                     a.IsPermission &&
+                                     a.WorkDate >= monthStartDateOnly &&
+                                     a.WorkDate < monthEndDateOnly);
+
+                int permsUsed = Math.Max(approvedPermsCount, markedPermsCount);
+                if (permsUsed < settings.MonthlyAllowedPermissions)
+                {
+                    isPermission = true;
+                }
+            }
 
             var calEntry = await _context.AttendanceCalendars
-                .FirstOrDefaultAsync(c => c.CalendarDate == todayDate);
+                .FirstOrDefaultAsync(c => c.CalendarDate == workDate);
 
             var eval = AttendanceRuleEvaluator.EvaluateDay(
-                todayDate,
+                workDate,
                 now,
                 null,
                 todayLeave,
                 todayPermission,
                 calEntry,
-                settings);
+                settings,
+                isAttendanceMarkedPermission: isPermission);
 
             isLate = eval.IsLateLogin;
             isPermission = eval.IsPermissionUsed;
@@ -124,18 +183,24 @@ public class AttendanceService : IAttendanceService
 
             if (loginTimeOfDay <= officeStart)
             {
-                // Rule A: On or before OfficeStartTime -> OfficeEndTime
+                // Rule 1: On or before OfficeStartTime (e.g. 10:00 AM) -> OfficeEndTime (7:00 PM)
                 allowedEndTimeIst = todayOfficeEndIst;
             }
             else if (loginTimeOfDay <= graceEnd)
             {
-                // Rule B: Grace Period (10:01 AM - 10:15 AM) -> Extend by actual delay minutes
+                // Rule 2: Within Grace Period (10:01 AM - 10:15 AM) -> Extend by exact delay minutes (e.g. 10:14 AM -> 7:14 PM)
                 TimeSpan delay = loginTimeOfDay - officeStart;
                 allowedEndTimeIst = todayOfficeEndIst.Add(delay);
             }
             else
             {
-                // Rule C & Rule D: Late Login (> 10:15 AM) or After OfficeEndTime -> OfficeEndTime (No extension!)
+                // Rule 3: Exceeds Grace Period (> 10:15 AM, e.g. 10:16 AM, 10:30 AM, 11:00 AM) -> OfficeEndTime (7:00 PM, No extension!)
+                allowedEndTimeIst = todayOfficeEndIst;
+            }
+
+            // Important Rule: The system must NEVER automatically log out an employee before the configured OfficeEndTime
+            if (allowedEndTimeIst < todayOfficeEndIst)
+            {
                 allowedEndTimeIst = todayOfficeEndIst;
             }
 
@@ -145,6 +210,7 @@ public class AttendanceService : IAttendanceService
         var attendance = new AttendanceLog
         {
             EmployeeId = employeeId,
+            WorkDate = workDate,   // ← IST date stored for unique-index filtering
             LoginTime = now,
             LogoutTime = null,
             IsLate = isLate,
@@ -156,21 +222,65 @@ public class AttendanceService : IAttendanceService
 
         _context.AttendanceLogs.Add(attendance);
 
+        // Synchronize calculated AllowedEndTime to any active EmployeeSessions for today
+        var activeSessions = await _context.EmployeeSessions
+            .Where(s => s.EmployeeId == employeeId && s.IsActive && s.WorkDate == workDate)
+            .ToListAsync();
+
+        foreach (var s in activeSessions)
+        {
+            s.AllowedEndTime = allowedEndTimeUtc;
+        }
+
         // Start open idle record if no active task/support/break
         await _idleTimeService.OnPunchInAsync(employeeId, now);
 
-        if (isLate)
+        // Rule 13 / Scenario 17 Fix: Only record grace violation if late AND NOT covered by permission
+        if (isLate && !isPermission)
         {
             await CheckAndRecordGraceViolationAsync(employeeId, now, (int)(loginTimeOfDay - officeStart).TotalMinutes);
         }
 
-        await _context.SaveChangesAsync();
+        // ── LAYER 3: DB-level race condition guard ─────────────────────────
+        // The unique filtered index UX_AttendanceLog_OpenPerDay on
+        // (EmployeeId, WorkDate) WHERE LogoutTime IS NULL ensures that even if
+        // two requests both pass Layers 1 & 2 simultaneously, only one INSERT
+        // will succeed at the database level.
+        //
+        // The loser gets a DbUpdateException (unique constraint violation).
+        // We catch it, reload the winning record, and return it — the caller
+        // gets a valid 200 response and no duplicate record is created.
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            when (ex.InnerException?.Message.Contains("UX_AttendanceLog_OpenPerDay") == true
+               || ex.InnerException?.Message.Contains("unique constraint") == true
+               || ex.InnerException?.Message.Contains("UNIQUE KEY") == true)
+        {
+            // Another concurrent request won the race — clear the tracked changes
+            // and reload the already-saved record.
+            _context.ChangeTracker.Clear();
+
+            var winner = await _context.AttendanceLogs
+                .FirstOrDefaultAsync(a => a.EmployeeId == employeeId
+                                       && a.LogoutTime == null
+                                       && a.WorkDate == workDate);
+
+            if (winner != null)
+                return await BuildAttendanceDtoAsync(winner, settings);
+
+            // Fallback: re-throw if we can't find the winning record
+            throw;
+        }
 
         // Recalculate monthly LOP for employee
         await RecalculateMonthlyAttendanceLOPAsync(employeeId, nowIst.Year, nowIst.Month);
 
         return await BuildAttendanceDtoAsync(attendance, settings);
     }
+
 
     public async Task LogoutAsync(int employeeId)
     {
@@ -271,8 +381,12 @@ public class AttendanceService : IAttendanceService
 
     public async Task<AttendanceDto?> GetByDateAsync(int employeeId, DateTime date)
     {
+        // Use WorkDate (stored IST date) for the comparison — avoids the UTC/IST
+        // midnight edge case where LoginTime.Date (UTC) != the IST calendar date.
+        var workDate = DateOnly.FromDateTime(date.Date);
+
         var attendance = await _context.AttendanceLogs
-            .Where(a => a.EmployeeId == employeeId && a.LoginTime.Date == date.Date)
+            .Where(a => a.EmployeeId == employeeId && a.WorkDate == workDate)
             .OrderByDescending(a => a.LoginTime)
             .FirstOrDefaultAsync();
 
@@ -284,8 +398,11 @@ public class AttendanceService : IAttendanceService
 
     public async Task<List<AttendanceDto>> GetByRangeAsync(int employeeId, DateTime from, DateTime to)
     {
+        var fromDate = DateOnly.FromDateTime(from.Date);
+        var toDate = DateOnly.FromDateTime(to.Date);
+
         var logs = await _context.AttendanceLogs
-            .Where(a => a.EmployeeId == employeeId && a.LoginTime.Date >= from.Date && a.LoginTime.Date <= to.Date)
+            .Where(a => a.EmployeeId == employeeId && a.WorkDate >= fromDate && a.WorkDate <= toDate)
             .OrderByDescending(a => a.LoginTime)
             .ToListAsync();
 
@@ -299,6 +416,7 @@ public class AttendanceService : IAttendanceService
 
         return resultList;
     }
+
 
     public async Task<MarkPermissionResultDto> MarkPermissionAsync(int attendanceId, bool force = false)
     {

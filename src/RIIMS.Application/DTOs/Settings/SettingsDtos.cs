@@ -41,3 +41,17 @@ public class TypedSystemSettingsDto
     public string MarriageAnniversaryWishesChannel { get; set; } = "Both"; // RIIMS, Email, Both
     public bool MarriageAnniversaryWishesNotifyAllEmployees { get; set; } = false;
 }
+
+public class TaskReminderSettingsDto
+{
+    public int TaskReminderFirstMinutes { get; set; } = 30;
+    public int TaskReminderSecondMinutes { get; set; } = 15;
+    public bool TaskReminderCompletionEnabled { get; set; } = true;
+}
+
+public class IdleNotificationSettingsDto
+{
+    public bool IdleNotificationEnabled { get; set; } = true;
+    public int IdleThresholdMinutes { get; set; } = 5;
+    public int IdleRepeatIntervalMinutes { get; set; } = 5;
+}

@@ -456,16 +456,6 @@ export const PayslipPage: React.FC = () => {
                           <tr style={{ backgroundColor: '#FFFFFF' }}>
                             <td className="label-cell" style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontWeight: 700, color: '#475569' }}>Date of Joining</td>
                             <td style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', fontWeight: 600, color: '#0F172A' }}>{formatDate(selectedPayslip.dateOfJoining)}</td>
-                            <td className="label-cell" style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontWeight: 700, color: '#475569' }}>Bank Account No</td>
-                            <td style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', fontWeight: 600, color: '#0F172A' }}>
-                              {selectedPayslip.bankAccountNumber || `50100${(selectedPayslip.employeeId * 18491).toString().padStart(7, '0')}`}
-                            </td>
-                          </tr>
-                          <tr style={{ backgroundColor: '#FFFFFF' }}>
-                            <td className="label-cell" style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontWeight: 700, color: '#475569' }}>Bank Name</td>
-                            <td style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', fontWeight: 600, color: '#0F172A' }}>
-                              {selectedPayslip.bankName || 'HDFC Bank Ltd'}
-                            </td>
                             <td className="label-cell" style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', fontWeight: 700, color: '#475569' }}>PAN / UAN No</td>
                             <td style={{ padding: '7px 10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', fontWeight: 600, color: '#0F172A' }}>
                               {selectedPayslip.panNumber || selectedPayslip.pfNumber || 'ABCDE1234F'}

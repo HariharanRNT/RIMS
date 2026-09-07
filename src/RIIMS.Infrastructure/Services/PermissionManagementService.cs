@@ -515,10 +515,6 @@ public class PermissionManagementService : IPermissionManagementService
             user.UserName = request.Username.Trim();
         }
 
-        if (IsOriginalSystemAdmin(user) && request.IsActive == false)
-        {
-            throw new InvalidOperationException($"The original System Administrator account ({user.Email}) is permanently protected and cannot be deactivated.");
-        }
 
         if (request.EmployeeId.HasValue)
         {
@@ -562,11 +558,6 @@ public class PermissionManagementService : IPermissionManagementService
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user == null)
             throw new KeyNotFoundException($"User with ID {userId} not found.");
-
-        if (IsOriginalSystemAdmin(user))
-        {
-            throw new InvalidOperationException($"The original System Administrator account ({user.Email}) is permanently protected and cannot be deactivated or activated.");
-        }
 
         if (!isActive && await _userManager.IsInRoleAsync(user, "Super Admin"))
         {
@@ -650,22 +641,5 @@ public class PermissionManagementService : IPermissionManagementService
         });
 
         await _context.SaveChangesAsync();
-    }
-
-    private bool IsOriginalSystemAdmin(ApplicationUser user)
-    {
-        if (string.Equals(user.Email, "hariharanrntgemini@gmail.com", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(user.Email, "admin@riims.local", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(user.Email, "harideepa0611@gmail.com", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (user.EmployeeId.HasValue && user.Employee != null && user.Employee.EmployeeCode == "EMP-001")
-        {
-            return true;
-        }
-
-        return false;
     }
 }

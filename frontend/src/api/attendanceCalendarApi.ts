@@ -46,6 +46,20 @@ export interface MonthCalendarStatusDto {
   publishedAt?: string;
 }
 
+export interface MonthAccessValidationDto {
+  year: number;
+  month: number;
+  monthName: string;
+  isMonthEnded: boolean;
+  nextYear: number;
+  nextMonth: number;
+  nextMonthName: string;
+  isNextMonthPublished: boolean;
+  canProcessPayroll: boolean;
+  canGenerateReport: boolean;
+  reasonMessage?: string;
+}
+
 export interface AttendanceCalendarAuditDto {
   id: number;
   attendanceCalendarId: number;
@@ -120,6 +134,11 @@ export const attendanceCalendarApi = {
 
   getCalendarStatus: async (year: number, month: number) => {
     const response = await apiClient.get<{ data: MonthCalendarStatusDto }>(`/attendance-calendar/${year}/${month}/status`);
+    return response.data.data;
+  },
+
+  getAccessValidation: async (year: number, month: number) => {
+    const response = await apiClient.get<{ data: MonthAccessValidationDto }>(`/attendance-calendar/${year}/${month}/access-validation`);
     return response.data.data;
   },
 

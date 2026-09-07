@@ -5,6 +5,15 @@ namespace RIIMS.Domain.Entities;
 public class AttendanceLog : BaseEntity
 {
     public int EmployeeId { get; set; }
+
+    /// <summary>
+    /// IST calendar date of the login session. Used as the anchor for the
+    /// unique filtered index UX_AttendanceLog_OpenPerDay to prevent duplicate
+    /// open attendance records per employee per day (race condition guard).
+    /// Populated by AttendanceService using the IST-converted LoginTime.
+    /// </summary>
+    public DateOnly WorkDate { get; set; }
+
     public DateTime LoginTime { get; set; }
     public DateTime? LogoutTime { get; set; }
 

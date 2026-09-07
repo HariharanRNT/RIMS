@@ -9,6 +9,7 @@ namespace RIIMS.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Route("api/mappings")]
 [Authorize]
 public class ProductClientMappingsController : ControllerBase
 {

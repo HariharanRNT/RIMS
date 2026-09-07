@@ -4,6 +4,7 @@ import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, ArrowRight, Shie
 import apiClient from '../../api/client';
 import rntLogo from '../../assets/RNT-Logo.png';
 import { ForgotPasswordModal } from '../../components/auth/ForgotPasswordModal';
+import { ThemeToggle } from '../../components/layout/ThemeToggle';
 
 export const ResetPasswordPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -39,10 +40,10 @@ export const ResetPasswordPage: React.FC = () => {
   const validRulesCount = [hasMinLength, hasUppercase, hasNumber, hasSymbol].filter(Boolean).length;
 
   const getStrengthLabel = () => {
-    if (newPassword.length === 0) return { label: 'Empty', color: 'rgba(255,255,255,0.3)', width: '0%' };
-    if (validRulesCount <= 1) return { label: 'Weak', color: '#EF4444', width: '33%' };
-    if (validRulesCount <= 3) return { label: 'Medium', color: '#F59E0B', width: '66%' };
-    return { label: 'Strong', color: '#10B981', width: '100%' };
+    if (newPassword.length === 0) return { label: 'Empty', color: 'var(--border)', width: '0%' };
+    if (validRulesCount <= 1) return { label: 'Weak', color: 'var(--danger)', width: '33%' };
+    if (validRulesCount <= 3) return { label: 'Medium', color: 'var(--warning)', width: '66%' };
+    return { label: 'Strong', color: 'var(--success)', width: '100%' };
   };
 
   const strength = getStrengthLabel();
@@ -134,19 +135,25 @@ export const ResetPasswordPage: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '1.5rem',
-        backgroundColor: '#f5f7fa',
+        backgroundColor: 'var(--bg-app)',
         fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+        position: 'relative',
       }}
     >
+      {/* Floating Theme Switcher */}
+      <div style={{ position: 'fixed', top: '18px', right: '18px', zIndex: 1000 }}>
+        <ThemeToggle variant="button" />
+      </div>
+
       <div
         style={{
           width: '100%',
           maxWidth: '460px',
-          background: '#ffffff',
+          background: 'var(--panel)',
           borderRadius: '20px',
           padding: '2.5rem 2.25rem',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.02)',
-          border: '1px solid #e5e7eb',
+          boxShadow: 'var(--shadow-lg)',
+          border: '1px solid var(--border)',
           animation: 'fadeIn 0.25s ease-in-out',
         }}
       >
@@ -160,10 +167,10 @@ export const ResetPasswordPage: React.FC = () => {
               width: '52px',
               height: '52px',
               borderRadius: '14px',
-              background: '#f8f9fa',
+              background: 'var(--panel-raised)',
               padding: '5px',
-              border: '1px solid #e5e7eb',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-xs)',
             }}
           >
             <img src={rntLogo} alt="RNT Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -173,8 +180,8 @@ export const ResetPasswordPage: React.FC = () => {
         {validatingToken ? (
           /* State 1: Token Validation Loader */
           <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-            <Loader2 size={36} className="spin-animation" style={{ color: '#E8873C', marginBottom: '1rem' }} />
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#111827' }}>
+            <Loader2 size={36} className="spin-animation" style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)' }}>
               Validating reset link...
             </h3>
           </div>
@@ -186,23 +193,23 @@ export const ResetPasswordPage: React.FC = () => {
                 width: '56px',
                 height: '56px',
                 borderRadius: '50%',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
+                background: 'var(--danger-bg)',
+                border: '1px solid rgba(216, 64, 74, 0.3)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#dc2626',
+                color: 'var(--danger)',
                 marginBottom: '1rem',
               }}
             >
               <AlertCircle size={32} />
             </div>
 
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#111827', marginBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
               Link Expired or Invalid
             </h3>
 
-            <p style={{ color: '#6b7280', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1.75rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1.75rem' }}>
               This password reset link has expired, already been used, or is invalid. Please request a new one to reset your password.
             </p>
 
@@ -232,9 +239,9 @@ export const ResetPasswordPage: React.FC = () => {
                   width: '100%',
                   height: '42px',
                   borderRadius: '12px',
-                  background: '#ffffff',
-                  borderColor: '#e5e7eb',
-                  color: '#374151',
+                  background: 'var(--panel-raised)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--text-main)',
                   fontSize: '0.85rem',
                 }}
               >
@@ -250,31 +257,31 @@ export const ResetPasswordPage: React.FC = () => {
                 width: '60px',
                 height: '60px',
                 borderRadius: '50%',
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
+                background: 'var(--success-bg)',
+                border: '1px solid rgba(21, 154, 99, 0.3)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#059669',
+                color: 'var(--success)',
                 marginBottom: '1rem',
               }}
             >
               <CheckCircle2 size={36} />
             </div>
 
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#111827', marginBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
               Password Reset Successfully!
             </h3>
 
-            <p style={{ color: '#6b7280', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1.5rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1.5rem' }}>
               Your password has been updated. You can now log in using your new credentials.
             </p>
 
             <div
               style={{
-                background: '#fff4e6',
-                border: '1px solid #fed7aa',
-                color: '#E8873C',
+                background: 'var(--primary-tint)',
+                border: '1px solid rgba(232, 135, 60, 0.3)',
+                color: 'var(--primary)',
                 padding: '0.75rem',
                 borderRadius: '12px',
                 fontSize: '0.825rem',
@@ -311,10 +318,10 @@ export const ResetPasswordPage: React.FC = () => {
           /* State 4: Reset Password Form */
           <>
             <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#111827', margin: 0 }}>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                 Set New Password
               </h2>
-              <p style={{ color: '#6b7280', fontSize: '0.825rem', marginTop: '0.3rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.825rem', marginTop: '0.3rem' }}>
                 Create a strong password for your portal account.
               </p>
             </div>
@@ -322,9 +329,9 @@ export const ResetPasswordPage: React.FC = () => {
             {serverError && (
               <div
                 style={{
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#dc2626',
+                  background: 'var(--danger-bg)',
+                  border: '1px solid rgba(216, 64, 74, 0.3)',
+                  color: 'var(--danger-text)',
                   padding: '0.7rem 0.9rem',
                   borderRadius: '12px',
                   marginBottom: '1.25rem',
@@ -342,7 +349,7 @@ export const ResetPasswordPage: React.FC = () => {
             <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               {/* New Password Field */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                   New Password
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -353,7 +360,7 @@ export const ResetPasswordPage: React.FC = () => {
                       left: '14px',
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      color: '#9ca3af',
+                      color: 'var(--text-muted)',
                     }}
                   />
                   <input
@@ -363,9 +370,9 @@ export const ResetPasswordPage: React.FC = () => {
                       paddingLeft: '2.6rem',
                       paddingRight: '2.6rem',
                       borderRadius: '12px',
-                      backgroundColor: '#ffffff',
-                      borderColor: '#e5e7eb',
-                      color: '#111827',
+                      backgroundColor: 'var(--input)',
+                      borderColor: 'var(--border)',
+                      color: 'var(--text-main)',
                       fontSize: '0.875rem',
                       height: '42px',
                     }}
@@ -383,7 +390,7 @@ export const ResetPasswordPage: React.FC = () => {
                       transform: 'translateY(-50%)',
                       background: 'none',
                       border: 'none',
-                      color: '#9ca3af',
+                      color: 'var(--text-muted)',
                       cursor: 'pointer',
                       padding: 0,
                     }}
@@ -395,30 +402,30 @@ export const ResetPasswordPage: React.FC = () => {
 
               {/* Password Strength Meter */}
               {newPassword.length > 0 && (
-                <div style={{ background: '#f9fafb', padding: '0.75rem', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                <div style={{ background: 'var(--panel-raised)', padding: '0.75rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.75rem' }}>
-                    <span style={{ color: '#6b7280' }}>Password Strength:</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Password Strength:</span>
                     <strong style={{ color: strength.color }}>{strength.label}</strong>
                   </div>
-                  <div style={{ height: '4px', width: '100%', background: '#e5e7eb', borderRadius: '2px', overflow: 'hidden', marginBottom: '0.65rem' }}>
+                  <div style={{ height: '4px', width: '100%', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden', marginBottom: '0.65rem' }}>
                     <div style={{ height: '100%', width: strength.width, background: strength.color, transition: 'all 0.25s ease' }} />
                   </div>
 
                   {/* Rules Checklist */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', fontSize: '0.725rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasMinLength ? '#059669' : '#9ca3af' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasMinLength ? 'var(--success)' : 'var(--text-muted)' }}>
                       {hasMinLength ? <Check size={12} /> : <X size={12} />}
                       <span>Min 8 characters</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasUppercase ? '#059669' : '#9ca3af' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasUppercase ? 'var(--success)' : 'var(--text-muted)' }}>
                       {hasUppercase ? <Check size={12} /> : <X size={12} />}
                       <span>1 Uppercase letter</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasNumber ? '#059669' : '#9ca3af' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasNumber ? 'var(--success)' : 'var(--text-muted)' }}>
                       {hasNumber ? <Check size={12} /> : <X size={12} />}
                       <span>1 Number (0-9)</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasSymbol ? '#059669' : '#9ca3af' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: hasSymbol ? 'var(--success)' : 'var(--text-muted)' }}>
                       {hasSymbol ? <Check size={12} /> : <X size={12} />}
                       <span>1 Special character</span>
                     </div>
@@ -428,7 +435,7 @@ export const ResetPasswordPage: React.FC = () => {
 
               {/* Confirm Password Field */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                   Confirm New Password
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -439,7 +446,7 @@ export const ResetPasswordPage: React.FC = () => {
                       left: '14px',
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      color: '#9ca3af',
+                      color: 'var(--text-muted)',
                     }}
                   />
                   <input
@@ -449,9 +456,9 @@ export const ResetPasswordPage: React.FC = () => {
                       paddingLeft: '2.6rem',
                       paddingRight: '2.6rem',
                       borderRadius: '12px',
-                      borderColor: confirmPassword && !passwordsMatch ? '#ef4444' : '#e5e7eb',
-                      backgroundColor: confirmPassword && !passwordsMatch ? '#fef2f2' : '#ffffff',
-                      color: '#111827',
+                      borderColor: confirmPassword && !passwordsMatch ? 'var(--danger)' : 'var(--border)',
+                      backgroundColor: confirmPassword && !passwordsMatch ? 'var(--danger-bg)' : 'var(--input)',
+                      color: 'var(--text-main)',
                       fontSize: '0.875rem',
                       height: '42px',
                     }}
@@ -469,7 +476,7 @@ export const ResetPasswordPage: React.FC = () => {
                       transform: 'translateY(-50%)',
                       background: 'none',
                       border: 'none',
-                      color: '#9ca3af',
+                      color: 'var(--text-muted)',
                       cursor: 'pointer',
                       padding: 0,
                     }}
@@ -478,46 +485,53 @@ export const ResetPasswordPage: React.FC = () => {
                   </button>
                 </div>
                 {confirmPassword && !passwordsMatch && (
-                  <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
                     ⚠️ Passwords do not match
                   </span>
                 )}
               </div>
 
               {/* Submit Button */}
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{
-                  width: '100%',
-                  height: '44px',
-                  borderRadius: '12px',
-                  background: loading || validRulesCount < 4 || !passwordsMatch ? '#e5e7eb' : 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
-                  borderColor: 'rgba(232,135,60,0.4)',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  boxShadow: loading || validRulesCount < 4 || !passwordsMatch ? 'none' : '0 8px 20px -3px rgba(232, 135, 60, 0.35)',
-                  cursor: loading || validRulesCount < 4 || !passwordsMatch ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  marginTop: '0.4rem',
-                }}
-                disabled={loading || validRulesCount < 4 || !passwordsMatch}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className="spin-animation" />
-                    <span>Updating Password...</span>
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck size={18} />
-                    <span>Reset Password</span>
-                  </>
-                )}
-              </button>
+              {(() => {
+                const isSubmitDisabled = loading || validRulesCount < 4 || !passwordsMatch;
+                return (
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{
+                      width: '100%',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: isSubmitDisabled ? 'var(--panel-raised)' : 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
+                      border: isSubmitDisabled ? '1px solid var(--border)' : '1px solid rgba(232,135,60,0.4)',
+                      color: isSubmitDisabled ? 'var(--text-muted)' : '#ffffff',
+                      fontSize: '0.9rem',
+                      fontWeight: 700,
+                      boxShadow: isSubmitDisabled ? 'none' : '0 8px 20px -3px rgba(232, 135, 60, 0.35)',
+                      cursor: isSubmitDisabled ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      marginTop: '0.4rem',
+                      transition: 'all 0.2s ease',
+                    }}
+                    disabled={isSubmitDisabled}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 size={18} className="spin-animation" />
+                        <span>Updating Password...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck size={18} />
+                        <span>Reset Password</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
             </form>
           </>
         )}

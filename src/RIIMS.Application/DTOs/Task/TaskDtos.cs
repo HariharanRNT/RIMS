@@ -106,6 +106,7 @@ public class TaskDto
     public string? Duration { get; set; } // Actual productive duration formatted
     public int TotalProductiveSeconds { get; set; }
     public bool IsOverdue { get; set; }
+    public bool IsExceededDuration { get; set; }
 
     public List<TaskTimelineEventDto> TimelineEvents { get; set; } = new();
 }
@@ -122,6 +123,7 @@ public class ActiveTaskDto
     public string Status { get; set; } = string.Empty;
     public DateTime? StartTime { get; set; }
     public int AccumulatedSeconds { get; set; }
+    public int? PlannedDurationMinutes { get; set; }
 }
 
 public class TeamEmployeeDto

@@ -15,7 +15,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requiredPermission,
   requiredPermissions,
 }) => {
-  const { isAuthenticated, role, isAdmin, mustChangePassword, hasPermission, hasAnyPermission } = useAuth();
+  const { isAuthenticated, role, roles, isAdmin, isEmployee, isPureAdmin, mustChangePassword, hasPermission, hasAnyPermission } = useAuth();
   const location = useLocation();
 
   if (!isAuthenticated) {
@@ -26,16 +26,16 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/change-password" replace />;
   }
 
-  // Role verification (if allowedRoles contains 'Admin', allow any admin role)
+  // Role verification
   if (allowedRoles && allowedRoles.length > 0) {
     const isRoleMatch = allowedRoles.some((allowed) => {
-      if (allowed === 'Admin') return isAdmin;
-      if (allowed === 'Employee') return role === 'Employee';
-      return role === allowed;
+      if (allowed === 'Admin') return isPureAdmin || isAdmin;
+      if (allowed === 'Employee') return isEmployee || role === 'Employee';
+      return roles.includes(allowed) || role === allowed;
     });
 
     if (!isRoleMatch) {
-      return <Navigate to={isAdmin ? '/admin/dashboard' : '/dashboard'} replace />;
+      return <Navigate to={isPureAdmin ? '/admin/dashboard' : '/dashboard'} replace />;
     }
   }
 

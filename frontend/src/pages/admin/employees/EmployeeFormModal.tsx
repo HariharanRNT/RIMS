@@ -80,7 +80,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
   const [designationId, setDesignationId] = useState<number | ''>('');
   const [designationFromDate, setDesignationFromDate] = useState('');
   const [dateOfJoining, setDateOfJoining] = useState('');
-  const [companyName, setCompanyName] = useState('RNT Technologies');
+  const [companyName, setCompanyName] = useState('Resh and Thosh Technologies Pvt. Ltd');
   const [gender, setGender] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [maritalStatus, setMaritalStatus] = useState('');
@@ -204,7 +204,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
         setDesignationFromDate(emp.designationFromDate ? emp.designationFromDate.split('T')[0] : '');
         setReportingPersonId(emp.reportingPersonId || '');
         setDateOfJoining(emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '');
-        setCompanyName(emp.companyName || 'RNT Technologies');
+        setCompanyName(emp.companyName || 'Resh and Thosh Technologies Pvt. Ltd');
         setGender(emp.gender || '');
         setDateOfBirth(emp.dateOfBirth ? emp.dateOfBirth.split('T')[0] : '');
         setMaritalStatus(emp.maritalStatus || '');
@@ -247,7 +247,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     setDesignationFromDate('');
     setReportingPersonId('');
     setDateOfJoining(new Date().toISOString().split('T')[0]);
-    setCompanyName('RNT Technologies');
+    setCompanyName('Resh and Thosh Technologies Pvt. Ltd');
     setGender('');
     setDateOfBirth('');
     setMaritalStatus('');
@@ -306,7 +306,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     if (!trimmed) return 'Email address is required.';
     if (trimmed.length > 254) return 'Email address must be 254 characters or less.';
     if (trimmed.includes(' ')) return 'Email address cannot contain spaces.';
-    
+
     const emailRegex = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
     if (!emailRegex.test(trimmed)) return 'Please enter a valid email address.';
 
@@ -321,7 +321,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     const trimmedBody = body.trim();
     if (!trimmedBody) return 'Primary phone number is required.';
     if (!cc.startsWith('+')) return 'Phone number must start with + and include a valid country code.';
-    
+
     if (/[a-zA-Z]/.test(trimmedBody)) return 'Please enter a valid international phone number.';
 
     const fullPhone = `${cc}${trimmedBody}`.replace(/\s+/g, '');
@@ -360,7 +360,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     const trimmedBody = body.trim();
     if (!trimmedBody) return 'Emergency contact number 1 is required.';
     if (!cc.startsWith('+')) return 'Please enter the emergency contact with country code.';
-    
+
     if (/[a-zA-Z]/.test(trimmedBody)) return 'Please enter a valid international phone number.';
 
     const fullPhone = `${cc}${trimmedBody}`.replace(/\s+/g, '');
@@ -416,7 +416,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     if (!val) return 'Date of joining is required.';
     const selectedDate = new Date(val);
     if (isNaN(selectedDate.getTime())) return 'Please enter a valid date.';
-    
+
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
@@ -621,7 +621,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
     const hasErrors = Object.values(errs).some(Boolean);
     if (hasErrors) {
       triggerShake(['code', 'name', 'email', 'phone', 'fatherName', 'motherName', 'emg1', 'emg2', 'password', 'department', 'designation', 'doj', 'designationFromDate', 'dateOfBirth']);
-      
+
       // Auto-focus first invalid field and scroll into view
       if (codeErr) { codeRef.current?.focus(); codeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       else if (nameErr) { nameRef.current?.focus(); nameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -637,7 +637,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
       else if (dojErr) { dojRef.current?.focus(); dojRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       else if (desigFromErr) { desigFromRef.current?.focus(); desigFromRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       else if (dobErr) { dobRef.current?.focus(); dobRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-      
+
       return false;
     }
     return true;
@@ -877,29 +877,29 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
             </div>
 
             <div style={{
-              background: '#f8fafc',
-              border: '1px solid #E2E8F0',
+              background: 'var(--panel-raised)',
+              border: '1px solid var(--border)',
               borderRadius: '14px',
               padding: '1.25rem',
               marginBottom: '1.5rem'
             }}>
               <div style={{ marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>EMPLOYEE NAME</span>
-                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#111827' }}>{name} ({employeeCode})</div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>EMPLOYEE NAME</span>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-main)' }}>{name} ({employeeCode})</div>
               </div>
               <div style={{ marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>USERNAME / EMAIL</span>
-                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#E8873C' }}>{email.toLowerCase()}</div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>USERNAME / EMAIL</span>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--primary)' }}>{email.toLowerCase()}</div>
               </div>
               <div>
-                <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>INITIAL TEMPORARY PASSWORD</span>
-                <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#d97706', fontFamily: 'monospace' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>INITIAL TEMPORARY PASSWORD</span>
+                <div style={{ fontWeight: 800, fontSize: '1.25rem', color: 'var(--primary)', fontFamily: 'monospace' }}>
                   {createdTempPassword}
                 </div>
               </div>
             </div>
 
-            <p style={{ fontSize: '0.8rem', color: '#64748B', marginBottom: '1.5rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', textAlign: 'center' }}>
               * The employee will be prompted to change this password upon their first login.
             </p>
 
@@ -908,7 +908,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                 <Copy size={16} />
                 <span>{copied ? 'Copied to Clipboard!' : 'Copy Credentials'}</span>
               </button>
-              <button type="button" className="btn btn-primary" onClick={onClose} style={{ background: '#E8873C', borderColor: '#E8873C' }}>
+              <button type="button" className="btn btn-primary" onClick={onClose}>
                 Done & Close
               </button>
             </div>
@@ -916,10 +916,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#111827', margin: 0 }}>
+              <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                 {employeeId ? 'Edit Employee Profile' : 'New Employee Registration'}
               </h3>
-              <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
+              <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
@@ -927,9 +927,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
             {/* Backend Failure Banner */}
             {error && (
               <div style={{
-                backgroundColor: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#EF4444',
+                backgroundColor: 'var(--danger-bg)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: 'var(--danger-text)',
                 padding: '0.75rem 1rem',
                 borderRadius: '12px',
                 marginBottom: '1.25rem',
@@ -943,14 +943,14 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   <AlertCircle size={18} style={{ flexShrink: 0 }} />
                   <span>{error}</span>
                 </div>
-                <button type="button" onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer' }}>
+                <button type="button" onClick={() => setError('')} style={{ background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer' }}>
                   <X size={16} />
                 </button>
               </div>
             )}
 
             {/* 3-Step Wizard Navigation Header */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #E2E8F0', paddingBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
               <button
                 type="button"
                 className={`btn ${activeTab === 'reg' ? 'btn-primary' : 'btn-secondary'}`}
@@ -959,9 +959,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   flex: 1,
                   fontSize: '0.825rem',
                   padding: '0.5rem 0.75rem',
-                  background: activeTab === 'reg' ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)' : '#F8FAFC',
-                  color: activeTab === 'reg' ? '#FFFFFF' : '#475569',
-                  borderColor: activeTab === 'reg' ? '#E8873C' : '#E2E8F0'
+                  background: activeTab === 'reg' ? 'var(--accent-gradient)' : 'var(--panel-raised)',
+                  color: activeTab === 'reg' ? '#FFFFFF' : 'var(--text-secondary)',
+                  borderColor: activeTab === 'reg' ? 'var(--primary)' : 'var(--border)'
                 }}
               >
                 <UserPlus size={15} />
@@ -977,9 +977,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   flex: 1,
                   fontSize: '0.825rem',
                   padding: '0.5rem 0.75rem',
-                  background: activeTab === 'rep' ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)' : '#F8FAFC',
-                  color: activeTab === 'rep' ? '#FFFFFF' : '#475569',
-                  borderColor: activeTab === 'rep' ? '#E8873C' : '#E2E8F0'
+                  background: activeTab === 'rep' ? 'var(--accent-gradient)' : 'var(--panel-raised)',
+                  color: activeTab === 'rep' ? '#FFFFFF' : 'var(--text-secondary)',
+                  borderColor: activeTab === 'rep' ? 'var(--primary)' : 'var(--border)'
                 }}
               >
                 <UserCheck size={15} />
@@ -995,9 +995,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   flex: 1,
                   fontSize: '0.825rem',
                   padding: '0.5rem 0.75rem',
-                  background: activeTab === 'work' ? 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)' : '#F8FAFC',
-                  color: activeTab === 'work' ? '#FFFFFF' : '#475569',
-                  borderColor: activeTab === 'work' ? '#E8873C' : '#E2E8F0'
+                  background: activeTab === 'work' ? 'var(--accent-gradient)' : 'var(--panel-raised)',
+                  color: activeTab === 'work' ? '#FFFFFF' : 'var(--text-secondary)',
+                  borderColor: activeTab === 'work' ? 'var(--primary)' : 'var(--border)'
                 }}
               >
                 <Clock size={15} />
@@ -1012,14 +1012,14 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
               {activeTab === 'reg' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    
+
                     {/* 1. Employee Code */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                           Employee Code *
                         </label>
-                        <span style={{ fontSize: '0.7rem', color: employeeCode.length > 20 ? '#EF4444' : '#94A3B8' }}>
+                        <span style={{ fontSize: '0.7rem', color: employeeCode.length > 20 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                           {employeeCode.length}/20
                         </span>
                       </div>
@@ -1031,8 +1031,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           maxLength={20}
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.employeeCode ? '#EF4444' : touched.code && !fieldErrors.employeeCode && employeeCode ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.employeeCode ? '#fef2f2' : '#ffffff',
+                            borderColor: fieldErrors.employeeCode ? '#EF4444' : touched.code && !fieldErrors.employeeCode && employeeCode ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.employeeCode ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)',
                             paddingRight: touched.code && !fieldErrors.employeeCode && employeeCode ? '2rem' : '0.8rem'
                           }}
                           value={employeeCode}
@@ -1055,10 +1056,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     {/* 2. Full Name */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                           Full Name *
                         </label>
-                        <span style={{ fontSize: '0.7rem', color: name.length > 100 ? '#EF4444' : '#94A3B8' }}>
+                        <span style={{ fontSize: '0.7rem', color: name.length > 100 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                           {name.length}/100
                         </span>
                       </div>
@@ -1070,8 +1071,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           maxLength={100}
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.name ? '#EF4444' : touched.name && !fieldErrors.name && name ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.name ? '#fef2f2' : '#ffffff',
+                            borderColor: fieldErrors.name ? '#EF4444' : touched.name && !fieldErrors.name && name ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.name ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)',
                             paddingRight: touched.name && !fieldErrors.name && name ? '2rem' : '0.8rem'
                           }}
                           value={name}
@@ -1092,14 +1094,14 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    
+
                     {/* 3. Email Address */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                           Email Address (Username) *
                         </label>
-                        <span style={{ fontSize: '0.7rem', color: email.length > 254 ? '#EF4444' : '#94A3B8' }}>
+                        <span style={{ fontSize: '0.7rem', color: email.length > 254 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                           {email.length}/254
                         </span>
                       </div>
@@ -1111,8 +1113,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           maxLength={254}
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.email ? '#EF4444' : touched.email && !fieldErrors.email && email ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.email ? '#fef2f2' : '#ffffff',
+                            borderColor: fieldErrors.email ? '#EF4444' : touched.email && !fieldErrors.email && email ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.email ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)',
                             paddingRight: touched.email && !fieldErrors.email && email ? '2rem' : '0.8rem'
                           }}
                           value={email}
@@ -1124,7 +1127,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           <Check size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#10B981' }} />
                         )}
                       </div>
-                      <span style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '0.2rem', display: 'block' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem', display: 'block' }}>
                         Use a valid company email address. Maximum 254 characters.
                       </span>
                       {fieldErrors.email && (
@@ -1136,7 +1139,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* 4. Primary Phone Number */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Primary Phone Number *
                       </label>
                       <div className={shakeFields.phone ? 'shake-field' : ''} style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1148,7 +1151,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             fontSize: '0.8rem',
                             fontWeight: 600,
                             paddingRight: '1.5rem',
-                            borderColor: fieldErrors.phone ? '#EF4444' : '#CBD5E1'
+                            borderColor: fieldErrors.phone ? '#EF4444' : 'var(--border)',
+                            backgroundColor: 'var(--input)',
+                            color: 'var(--text-main)'
                           }}
                           value={phoneCountryCode}
                           onChange={(e) => handleChange('phoneCC', e.target.value)}
@@ -1165,8 +1170,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             className="form-input"
                             style={{
                               borderRadius: '10px',
-                              borderColor: fieldErrors.phone ? '#EF4444' : touched.phone && !fieldErrors.phone && phoneBody ? '#10B981' : '#CBD5E1',
-                              backgroundColor: fieldErrors.phone ? '#fef2f2' : '#ffffff',
+                              borderColor: fieldErrors.phone ? '#EF4444' : touched.phone && !fieldErrors.phone && phoneBody ? '#10B981' : 'var(--border)',
+                              backgroundColor: fieldErrors.phone ? 'var(--danger-bg)' : 'var(--input)',
+                              color: 'var(--text-main)',
                               paddingRight: touched.phone && !fieldErrors.phone && phoneBody ? '2rem' : '0.8rem'
                             }}
                             value={phoneBody}
@@ -1179,7 +1185,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           )}
                         </div>
                       </div>
-                      <span style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '0.2rem', display: 'block' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem', display: 'block' }}>
                         International format: Country code + 8 to 15 digits
                       </span>
                       {fieldErrors.phone && (
@@ -1193,15 +1199,15 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* Family Information Row: Father & Mother Name */}
                   <div style={{
                     padding: '0.85rem 1rem',
-                    background: '#f8fafc',
+                    background: 'var(--panel-raised)',
                     borderRadius: '12px',
-                    border: '1px solid #E2E8F0',
+                    border: '1px solid var(--border)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.75rem'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: '#111827' }}>
-                      <Users size={14} style={{ color: '#E8873C' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                      <Users size={14} style={{ color: 'var(--primary)' }} />
                       <span>Family Information (Optional)</span>
                     </div>
 
@@ -1209,10 +1215,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       {/* 5. Father Name */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label className="form-label" style={{ fontWeight: 600, color: '#64748B', fontSize: '0.8rem' }}>
+                          <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                             Father's Name
                           </label>
-                          <span style={{ fontSize: '0.7rem', color: fatherName.length > 100 ? '#EF4444' : '#94A3B8' }}>
+                          <span style={{ fontSize: '0.7rem', color: fatherName.length > 100 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                             {fatherName.length}/100
                           </span>
                         </div>
@@ -1224,8 +1230,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             maxLength={100}
                             style={{
                               borderRadius: '10px',
-                              borderColor: fieldErrors.fatherName ? '#EF4444' : '#CBD5E1',
-                              backgroundColor: fieldErrors.fatherName ? '#fef2f2' : '#ffffff'
+                              borderColor: fieldErrors.fatherName ? '#EF4444' : 'var(--border)',
+                              backgroundColor: fieldErrors.fatherName ? 'var(--danger-bg)' : 'var(--input)',
+                              color: 'var(--text-main)'
                             }}
                             value={fatherName}
                             onChange={(e) => handleChange('fatherName', e.target.value)}
@@ -1243,10 +1250,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       {/* 6. Mother Name */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label className="form-label" style={{ fontWeight: 600, color: '#64748B', fontSize: '0.8rem' }}>
+                          <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                             Mother's Name
                           </label>
-                          <span style={{ fontSize: '0.7rem', color: motherName.length > 100 ? '#EF4444' : '#94A3B8' }}>
+                          <span style={{ fontSize: '0.7rem', color: motherName.length > 100 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                             {motherName.length}/100
                           </span>
                         </div>
@@ -1258,8 +1265,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             maxLength={100}
                             style={{
                               borderRadius: '10px',
-                              borderColor: fieldErrors.motherName ? '#EF4444' : '#CBD5E1',
-                              backgroundColor: fieldErrors.motherName ? '#fef2f2' : '#ffffff'
+                              borderColor: fieldErrors.motherName ? '#EF4444' : 'var(--border)',
+                              backgroundColor: fieldErrors.motherName ? 'var(--danger-bg)' : 'var(--input)',
+                              color: 'var(--text-main)'
                             }}
                             value={motherName}
                             onChange={(e) => handleChange('motherName', e.target.value)}
@@ -1279,27 +1287,27 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* Demographic & Marital Details Card */}
                   <div style={{
                     padding: '0.85rem 1rem',
-                    background: '#f8fafc',
+                    background: 'var(--panel-raised)',
                     borderRadius: '12px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--border)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.75rem'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
-                      <User size={14} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                      <User size={14} style={{ color: 'var(--primary)' }} />
                       <span>Demographic & Marital Details</span>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       {/* Gender */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           Gender
                         </label>
                         <select
                           className="form-select"
-                          style={{ borderRadius: '10px' }}
+                          style={{ borderRadius: '10px', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                           value={gender}
                           onChange={(e) => setGender(e.target.value)}
                         >
@@ -1312,7 +1320,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                       {/* Date of Birth */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           Date of Birth
                         </label>
                         <div className={shakeFields.dateOfBirth ? 'shake-field' : ''}>
@@ -1324,8 +1332,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             className="form-input"
                             style={{
                               borderRadius: '10px',
-                              borderColor: fieldErrors.dateOfBirth ? '#EF4444' : touched.dateOfBirth && !fieldErrors.dateOfBirth && dateOfBirth ? '#10B981' : '#CBD5E1',
-                              backgroundColor: fieldErrors.dateOfBirth ? '#fef2f2' : '#ffffff'
+                              borderColor: fieldErrors.dateOfBirth ? '#EF4444' : touched.dateOfBirth && !fieldErrors.dateOfBirth && dateOfBirth ? '#10B981' : 'var(--border)',
+                              backgroundColor: fieldErrors.dateOfBirth ? 'var(--danger-bg)' : 'var(--input)',
+                              color: 'var(--text-main)'
                             }}
                             value={dateOfBirth}
                             onChange={(e) => {
@@ -1346,12 +1355,12 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       {/* Marital Status */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           Marital Status
                         </label>
                         <select
                           className="form-select"
-                          style={{ borderRadius: '10px' }}
+                          style={{ borderRadius: '10px', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                           value={maritalStatus}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -1369,7 +1378,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                       {/* Marriage Date */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: maritalStatus === 'Married' ? '#111827' : '#94A3B8', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: maritalStatus === 'Married' ? 'var(--text-main)' : 'var(--text-muted)', fontSize: '0.8rem' }}>
                           Marriage Date {maritalStatus === 'Married' ? '(If Married)' : ''}
                         </label>
                         <input
@@ -1379,7 +1388,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           className="form-input"
                           style={{
                             borderRadius: '10px',
-                            backgroundColor: maritalStatus === 'Married' ? '#ffffff' : '#f8fafc',
+                            backgroundColor: maritalStatus === 'Married' ? 'var(--input)' : 'var(--panel-raised)',
+                            color: 'var(--text-main)',
+                            borderColor: 'var(--border)',
                             cursor: maritalStatus === 'Married' ? 'text' : 'not-allowed'
                           }}
                           value={marriageDate}
@@ -1392,14 +1403,14 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* Emergency Contacts Row */}
                   <div style={{
                     padding: '0.85rem 1rem',
-                    background: '#fff4e6',
+                    background: 'var(--primary-tint)',
                     borderRadius: '12px',
-                    border: '1px solid #fed7aa',
+                    border: '1px solid rgba(232, 135, 60, 0.3)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.75rem'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: '#E8873C' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>
                       <PhoneCall size={14} />
                       <span>Emergency Contacts</span>
                     </div>
@@ -1407,7 +1418,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       {/* 7. Emergency Contact 1 */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           Emergency Contact 1 *
                         </label>
                         <div className={shakeFields.emg1 ? 'shake-field' : ''} style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1419,7 +1430,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                               fontSize: '0.8rem',
                               fontWeight: 600,
                               paddingRight: '1.5rem',
-                              borderColor: fieldErrors.emergencyContact1 ? '#EF4444' : '#CBD5E1'
+                              borderColor: fieldErrors.emergencyContact1 ? '#EF4444' : 'var(--border)',
+                              backgroundColor: 'var(--input)',
+                              color: 'var(--text-main)'
                             }}
                             value={emg1CountryCode}
                             onChange={(e) => handleChange('emg1CC', e.target.value)}
@@ -1434,8 +1447,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             className="form-input"
                             style={{
                               borderRadius: '10px',
-                              borderColor: fieldErrors.emergencyContact1 ? '#EF4444' : touched.emg1 && !fieldErrors.emergencyContact1 && emg1Body ? '#10B981' : '#CBD5E1',
-                              backgroundColor: fieldErrors.emergencyContact1 ? '#fef2f2' : '#ffffff'
+                              borderColor: fieldErrors.emergencyContact1 ? '#EF4444' : touched.emg1 && !fieldErrors.emergencyContact1 && emg1Body ? '#10B981' : 'var(--border)',
+                              backgroundColor: fieldErrors.emergencyContact1 ? 'var(--danger-bg)' : 'var(--input)',
+                              color: 'var(--text-main)'
                             }}
                             value={emg1Body}
                             onChange={(e) => handleChange('emg1Body', e.target.value)}
@@ -1452,7 +1466,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                       {/* 8. Emergency Contact 2 */}
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#64748B', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                           Emergency Contact 2 (Optional)
                         </label>
                         <div className={shakeFields.emg2 ? 'shake-field' : ''} style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1464,7 +1478,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                               fontSize: '0.8rem',
                               fontWeight: 600,
                               paddingRight: '1.5rem',
-                              borderColor: fieldErrors.emergencyContact2 ? '#EF4444' : '#CBD5E1'
+                              borderColor: fieldErrors.emergencyContact2 ? '#EF4444' : 'var(--border)',
+                              backgroundColor: 'var(--input)',
+                              color: 'var(--text-main)'
                             }}
                             value={emg2CountryCode}
                             onChange={(e) => handleChange('emg2CC', e.target.value)}
@@ -1479,8 +1495,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             className="form-input"
                             style={{
                               borderRadius: '10px',
-                              borderColor: fieldErrors.emergencyContact2 ? '#EF4444' : '#CBD5E1',
-                              backgroundColor: fieldErrors.emergencyContact2 ? '#fef2f2' : '#ffffff'
+                              borderColor: fieldErrors.emergencyContact2 ? '#EF4444' : 'var(--border)',
+                              backgroundColor: fieldErrors.emergencyContact2 ? 'var(--danger-bg)' : 'var(--input)',
+                              color: 'var(--text-main)'
                             }}
                             value={emg2Body}
                             onChange={(e) => handleChange('emg2Body', e.target.value)}
@@ -1501,12 +1518,12 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {!employeeId && (
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
-                          <Key size={14} style={{ marginRight: '0.3rem', display: 'inline-block', color: '#E8873C' }} />
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
+                          <Key size={14} style={{ marginRight: '0.3rem', display: 'inline-block', color: 'var(--primary)' }} />
                           Initial Password (Optional)
                         </label>
                         {password && (
-                          <span style={{ fontSize: '0.7rem', color: password.length > 64 ? '#EF4444' : '#94A3B8' }}>
+                          <span style={{ fontSize: '0.7rem', color: password.length > 64 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                             {password.length}/64
                           </span>
                         )}
@@ -1519,8 +1536,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           maxLength={64}
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.password ? '#EF4444' : touched.password && !fieldErrors.password && password ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.password ? '#fef2f2' : '#ffffff',
+                            borderColor: fieldErrors.password ? '#EF4444' : touched.password && !fieldErrors.password && password ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.password ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)',
                             paddingRight: '2.5rem'
                           }}
                           value={password}
@@ -1538,7 +1556,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                             transform: 'translateY(-50%)',
                             background: 'none',
                             border: 'none',
-                            color: '#94A3B8',
+                            color: 'var(--text-muted)',
                             cursor: 'pointer',
                             padding: 0
                           }}
@@ -1546,19 +1564,19 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
                       </div>
-                      
+
                       {password ? (
                         <div style={{ marginTop: '0.4rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', marginBottom: '0.2rem' }}>
-                            <span style={{ color: '#64748B' }}>Password Strength:</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>Password Strength:</span>
                             <span style={{ fontWeight: 700, color: passStrength.color }}>{passStrength.label}</span>
                           </div>
-                          <div style={{ height: '4px', width: '100%', backgroundColor: '#e5e7eb', borderRadius: '9999px', overflow: 'hidden' }}>
+                          <div style={{ height: '4px', width: '100%', backgroundColor: 'var(--border)', borderRadius: '9999px', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${passStrength.percent}%`, backgroundColor: passStrength.color, transition: 'all 0.3s ease' }} />
                           </div>
                         </div>
                       ) : (
-                        <span style={{ fontSize: '0.725rem', color: '#64748B', marginTop: '0.25rem', display: 'block' }}>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'block' }}>
                           If left blank, a secure temporary password will be auto-generated.
                         </span>
                       )}
@@ -1572,10 +1590,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   )}
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    
+
                     {/* 10. Department */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Department *
                       </label>
                       <div className={shakeFields.department ? 'shake-field' : ''}>
@@ -1584,8 +1602,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           className="form-select"
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.departmentId ? '#EF4444' : touched.department && !fieldErrors.departmentId && departmentId ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.departmentId ? '#fef2f2' : '#ffffff'
+                            borderColor: fieldErrors.departmentId ? '#EF4444' : touched.department && !fieldErrors.departmentId && departmentId ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.departmentId ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)'
                           }}
                           value={departmentId}
                           onChange={(e) => handleChange('department', e.target.value ? Number(e.target.value) : '')}
@@ -1606,7 +1625,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* 11. Designation */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Designation *
                       </label>
                       <div className={shakeFields.designation ? 'shake-field' : ''}>
@@ -1615,8 +1634,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           className="form-select"
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.designationId ? '#EF4444' : touched.designation && !fieldErrors.designationId && designationId ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.designationId ? '#fef2f2' : '#ffffff'
+                            borderColor: fieldErrors.designationId ? '#EF4444' : touched.designation && !fieldErrors.designationId && designationId ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.designationId ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)'
                           }}
                           value={designationId}
                           onChange={(e) => handleChange('designation', e.target.value ? Number(e.target.value) : '')}
@@ -1639,7 +1659,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* 12. Date of Joining & Designation From Date */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Date of Joining *
                       </label>
                       <div className={shakeFields.doj ? 'shake-field' : ''}>
@@ -1651,8 +1671,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           className="form-input"
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.dateOfJoining ? '#EF4444' : touched.doj && !fieldErrors.dateOfJoining && dateOfJoining ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.dateOfJoining ? '#fef2f2' : '#ffffff'
+                            borderColor: fieldErrors.dateOfJoining ? '#EF4444' : touched.doj && !fieldErrors.dateOfJoining && dateOfJoining ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.dateOfJoining ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)'
                           }}
                           value={dateOfJoining}
                           onChange={(e) => handleChange('doj', e.target.value)}
@@ -1667,7 +1688,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                     </div>
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Designation From Date
                       </label>
                       <div className={shakeFields.designationFromDate ? 'shake-field' : ''}>
@@ -1679,8 +1700,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           className="form-input"
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.designationFromDate ? '#EF4444' : touched.designationFromDate && !fieldErrors.designationFromDate && designationFromDate ? '#10B981' : '#CBD5E1',
-                            backgroundColor: fieldErrors.designationFromDate ? '#fef2f2' : '#ffffff'
+                            borderColor: fieldErrors.designationFromDate ? '#EF4444' : touched.designationFromDate && !fieldErrors.designationFromDate && designationFromDate ? '#10B981' : 'var(--border)',
+                            backgroundColor: fieldErrors.designationFromDate ? 'var(--danger-bg)' : 'var(--input)',
+                            color: 'var(--text-main)'
                           }}
                           value={designationFromDate}
                           onChange={(e) => {
@@ -1701,38 +1723,38 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   {/* Company & Statutory Info Header */}
                   <div style={{
                     padding: '0.75rem 1rem',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
+                    background: 'var(--panel-raised)',
+                    border: '1px solid var(--border)',
                     borderRadius: '12px',
                     fontSize: '0.8rem',
                     fontWeight: 700,
-                    color: '#111827',
+                    color: 'var(--text-main)',
                     marginTop: '0.5rem'
                   }}>
                     🏢 Company & Statutory Details
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                    <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                       Company Name
                     </label>
                     <input
                       type="text"
                       className="form-input"
-                      style={{ borderRadius: '10px' }}
+                      style={{ borderRadius: '10px', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="e.g. RNT Technologies"
+                      placeholder="e.g. Resh and Thosh Technologies Pvt. Ltd"
                     />
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           PF Number (Max 25)
                         </label>
-                        <span style={{ fontSize: '0.7rem', color: pfNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
+                        <span style={{ fontSize: '0.7rem', color: pfNumber.length > 25 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                           {pfNumber.length}/25
                         </span>
                       </div>
@@ -1740,7 +1762,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                         type="text"
                         maxLength={25}
                         className="form-input"
-                        style={{ borderRadius: '10px', fontSize: '0.825rem' }}
+                        style={{ borderRadius: '10px', fontSize: '0.825rem', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                         value={pfNumber}
                         onChange={(e) => setPfNumber(e.target.value)}
                         placeholder="PF12345678"
@@ -1749,10 +1771,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           PAN Number (Max 25)
                         </label>
-                        <span style={{ fontSize: '0.7rem', color: panNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
+                        <span style={{ fontSize: '0.7rem', color: panNumber.length > 25 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                           {panNumber.length}/25
                         </span>
                       </div>
@@ -1760,7 +1782,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                         type="text"
                         maxLength={25}
                         className="form-input"
-                        style={{ borderRadius: '10px', fontSize: '0.825rem' }}
+                        style={{ borderRadius: '10px', fontSize: '0.825rem', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                         value={panNumber}
                         onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
                         placeholder="ABCDE1234F"
@@ -1769,10 +1791,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           ESI Number (Max 25)
                         </label>
-                        <span style={{ fontSize: '0.7rem', color: esiNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
+                        <span style={{ fontSize: '0.7rem', color: esiNumber.length > 25 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                           {esiNumber.length}/25
                         </span>
                       </div>
@@ -1780,7 +1802,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                         type="text"
                         maxLength={25}
                         className="form-input"
-                        style={{ borderRadius: '10px', fontSize: '0.825rem' }}
+                        style={{ borderRadius: '10px', fontSize: '0.825rem', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                         value={esiNumber}
                         onChange={(e) => setEsiNumber(e.target.value)}
                         placeholder="3100012345"
@@ -1789,10 +1811,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.8rem' }}>
+                        <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
                           Aadhaar Number (Max 25)
                         </label>
-                        <span style={{ fontSize: '0.7rem', color: aadhaarNumber.length > 25 ? '#EF4444' : '#94A3B8' }}>
+                        <span style={{ fontSize: '0.7rem', color: aadhaarNumber.length > 25 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                           {aadhaarNumber.length}/25
                         </span>
                       </div>
@@ -1800,7 +1822,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                         type="text"
                         maxLength={25}
                         className="form-input"
-                        style={{ borderRadius: '10px', fontSize: '0.825rem' }}
+                        style={{ borderRadius: '10px', fontSize: '0.825rem', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                         value={aadhaarNumber}
                         onChange={(e) => setAadhaarNumber(e.target.value)}
                         placeholder="1234 5678 9012"
@@ -1816,7 +1838,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
               {activeTab === 'rep' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                    <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                       Reporting Manager / Person *
                     </label>
                     <div className={shakeFields.reporting ? 'shake-field' : ''}>
@@ -1825,8 +1847,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                         className="form-select"
                         style={{
                           borderRadius: '10px',
-                          borderColor: fieldErrors.reportingPersonId ? '#EF4444' : touched.reporting && !fieldErrors.reportingPersonId && reportingPersonId ? '#10B981' : '#CBD5E1',
-                          backgroundColor: fieldErrors.reportingPersonId ? '#fef2f2' : '#ffffff'
+                          borderColor: fieldErrors.reportingPersonId ? '#EF4444' : touched.reporting && !fieldErrors.reportingPersonId && reportingPersonId ? '#10B981' : 'var(--border)',
+                          backgroundColor: fieldErrors.reportingPersonId ? 'var(--danger-bg)' : 'var(--input)',
+                          color: 'var(--text-main)'
                         }}
                         value={reportingPersonId}
                         onChange={(e) => handleChange('reporting', e.target.value ? Number(e.target.value) : '')}
@@ -1845,7 +1868,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                         ⚠️ {fieldErrors.reportingPersonId}
                       </span>
                     ) : (
-                      <span style={{ fontSize: '0.725rem', color: '#64748B', marginTop: '0.25rem', display: 'block' }}>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'block' }}>
                         Select the designated manager responsible for leave approvals and performance evaluations.
                       </span>
                     )}
@@ -1859,10 +1882,10 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
               {activeTab === 'work' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    
+
                     {/* Shift Start */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Shift Start Time *
                       </label>
                       <div className={shakeFields.shiftStart ? 'shake-field' : ''}>
@@ -1872,7 +1895,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           className="form-input"
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.shiftStart ? '#EF4444' : '#CBD5E1'
+                            borderColor: fieldErrors.shiftStart ? '#EF4444' : 'var(--border)',
+                            backgroundColor: 'var(--input)',
+                            color: 'var(--text-main)'
                           }}
                           value={shiftStart}
                           onChange={(e) => handleChange('shiftStart', e.target.value)}
@@ -1887,7 +1912,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* Shift End */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Shift End Time *
                       </label>
                       <div className={shakeFields.shiftEnd ? 'shake-field' : ''}>
@@ -1897,7 +1922,9 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                           className="form-input"
                           style={{
                             borderRadius: '10px',
-                            borderColor: fieldErrors.shiftEnd ? '#EF4444' : '#CBD5E1'
+                            borderColor: fieldErrors.shiftEnd ? '#EF4444' : 'var(--border)',
+                            backgroundColor: 'var(--input)',
+                            color: 'var(--text-main)'
                           }}
                           value={shiftEnd}
                           onChange={(e) => handleChange('shiftEnd', e.target.value)}
@@ -1912,15 +1939,15 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    
+
                     {/* Work Location */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Work Location *
                       </label>
                       <select
                         className="form-select"
-                        style={{ borderRadius: '10px' }}
+                        style={{ borderRadius: '10px', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                         value={workLocation}
                         onChange={(e) => setWorkLocation(e.target.value)}
                       >
@@ -1932,12 +1959,12 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
 
                     {/* Employment Type */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                      <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                         Employment Type *
                       </label>
                       <select
                         className="form-select"
-                        style={{ borderRadius: '10px' }}
+                        style={{ borderRadius: '10px', backgroundColor: 'var(--input)', borderColor: 'var(--border)', color: 'var(--text-main)' }}
                         value={employmentType}
                         onChange={(e) => setEmploymentType(e.target.value)}
                       >
@@ -1951,7 +1978,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
               )}
 
               {/* Wizard Action Controls */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid #E2E8F0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
                 <div>
                   {activeTab !== 'reg' && (
                     <button
@@ -1974,7 +2001,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       type="button"
                       className="btn btn-primary"
                       onClick={(e) => handleNext(e, activeTab as 'reg' | 'rep')}
-                      style={{ background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)', borderColor: '#E8873C', borderRadius: '10px' }}
+                      style={{ borderRadius: '10px' }}
                     >
                       Next Step →
                     </button>
@@ -1983,7 +2010,7 @@ export const EmployeeFormModal: React.FC<EmployeeFormModalProps> = ({
                       type="submit"
                       className="btn btn-primary"
                       disabled={loading}
-                      style={{ background: 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)', borderColor: '#E8873C', borderRadius: '10px' }}
+                      style={{ borderRadius: '10px' }}
                     >
                       {loading ? 'Saving Employee...' : 'Save Employee'}
                     </button>

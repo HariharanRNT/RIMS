@@ -200,3 +200,47 @@ public class AdminNotificationSummaryDto
     public List<AdminNotificationItemDto> Notifications { get; set; } = new();
 }
 
+public class AttendanceBreakdownItemDto
+{
+    public DateOnly Date { get; set; }
+    public string Type { get; set; } = string.Empty; // "Late Login", "Absent", "Approved Leave", "Half Day", "Permission", "Holiday", "Weekend", "Present"
+    public string Value { get; set; } = string.Empty; // "+1", "10:25 AM", "+0.5", "1", "0", "-"
+    public string Details { get; set; } = string.Empty; // "Login: 10:25 AM", "No login", "Approved Casual Leave", "Login after 11:00 AM", etc.
+    public DateTime? LoginTime { get; set; }
+    public DateTime? LogoutTime { get; set; }
+    public decimal LeaveDaysCount { get; set; }
+    public decimal PresentDaysCount { get; set; }
+    public bool IsLop { get; set; }
+    public bool IsSandwichLeave { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class AttendanceBreakdownSummaryDto
+{
+    public int EmployeeId { get; set; }
+    public string EmployeeCode { get; set; } = string.Empty;
+    public string EmployeeName { get; set; } = string.Empty;
+    public string DepartmentName { get; set; } = string.Empty;
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public string MonthName { get; set; } = string.Empty;
+
+    // Summary Metrics
+    public int LateLoginCount { get; set; }
+    public decimal AbsentCount { get; set; }
+    public decimal ApprovedLeaveCount { get; set; }
+    public decimal HalfDayCount { get; set; }
+    public decimal SandwichLeaveCount { get; set; }
+    public int PermissionCount { get; set; }
+    public decimal TotalLeaveCount { get; set; }
+    public int MonthlyAllowedLeave { get; set; }
+    public decimal LeaveLopDays { get; set; }
+    public decimal LateLoginLopDays { get; set; }
+    public decimal TotalLopDays { get; set; }
+    public decimal LopAmount { get; set; }
+
+    // Date-wise breakdown
+    public List<AttendanceBreakdownItemDto> Items { get; set; } = new();
+}
+
+

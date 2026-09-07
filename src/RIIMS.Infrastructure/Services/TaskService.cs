@@ -19,6 +19,25 @@ public class TaskService : ITaskService
     private readonly IEmailService _emailService;
     private readonly IIdleTimeService _idleTimeService;
 
+    private static readonly TimeZoneInfo IstTimeZone = GetIstTimeZone();
+
+    private static TimeZoneInfo GetIstTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Indian Standard Time");
+        }
+        catch
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata");
+        }
+    }
+
+    private static DateTime GetTodayIst()
+    {
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, IstTimeZone).Date;
+    }
+
     public TaskService(RiimsDbContext context, IEmailService emailService, IIdleTimeService idleTimeService)
     {
         _context = context;
@@ -219,6 +238,11 @@ public class TaskService : ITaskService
             {
                 throw new UnauthorizedAccessException("You cannot assign a team task to yourself. Please use the self-task section.");
             }
+
+            if (targetEmployee.ReportingPersonId != currentUserId)
+            {
+                throw new UnauthorizedAccessException("You are only authorized to assign tasks to employees reporting directly to you.");
+            }
         }
 
         // Resolve Product
@@ -351,7 +375,7 @@ public class TaskService : ITaskService
   </div>
   
   <p style=""color: #111827; font-size: 0.95rem;"">Dear <strong>{targetEmployee.Name}</strong>,</p>
-  <p style=""color: #374151; font-size: 0.9rem;"">A new work task has been assigned to you in RIIMS V2 by <strong>{assignerName}</strong>.</p>
+  <p style=""color: #374151; font-size: 0.9rem;"">A new work task has been assigned to you in RIMS by <strong>{assignerName}</strong>.</p>
   
   <table style=""width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.875rem;"">
     <tr style=""background-color: #F9FAFB;"">
@@ -374,8 +398,8 @@ public class TaskService : ITaskService
       <td style=""padding: 10px 12px; border: 1px solid #E5E7EB; font-weight: 600; color: #4B5563;"">Planned Duration</td>
       <td style=""padding: 10px 12px; border: 1px solid #E5E7EB; color: #111827;"">{durationText}</td>
     </tr>
-    {(task.PlannedStart.HasValue ? $"<tr><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; font-weight: 600; color: #4B5563;\">Planned Start</td><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; color: #111827;\">{task.PlannedStart.Value:dd-MMM-yyyy hh:mm tt}</td></tr>" : "")}
-    {(task.DueDate.HasValue ? $"<tr style=\"background-color: #F9FAFB;\"><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; font-weight: 600; color: #4B5563;\">Due Date</td><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; color: #111827;\">{task.DueDate.Value:dd-MMM-yyyy hh:mm tt}</td></tr>" : "")}
+    {(task.PlannedStart.HasValue ? $"<tr><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; font-weight: 600; color: #4B5563;\">Planned Start</td><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; color: #111827;\">{task.PlannedStart.Value.ToString("dd-MMM-yyyy", System.Globalization.CultureInfo.InvariantCulture)}</td></tr>" : "")}
+    {(task.DueDate.HasValue ? $"<tr style=\"background-color: #F9FAFB;\"><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; font-weight: 600; color: #4B5563;\">Due Date</td><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; color: #111827;\">{task.DueDate.Value.ToString("dd-MMM-yyyy", System.Globalization.CultureInfo.InvariantCulture)}</td></tr>" : "")}
     <tr>
       <td style=""padding: 10px 12px; border: 1px solid #E5E7EB; font-weight: 600; color: #4B5563;"">Description</td>
       <td style=""padding: 10px 12px; border: 1px solid #E5E7EB; color: #111827;"">{task.Description}</td>
@@ -383,9 +407,9 @@ public class TaskService : ITaskService
     {(!string.IsNullOrWhiteSpace(task.Instructions) ? $"<tr style=\"background-color: #F9FAFB;\"><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; font-weight: 600; color: #4B5563;\">Instructions</td><td style=\"padding: 10px 12px; border: 1px solid #E5E7EB; color: #111827;\">{task.Instructions}</td></tr>" : "")}
   </table>
 
-  <p style=""font-size: 0.85rem; color: #6B7280;"">Please log in to your RIIMS V2 portal to start working on this task.</p>
+  <p style=""font-size: 0.85rem; color: #6B7280;"">Please log in to your RIMS portal to start working on this task.</p>
   <div style=""border-top: 1px solid #E5E7EB; margin-top: 20px; padding-top: 12px; font-size: 0.75rem; color: #9CA3AF; text-align: center;"">
-    RIIMS V2 Notification Engine &bull; Assigned by {assignerName} ({currentUserRole})
+    RIMS Notification Engine &bull; Assigned by {assignerName} ({currentUserRole})
   </div>
 </div>";
 
@@ -726,8 +750,9 @@ public class TaskService : ITaskService
             ModuleName = task.ModuleName,
             Description = task.Description,
             Status = task.Status.ToString(),
-            StartTime = openTimeLog?.StartTime,
-            AccumulatedSeconds = Math.Max(0, accumulatedSeconds)
+            StartTime = openTimeLog?.StartTime != null ? DateTime.SpecifyKind(openTimeLog.StartTime, DateTimeKind.Utc) : null,
+            AccumulatedSeconds = Math.Max(0, accumulatedSeconds),
+            PlannedDurationMinutes = task.PlannedDurationMinutes
         };
     }
 
@@ -901,17 +926,21 @@ public class TaskService : ITaskService
         // Smart View Filter
         if (!string.IsNullOrWhiteSpace(query.SmartView))
         {
-            var now = DateTime.UtcNow;
+            var todayIst = GetTodayIst();
             switch (query.SmartView.ToLower().Trim())
             {
                 case "overdue":
-                    baseQuery = baseQuery.Where(t => t.DueDate.HasValue && t.DueDate.Value < now && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
+                    baseQuery = baseQuery.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date < todayIst && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
                     break;
                 case "due-today":
-                    baseQuery = baseQuery.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date == now.Date && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
+                    baseQuery = baseQuery.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date == todayIst && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
                     break;
                 case "high-priority":
                     baseQuery = baseQuery.Where(t => t.Priority == TaskPriority.High || t.Priority == TaskPriority.Urgent);
+                    break;
+                case "exceeded-duration":
+                case "exceeded-estimate":
+                    baseQuery = baseQuery.Where(t => t.PlannedDurationMinutes.HasValue && t.PlannedDurationMinutes.Value > 0);
                     break;
             }
         }
@@ -944,16 +973,24 @@ public class TaskService : ITaskService
             .Take(query.PageSize)
             .ToListAsync();
 
+        var dtos = items.Select(MapToDto).ToList();
+        if ((query.IsExceededDuration.HasValue && query.IsExceededDuration.Value) || 
+            string.Equals(query.SmartView, "exceeded-duration", StringComparison.OrdinalIgnoreCase) || 
+            string.Equals(query.SmartView, "exceeded-estimate", StringComparison.OrdinalIgnoreCase))
+        {
+            dtos = dtos.Where(t => t.IsExceededDuration).ToList();
+        }
+
         return new PagedResult<TaskDto>
         {
-            Items = items.Select(MapToDto).ToList(),
+            Items = dtos,
             TotalCount = totalCount,
             Page = query.Page,
             PageSize = query.PageSize
         };
     }
 
-    public async Task<List<TaskDto>> GetAdminTasksAsync(int? employeeId = null, int? departmentId = null, int? managerId = null, string? status = null, DateTime? from = null, DateTime? to = null, bool? isOverdue = null)
+    public async Task<List<TaskDto>> GetAdminTasksAsync(int? employeeId = null, int? departmentId = null, int? managerId = null, string? status = null, DateTime? from = null, DateTime? to = null, bool? isOverdue = null, bool? isExceededDuration = null)
     {
         var query = _context.WorkTasks
             .Include(t => t.Employee).ThenInclude(e => e.Department)
@@ -989,12 +1026,17 @@ public class TaskService : ITaskService
 
         if (isOverdue.HasValue && isOverdue.Value)
         {
-            var utcNow = DateTime.UtcNow;
-            query = query.Where(t => t.DueDate.HasValue && t.DueDate.Value < utcNow && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
+            var todayIst = GetTodayIst();
+            query = query.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date < todayIst && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled);
         }
 
         var tasks = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
-        return tasks.Select(MapToDto).ToList();
+        var dtos = tasks.Select(MapToDto).ToList();
+        if (isExceededDuration.HasValue && isExceededDuration.Value)
+        {
+            dtos = dtos.Where(t => t.IsExceededDuration).ToList();
+        }
+        return dtos;
     }
 
     public async Task<TaskDto> ReassignTaskAsync(int taskId, int currentUserId, string currentUserRole, ReassignTaskRequest request)
@@ -1163,7 +1205,10 @@ public class TaskService : ITaskService
 
         var ts = TimeSpan.FromSeconds(totalSeconds);
         var duration = $"{((int)ts.TotalHours):D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
-        var isOverdue = t.DueDate.HasValue && t.DueDate.Value < DateTime.UtcNow && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled;
+        var todayIst = GetTodayIst();
+        var dueDateIst = t.DueDate.HasValue ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(t.DueDate.Value, DateTimeKind.Utc), IstTimeZone).Date : (DateTime?)null;
+        var isOverdue = dueDateIst.HasValue && dueDateIst.Value < todayIst && t.Status != TaskStatusEnum.Completed && t.Status != TaskStatusEnum.Cancelled;
+        var isExceededDuration = t.PlannedDurationMinutes.HasValue && t.PlannedDurationMinutes.Value > 0 && totalSeconds > (t.PlannedDurationMinutes.Value * 60);
 
         return new TaskDto
         {
@@ -1193,6 +1238,7 @@ public class TaskService : ITaskService
             Duration = duration,
             TotalProductiveSeconds = Math.Max(0, totalSeconds),
             IsOverdue = isOverdue,
+            IsExceededDuration = isExceededDuration,
             TimelineEvents = (t.TimelineEvents ?? Enumerable.Empty<TaskTimelineEvent>()).Select(e => new TaskTimelineEventDto
             {
                 Id = e.Id,

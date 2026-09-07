@@ -10,10 +10,12 @@ namespace RIIMS.Infrastructure.Services;
 public class IdleTimeService : IIdleTimeService
 {
     private readonly RiimsDbContext _context;
+    private readonly ISystemSettingService? _settingService;
 
-    public IdleTimeService(RiimsDbContext context)
+    public IdleTimeService(RiimsDbContext context, ISystemSettingService? settingService = null)
     {
         _context = context;
+        _settingService = settingService;
     }
 
     private static readonly TimeZoneInfo IstTimeZone = GetIstTimeZone();
@@ -115,12 +117,6 @@ public class IdleTimeService : IIdleTimeService
         var nowIst = TimeZoneInfo.ConvertTimeFromUtc(activityEndTime, IstTimeZone);
         var workDate = DateOnly.FromDateTime(nowIst);
 
-        // Check if employee is logged in today
-        var isLoggedIn = await _context.AttendanceLogs
-            .AnyAsync(a => a.EmployeeId == employeeId && a.LogoutTime == null);
-
-        if (!isLoggedIn) return;
-
         // Check if any other activity is running (taking EF local change tracker into account)
         var activeTaskInDb = await _context.WorkTasks.Where(t => t.EmployeeId == employeeId && t.Status == TaskStatusEnum.Running).Select(t => t.Id).ToListAsync();
         var activeTaskLocalStopped = _context.WorkTasks.Local.Where(t => t.EmployeeId == employeeId && t.Status != TaskStatusEnum.Running).Select(t => t.Id).ToList();
@@ -155,6 +151,12 @@ public class IdleTimeService : IIdleTimeService
                 });
                 await _context.SaveChangesAsync();
             }
+            else
+            {
+                // Reset start time to current activity end time so idle counts fresh from now
+                openIdle.StartTime = activityEndTime;
+                await _context.SaveChangesAsync();
+            }
         }
     }
 
@@ -168,15 +170,6 @@ public class IdleTimeService : IIdleTimeService
         // 1. Check Attendance Session
         var openAttendance = await _context.AttendanceLogs
             .FirstOrDefaultAsync(a => a.EmployeeId == employeeId && a.LogoutTime == null);
-
-        if (openAttendance == null)
-        {
-            return new EmployeeCurrentStateDto
-            {
-                State = "LOGGED_OUT",
-                AttendanceSessionId = null
-            };
-        }
 
         // 2. Auto-close any stale unclosed idle logs from past dates
         var staleIdleLogs = await _context.IdleTimeLogs
@@ -227,9 +220,18 @@ public class IdleTimeService : IIdleTimeService
                 .FirstOrDefaultAsync(tl => tl.TaskId == activeTask.Id && tl.EndTime == null);
             activityStartedAt = openTimeLog?.StartTime ?? nowUtc;
         }
-        else
+        else if (openAttendance != null || openIdle != null)
         {
             currentState = "IDLE";
+        }
+        else
+        {
+            // Check if there was any task or activity today before declaring LOGGED_OUT
+            var hasAnyActivityToday = await _context.TaskTimeLogs.AnyAsync(tl => tl.Task.EmployeeId == employeeId && tl.StartTime >= todayStartUtc)
+                || await _context.SupportActivityLogs.AnyAsync(s => s.EmployeeId == employeeId && s.StartTime >= todayStartUtc)
+                || await _context.BreakLogs.AnyAsync(b => b.EmployeeId == employeeId && b.StartTime >= todayStartUtc);
+
+            currentState = hasAnyActivityToday ? "IDLE" : "LOGGED_OUT";
         }
 
         if (currentState == "IDLE" && openIdle == null)
@@ -251,30 +253,72 @@ public class IdleTimeService : IIdleTimeService
                 .OrderByDescending(b => b.EndTime)
                 .FirstOrDefaultAsync();
 
-            var candidateStarts = new List<DateTime> { openAttendance.LoginTime };
+            var candidateStarts = new List<DateTime>();
+            if (openAttendance != null) candidateStarts.Add(openAttendance.LoginTime);
             if (lastTaskLog?.EndTime != null) candidateStarts.Add(lastTaskLog.EndTime.Value);
             if (lastSupportLog?.EndTime != null) candidateStarts.Add(lastSupportLog.EndTime.Value);
             if (lastBreakLog?.EndTime != null) candidateStarts.Add(lastBreakLog.EndTime.Value);
 
-            var idleStart = candidateStarts.Max();
-
-            openIdle = new IdleTimeLog
+            if (candidateStarts.Any())
             {
-                EmployeeId = employeeId,
-                WorkDate = todayWorkDate,
-                StartTime = idleStart,
-                EndTime = null,
-                DurationMinutes = 0,
-                DurationSeconds = 0,
-                Type = "NoActivity",
-                Source = "AutoRecovered",
-                Remarks = "Auto-recovered active idle session"
-            };
-            _context.IdleTimeLogs.Add(openIdle);
-            await _context.SaveChangesAsync();
+                var idleStart = candidateStarts.Max();
+
+                openIdle = new IdleTimeLog
+                {
+                    EmployeeId = employeeId,
+                    WorkDate = todayWorkDate,
+                    StartTime = idleStart,
+                    EndTime = null,
+                    DurationMinutes = 0,
+                    DurationSeconds = 0,
+                    Type = "NoActivity",
+                    Source = "AutoRecovered",
+                    Remarks = "Auto-recovered active idle session"
+                };
+                _context.IdleTimeLogs.Add(openIdle);
+                await _context.SaveChangesAsync();
+            }
         }
 
-        // 3. Calculate Today's Totals
+        // 3. Calculate Today's Totals — capped at AllowedEndTime (or OfficeEndTime)
+        var todayAttendanceSessions = await _context.AttendanceLogs
+            .Where(a => a.EmployeeId == employeeId && a.LoginTime >= todayStartUtc)
+            .ToListAsync();
+
+        var settings = _settingService != null ? await _settingService.GetTypedSettingsAsync() : null;
+        var officeEndTs = settings?.OfficeEndTime ?? new TimeSpan(19, 0, 0);
+        var officeEndIst = nowIst.Date.Add(officeEndTs);
+        var officeEndUtc = TimeZoneInfo.ConvertTimeToUtc(officeEndIst, IstTimeZone);        if (openAttendance?.AllowedEndTime != null && openAttendance.AllowedEndTime.Value > officeEndUtc)
+        {
+            officeEndUtc = openAttendance.AllowedEndTime.Value;
+        }
+        else
+        {
+            var maxAllowedEnd = todayAttendanceSessions.Select(a => a.AllowedEndTime).Max();
+            if (maxAllowedEnd.HasValue && maxAllowedEnd.Value > officeEndUtc)
+            {
+                officeEndUtc = maxAllowedEnd.Value;
+            }
+        }
+
+        // Helper to cap an end time at OfficeEndTime (or AllowedEndTime)
+        DateTime CapAtOfficeEnd(DateTime start, DateTime end)
+        {
+            if (start >= officeEndUtc) return start; // No contribution past office/allowed end
+            return end > officeEndUtc ? officeEndUtc : end;
+        }
+
+        // Compute OfficeStartTime boundary for clamping calculation start
+        var officeStartTs = settings?.OfficeStartTime ?? new TimeSpan(10, 0, 0);
+        var officeStartIst = nowIst.Date.Add(officeStartTs);
+        var officeStartUtc = TimeZoneInfo.ConvertTimeToUtc(officeStartIst, IstTimeZone);
+
+        // Helper to clamp an activity start time at OfficeStartTime
+        DateTime ClampStart(DateTime actStart)
+        {
+            return actStart < officeStartUtc ? officeStartUtc : actStart;
+        }
+
         // Work Seconds
         var todayTimeLogs = await _context.TaskTimeLogs
             .Include(tl => tl.Task)
@@ -284,8 +328,10 @@ public class IdleTimeService : IIdleTimeService
         long workSeconds = 0;
         foreach (var log in todayTimeLogs)
         {
-            var end = log.EndTime ?? nowUtc;
-            workSeconds += (long)Math.Max(0, (end - log.StartTime).TotalSeconds);
+            var effStart = ClampStart(log.StartTime);
+            if (effStart >= officeEndUtc) continue;
+            var end = CapAtOfficeEnd(effStart, log.EndTime ?? nowUtc);
+            workSeconds += (long)Math.Max(0, (end - effStart).TotalSeconds);
         }
 
         // Support Seconds
@@ -296,8 +342,10 @@ public class IdleTimeService : IIdleTimeService
         long supportSeconds = 0;
         foreach (var s in todaySupportLogs)
         {
-            var end = s.EndTime ?? nowUtc;
-            supportSeconds += (long)Math.Max(0, (end - s.StartTime).TotalSeconds);
+            var effStart = ClampStart(s.StartTime);
+            if (effStart >= officeEndUtc) continue;
+            var end = CapAtOfficeEnd(effStart, s.EndTime ?? nowUtc);
+            supportSeconds += (long)Math.Max(0, (end - effStart).TotalSeconds);
         }
 
         // Break Seconds
@@ -308,35 +356,35 @@ public class IdleTimeService : IIdleTimeService
         long breakSeconds = 0;
         foreach (var b in todayBreakLogs)
         {
-            var end = b.EndTime ?? nowUtc;
-            breakSeconds += (long)Math.Max(0, (end - b.StartTime).TotalSeconds);
+            var effStart = ClampStart(b.StartTime);
+            if (effStart >= officeEndUtc) continue;
+            var end = CapAtOfficeEnd(effStart, b.EndTime ?? nowUtc);
+            breakSeconds += (long)Math.Max(0, (end - effStart).TotalSeconds);
         }
 
-        // Idle Seconds: Compute gap within attendance sessions today
-        var todayAttendanceSessions = await _context.AttendanceLogs
-            .Where(a => a.EmployeeId == employeeId && a.LoginTime >= todayStartUtc)
-            .ToListAsync();
-
+        // Idle Seconds: Compute gap within attendance sessions today, bounded to [OfficeStartTime, OfficeEndTime]
         long idleSeconds = 0;
         foreach (var att in todayAttendanceSessions)
         {
-            var sessionStart = att.LoginTime;
-            var sessionEnd = att.LogoutTime ?? nowUtc;
+            // Clamp session start to OfficeStartTime
+            var sessionStart = ClampStart(att.LoginTime);
+            if (sessionStart >= officeEndUtc) continue;
+            var sessionEnd = CapAtOfficeEnd(sessionStart, att.LogoutTime ?? nowUtc);
             if (sessionEnd <= sessionStart) continue;
 
             double sessionTotalSec = (sessionEnd - sessionStart).TotalSeconds;
 
             double tSec = todayTimeLogs
-                .Where(tl => tl.StartTime < sessionEnd && (tl.EndTime ?? nowUtc) > sessionStart)
-                .Sum(tl => (Math.Min((tl.EndTime ?? nowUtc).Ticks, sessionEnd.Ticks) - Math.Max(tl.StartTime.Ticks, sessionStart.Ticks)) / (double)TimeSpan.TicksPerSecond);
+                .Where(tl => ClampStart(tl.StartTime) < sessionEnd && (tl.EndTime ?? nowUtc) > sessionStart)
+                .Sum(tl => (Math.Min(CapAtOfficeEnd(ClampStart(tl.StartTime), tl.EndTime ?? nowUtc).Ticks, sessionEnd.Ticks) - Math.Max(ClampStart(tl.StartTime).Ticks, sessionStart.Ticks)) / (double)TimeSpan.TicksPerSecond);
 
             double sSec = todaySupportLogs
-                .Where(s => s.StartTime < sessionEnd && (s.EndTime ?? nowUtc) > sessionStart)
-                .Sum(s => (Math.Min((s.EndTime ?? nowUtc).Ticks, sessionEnd.Ticks) - Math.Max(s.StartTime.Ticks, sessionStart.Ticks)) / (double)TimeSpan.TicksPerSecond);
+                .Where(s => ClampStart(s.StartTime) < sessionEnd && (s.EndTime ?? nowUtc) > sessionStart)
+                .Sum(s => (Math.Min(CapAtOfficeEnd(ClampStart(s.StartTime), s.EndTime ?? nowUtc).Ticks, sessionEnd.Ticks) - Math.Max(ClampStart(s.StartTime).Ticks, sessionStart.Ticks)) / (double)TimeSpan.TicksPerSecond);
 
             double bSec = todayBreakLogs
-                .Where(b => b.StartTime < sessionEnd && (b.EndTime ?? nowUtc) > sessionStart)
-                .Sum(b => (Math.Min((b.EndTime ?? nowUtc).Ticks, sessionEnd.Ticks) - Math.Max(b.StartTime.Ticks, sessionStart.Ticks)) / (double)TimeSpan.TicksPerSecond);
+                .Where(b => ClampStart(b.StartTime) < sessionEnd && (b.EndTime ?? nowUtc) > sessionStart)
+                .Sum(b => (Math.Min(CapAtOfficeEnd(ClampStart(b.StartTime), b.EndTime ?? nowUtc).Ticks, sessionEnd.Ticks) - Math.Max(ClampStart(b.StartTime).Ticks, sessionStart.Ticks)) / (double)TimeSpan.TicksPerSecond);
 
             double sessionIdle = Math.Max(0, sessionTotalSec - tSec - sSec - bSec);
             idleSeconds += (long)Math.Round(sessionIdle);
@@ -351,9 +399,9 @@ public class IdleTimeService : IIdleTimeService
         return new EmployeeCurrentStateDto
         {
             State = currentState,
-            AttendanceSessionId = openAttendance.Id,
-            IdleStartedAt = openIdle?.StartTime,
-            ActivityStartedAt = activityStartedAt,
+            AttendanceSessionId = openAttendance?.Id,
+            IdleStartedAt = openIdle?.StartTime != null ? DateTime.SpecifyKind(openIdle.StartTime, DateTimeKind.Utc) : null,
+            ActivityStartedAt = activityStartedAt != null ? DateTime.SpecifyKind(activityStartedAt.Value, DateTimeKind.Utc) : null,
             ActiveTaskId = activeTask?.Id,
             ActiveSupportId = activeSupport?.Id,
             ActiveBreakId = activeBreak?.Id,

@@ -181,14 +181,14 @@ export const EmployeeCalendarPage: React.FC = () => {
             <div style={{ fontSize: '1.35rem', fontWeight: 700, color: report.lateLoginLOPDays > 0 ? 'var(--danger)' : 'var(--text-main)', marginTop: '0.15rem' }}>{report.lateLoginLOPDays}</div>
           </div>
 
-          <div className="ui-card" style={{ padding: '0.85rem 1rem', background: report.totalLOPDays > 0 ? '#fef2f2' : undefined }}>
+          <div className="ui-card" style={{ padding: '0.85rem 1rem', background: report.totalLOPDays > 0 ? 'var(--danger-bg)' : undefined, border: report.totalLOPDays > 0 ? '1px solid rgba(239, 68, 68, 0.3)' : undefined }}>
             <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Total LOP Days</div>
-            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: report.totalLOPDays > 0 ? 'var(--danger)' : 'var(--success)', marginTop: '0.15rem' }}>{report.totalLOPDays}</div>
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: report.totalLOPDays > 0 ? 'var(--danger-text)' : 'var(--success-text)', marginTop: '0.15rem' }}>{report.totalLOPDays}</div>
           </div>
 
-          <div className="ui-card" style={{ padding: '0.85rem 1rem', background: report.totalLOPAmount > 0 ? '#fef2f2' : undefined }}>
+          <div className="ui-card" style={{ padding: '0.85rem 1rem', background: report.totalLOPAmount > 0 ? 'var(--danger-bg)' : undefined, border: report.totalLOPAmount > 0 ? '1px solid rgba(239, 68, 68, 0.3)' : undefined }}>
             <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>LOP Amount</div>
-            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: report.totalLOPAmount > 0 ? 'var(--danger)' : 'var(--success)', marginTop: '0.15rem' }}>
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: report.totalLOPAmount > 0 ? 'var(--danger-text)' : 'var(--success-text)', marginTop: '0.15rem' }}>
               ₹{report.totalLOPAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
@@ -230,7 +230,7 @@ export const EmployeeCalendarPage: React.FC = () => {
                 const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
 
                 return (
-                  <tr key={item.date} style={{ backgroundColor: item.isSandwichLeave ? '#fffbeb' : undefined }}>
+                  <tr key={item.date} style={{ backgroundColor: item.isSandwichLeave ? 'var(--warning-bg)' : undefined }}>
                     <td style={{ fontWeight: 600, fontFamily: 'monospace' }}>{formattedDate}</td>
                     <td style={{ color: 'var(--text-secondary)' }}>{dayOfWeek}</td>
                     <td>

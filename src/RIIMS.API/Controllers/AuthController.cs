@@ -26,7 +26,14 @@ public class AuthController : ControllerBase
         // Auto-trigger attendance login for Employee role
         if (result.Role == "Employee" && result.EmployeeId > 0)
         {
-            await _attendanceService.LoginAsync(result.EmployeeId);
+            try
+            {
+                await _attendanceService.LoginAsync(result.EmployeeId);
+            }
+            catch
+            {
+                // Non-blocking fallback: attendance auto-punch shouldn't fail authentication
+            }
         }
 
         return Ok(ApiResponse<LoginResponse>.SuccessResponse(result));

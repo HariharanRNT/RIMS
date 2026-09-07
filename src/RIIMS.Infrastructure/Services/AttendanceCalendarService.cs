@@ -416,4 +416,55 @@ public class AttendanceCalendarService : IAttendanceCalendarService
             LastModifiedAt = c.LastModifiedAt
         };
     }
+
+    public async Task<MonthAccessValidationDto> ValidateMonthAccessRulesAsync(int year, int month)
+    {
+        var monthName = new DateTime(year, month, 1).ToString("MMMM");
+        int nextMonth = month == 12 ? 1 : month + 1;
+        int nextYear = month == 12 ? year + 1 : year;
+        var nextMonthName = new DateTime(nextYear, nextMonth, 1).ToString("MMMM");
+
+        var nowIst = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, IstTimeZone);
+        var todayIst = DateOnly.FromDateTime(nowIst);
+        var lastDayOfSelectedMonth = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+
+        bool isMonthEnded = todayIst > lastDayOfSelectedMonth;
+
+        var nextMonthStatus = await GetCalendarStatusAsync(nextYear, nextMonth);
+        bool isNextMonthPublished = nextMonthStatus.IsPublished;
+
+        bool canProceed = isMonthEnded && isNextMonthPublished;
+        string? reasonMessage = null;
+
+        if (!canProceed)
+        {
+            if (!isMonthEnded && !isNextMonthPublished)
+            {
+                reasonMessage = $"The selected month ({monthName} {year}) has not completely ended, and the next month's Monthly Attendance Calendar ({nextMonthName} {nextYear}) must be published before proceeding.";
+            }
+            else if (!isMonthEnded)
+            {
+                reasonMessage = $"Action is disabled because {monthName} {year} has not completely ended. It will become available after the month has fully ended.";
+            }
+            else if (!isNextMonthPublished)
+            {
+                reasonMessage = $"The next month's Monthly Attendance Calendar ({nextMonthName} {nextYear}) must be published before processing payroll or generating the monthly employee report.";
+            }
+        }
+
+        return new MonthAccessValidationDto
+        {
+            Year = year,
+            Month = month,
+            MonthName = monthName,
+            IsMonthEnded = isMonthEnded,
+            NextYear = nextYear,
+            NextMonth = nextMonth,
+            NextMonthName = nextMonthName,
+            IsNextMonthPublished = isNextMonthPublished,
+            CanProcessPayroll = canProceed,
+            CanGenerateReport = canProceed,
+            ReasonMessage = reasonMessage
+        };
+    }
 }

@@ -7,6 +7,7 @@ using RIIMS.Application.Interfaces;
 using RIIMS.Domain.Entities;
 using RIIMS.Domain.Enums;
 using RIIMS.Infrastructure.Data;
+using Microsoft.Extensions.Configuration;
 using RIIMS.Infrastructure.Identity;
 
 namespace RIIMS.Infrastructure.Services;
@@ -17,17 +18,20 @@ public class EmployeeService : IEmployeeService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IEmailService _emailService;
     private readonly ISalaryStructureService _salaryStructureService;
+    private readonly IConfiguration? _configuration;
 
     public EmployeeService(
         RiimsDbContext context,
         UserManager<ApplicationUser> userManager,
         IEmailService emailService,
-        ISalaryStructureService salaryStructureService)
+        ISalaryStructureService salaryStructureService,
+        IConfiguration? configuration = null)
     {
         _context = context;
         _userManager = userManager;
         _emailService = emailService;
         _salaryStructureService = salaryStructureService;
+        _configuration = configuration;
     }
 
     public async Task<PagedResult<EmployeeListDto>> GetAllAsync(int page, int pageSize, int? departmentId = null, string? search = null)
@@ -260,7 +264,7 @@ public class EmployeeService : IEmployeeService
                     </p>
                     
                     <div style=""text-align: center; margin-top: 30px;"">
-                        <a href=""http://localhost:3000/login"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Login to Portal</a>
+                        <a href=""{(_configuration?["AppUrl"] ?? "http://10.60.121.234:99").TrimEnd('/')}/login"" style=""background: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;"">Login to Portal</a>
                     </div>
                 </div>
                 <div style=""background: #f1f5f9; padding: 15px; text-align: center; font-size: 12px; color: #64748b;"">

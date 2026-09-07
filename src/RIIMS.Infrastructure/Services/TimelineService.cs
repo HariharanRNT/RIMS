@@ -20,6 +20,7 @@ public class TimelineService : ITimelineService
         var nextDate = targetDate.AddDays(1);
 
         var items = await _context.ActivityTimelines
+            .Include(a => a.Employee)
             .Where(a => a.EmployeeId == employeeId && a.StartTime >= targetDate && a.StartTime < nextDate)
             .OrderBy(a => a.StartTime)
             .ToListAsync();
@@ -34,6 +35,8 @@ public class TimelineService : ITimelineService
             {
                 Id = a.Id,
                 EmployeeId = a.EmployeeId,
+                EmployeeName = a.Employee != null ? a.Employee.Name : null,
+                EmployeeCode = a.Employee != null ? a.Employee.EmployeeCode : null,
                 ActivityType = a.ActivityType,
                 RefTable = a.RefTable,
                 RefId = a.RefId,

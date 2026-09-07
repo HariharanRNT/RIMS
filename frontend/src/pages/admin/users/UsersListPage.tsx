@@ -314,7 +314,7 @@ export const UsersListPage: React.FC = () => {
                         </button>
                       )}
 
-                      {u.email === 'hariharanrntgemini@gmail.com' || u.email === 'admin@riims.local' || u.email === 'harideepa0611@gmail.com' || u.employeeCode === 'EMP-001' ? (
+                      {u.isSuperAdmin || u.roles?.includes('Super Admin') ? (
                         <span
                           style={{
                             display: 'inline-flex',
@@ -328,7 +328,7 @@ export const UsersListPage: React.FC = () => {
                             fontWeight: 600,
                             border: '1px solid rgba(245, 158, 11, 0.25)',
                           }}
-                          title="Original System Administrator account is permanently protected and cannot be deactivated."
+                          title="Super Administrator accounts are protected and cannot be deactivated."
                         >
                           <ShieldCheck size={12} /> Protected
                         </span>

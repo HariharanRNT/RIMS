@@ -115,16 +115,15 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "RIIMS API", Version = "v1" });
-    var securityScheme = new OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = SecuritySchemeType.ApiKey,
+        Type = SecuritySchemeType.Http,
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter 'Bearer' [space] and then your valid token in the text input below."
-    };
-    options.AddSecurityDefinition("Bearer", securityScheme);
+        Description = "Paste your JWT access token directly into the field below."
+    });
     options.AddSecurityRequirement((doc) => new OpenApiSecurityRequirement
     {
         {
@@ -151,13 +150,15 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Seed Database
+// Apply EF Core database migrations & Seed Default Data on startup
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<RiimsDbContext>();
+        await context.Database.MigrateAsync();
+
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<ApplicationRole>>();
         await DataSeeder.SeedAsync(context, userManager, roleManager);
@@ -165,7 +166,7 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while seeding the database.");
+        logger.LogError(ex, "An error occurred while migrating and seeding the database.");
     }
 }
 
@@ -194,12 +195,5 @@ app.UseAuthorization();
 app.UseMiddleware<SessionValidationMiddleware>();
 
 app.MapControllers();
-
-// Automatically apply pending EF Core database migrations on startup
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<RIIMS.Infrastructure.Data.RiimsDbContext>();
-    await dbContext.Database.MigrateAsync();
-}
 
 app.Run();

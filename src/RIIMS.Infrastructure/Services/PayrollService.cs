@@ -25,6 +25,8 @@ public class PayrollService : IPayrollService
 
     public async Task<PayrollSummaryDto> ProcessMonthlyPayrollAsync(int month, int year)
     {
+        await ValidatePayrollAccessRulesAsync(month, year);
+
         var activeEmployees = await _context.Employees
             .Include(e => e.Department)
             .Include(e => e.Designation)
@@ -33,7 +35,14 @@ public class PayrollService : IPayrollService
 
         foreach (var emp in activeEmployees)
         {
-            await ProcessSingleEmployeePayrollAsync(emp, month, year);
+            var salaryStructure = await GetActiveSalaryStructureAsync(emp.Id, month, year);
+            if (salaryStructure == null)
+            {
+                // BUG-019 Fix: Skip employees without active salary structure to prevent generating invalid ₹0 payslips
+                continue;
+            }
+
+            await ProcessSingleEmployeePayrollAsync(emp, month, year, salaryStructure);
         }
 
         await _context.SaveChangesAsync();
@@ -43,19 +52,69 @@ public class PayrollService : IPayrollService
 
     public async Task ProcessMonthlyPayrollForEmployeeAsync(int employeeId, int month, int year)
     {
+        await ValidatePayrollAccessRulesAsync(month, year);
+
         var emp = await _context.Employees
             .Include(e => e.Department)
             .Include(e => e.Designation)
             .FirstOrDefaultAsync(e => e.Id == employeeId && e.IsActive);
 
-        if (emp != null)
+        if (emp == null)
         {
-            await ProcessSingleEmployeePayrollAsync(emp, month, year);
-            await _context.SaveChangesAsync();
+            throw new KeyNotFoundException($"Employee #{employeeId} not found or inactive.");
+        }
+
+        var salaryStructure = await GetActiveSalaryStructureAsync(emp.Id, month, year);
+        if (salaryStructure == null)
+        {
+            throw new InvalidOperationException($"No active salary structure found for employee '{emp.Name}' ({emp.EmployeeCode}). Please configure a salary structure before processing payroll.");
+        }
+
+        await ProcessSingleEmployeePayrollAsync(emp, month, year, salaryStructure);
+        await _context.SaveChangesAsync();
+    }
+
+    private async Task ValidatePayrollAccessRulesAsync(int month, int year)
+    {
+        var validation = await _calendarService.ValidateMonthAccessRulesAsync(year, month);
+        if (!validation.CanProcessPayroll)
+        {
+            throw new InvalidOperationException(validation.ReasonMessage ?? $"Payroll processing for {validation.MonthName} {year} is not allowed.");
         }
     }
 
-    private async Task ProcessSingleEmployeePayrollAsync(Employee emp, int month, int year)
+    private async Task<EmployeeSalaryStructure?> GetActiveSalaryStructureAsync(int employeeId, int month, int year)
+    {
+        var daysInMonth = DateTime.DaysInMonth(year, month);
+        var payslipMonthStart = new DateTime(year, month, 1);
+        var payslipMonthEnd = new DateTime(year, month, daysInMonth);
+
+        var activeSalaryStructure = await _context.EmployeeSalaryStructures
+            .Include(s => s.Components)
+            .Where(s => s.EmployeeId == employeeId && s.EffectiveFrom <= payslipMonthEnd && (s.EffectiveTo == null || s.EffectiveTo >= payslipMonthStart))
+            .OrderByDescending(s => s.EffectiveFrom)
+            .FirstOrDefaultAsync();
+
+        if (activeSalaryStructure == null)
+        {
+            activeSalaryStructure = await _context.EmployeeSalaryStructures
+                .Include(s => s.Components)
+                .Where(s => s.EmployeeId == employeeId && s.IsActive)
+                .OrderByDescending(s => s.EffectiveFrom)
+                .FirstOrDefaultAsync();
+        }
+
+        if (activeSalaryStructure == null)
+            return null;
+
+        bool hasEarningComponents = activeSalaryStructure.Components != null && activeSalaryStructure.Components.Any(c => c.IsEarning && c.MonthlyAmount > 0);
+        if (activeSalaryStructure.MonthlyCTC <= 0m && !hasEarningComponents)
+            return null;
+
+        return activeSalaryStructure;
+    }
+
+    private async Task ProcessSingleEmployeePayrollAsync(Employee emp, int month, int year, EmployeeSalaryStructure activeSalaryStructure)
     {
         var daysInMonth = DateTime.DaysInMonth(year, month);
         var settings = await _settingService.GetTypedSettingsAsync();
@@ -88,25 +147,6 @@ public class PayrollService : IPayrollService
             .ToList();
 
         var graceViolations = firstLogsByDate.Count(a => a.IsLate);
-
-        // 2. Retrieve Active Employee Salary Structure for target month
-        var payslipMonthStart = new DateTime(year, month, 1);
-        var payslipMonthEnd = new DateTime(year, month, daysInMonth);
-
-        var activeSalaryStructure = await _context.EmployeeSalaryStructures
-            .Include(s => s.Components)
-            .Where(s => s.EmployeeId == emp.Id && s.EffectiveFrom <= payslipMonthEnd && (s.EffectiveTo == null || s.EffectiveTo >= payslipMonthStart))
-            .OrderByDescending(s => s.EffectiveFrom)
-            .FirstOrDefaultAsync();
-
-        if (activeSalaryStructure == null)
-        {
-            activeSalaryStructure = await _context.EmployeeSalaryStructures
-                .Include(s => s.Components)
-                .Where(s => s.EmployeeId == emp.Id && s.IsActive)
-                .OrderByDescending(s => s.EffectiveFrom)
-                .FirstOrDefaultAsync();
-        }
 
         decimal basicPay = 0m;
         decimal hra = 0m;
@@ -343,8 +383,6 @@ public class PayrollService : IPayrollService
 
     public async Task<PayslipDto?> GetEmployeePayslipAsync(int employeeId, int month, int year)
     {
-        await ProcessMonthlyPayrollForEmployeeAsync(employeeId, month, year);
-
         var payslip = await _context.PayslipDetails
             .Include(p => p.Employee)
                 .ThenInclude(e => e.Department)
@@ -357,12 +395,6 @@ public class PayrollService : IPayrollService
 
     public async Task<List<PayslipDto>> GetEmployeePayslipHistoryAsync(int employeeId)
     {
-        var now = DateTime.UtcNow;
-        await ProcessMonthlyPayrollForEmployeeAsync(employeeId, now.Month, now.Year);
-        int prevMonth = now.Month == 1 ? 12 : now.Month - 1;
-        int prevYear = now.Month == 1 ? now.Year - 1 : now.Year;
-        await ProcessMonthlyPayrollForEmployeeAsync(employeeId, prevMonth, prevYear);
-
         var payslips = await _context.PayslipDetails
             .Include(p => p.Employee)
                 .ThenInclude(e => e.Department)
@@ -391,8 +423,6 @@ public class PayrollService : IPayrollService
             PfNumber = !string.IsNullOrWhiteSpace(p.Employee.PfNumber) ? p.Employee.PfNumber : "101988421092",
             EsiNumber = !string.IsNullOrWhiteSpace(p.Employee.EsiNumber) ? p.Employee.EsiNumber : "3194829104",
             AadhaarNumber = !string.IsNullOrWhiteSpace(p.Employee.AadhaarNumber) ? p.Employee.AadhaarNumber : "XXXX XXXX 9128",
-            BankName = "HDFC Bank Ltd",
-            BankAccountNumber = "50100" + (p.EmployeeId * 18491).ToString("D7"),
             Month = p.Month,
             Year = p.Year,
             BasicPay = p.BasicPay,

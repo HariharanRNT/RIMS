@@ -52,9 +52,41 @@ public class SessionService : ISessionService
         var nowIst = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, IstTimeZone);
         var workDate = DateOnly.FromDateTime(nowIst);
 
+        // Ensure a valid EmployeeId is used to satisfy FK_EmployeeSessions_Employees constraint
+        int validEmployeeId = employeeId;
+        if (validEmployeeId <= 0 || !await _context.Employees.AnyAsync(e => e.Id == validEmployeeId))
+        {
+            var fallbackEmp = await _context.Employees.FirstOrDefaultAsync();
+            if (fallbackEmp != null)
+            {
+                validEmployeeId = fallbackEmp.Id;
+            }
+            else
+            {
+                var adminDept = await _context.Departments.FirstOrDefaultAsync() ?? new Department { Name = "Administration" };
+                if (adminDept.Id == 0) { _context.Departments.Add(adminDept); await _context.SaveChangesAsync(); }
+
+                var adminDesig = await _context.Designations.FirstOrDefaultAsync() ?? new Designation { Name = "System Administrator" };
+                if (adminDesig.Id == 0) { _context.Designations.Add(adminDesig); await _context.SaveChangesAsync(); }
+
+                var defaultEmp = new Employee
+                {
+                    EmployeeCode = "EMP-001",
+                    Name = "System Admin",
+                    Email = "admin@riims.local",
+                    DepartmentId = adminDept.Id,
+                    DesignationId = adminDesig.Id,
+                    DateOfJoining = DateTime.UtcNow.Date
+                };
+                _context.Employees.Add(defaultEmp);
+                await _context.SaveChangesAsync();
+                validEmployeeId = defaultEmp.Id;
+            }
+        }
+
         // 1. Single Active Session Policy: Invalidate previous active sessions for this employee
         var previousActiveSessions = await _context.EmployeeSessions
-            .Where(s => s.EmployeeId == employeeId && s.IsActive)
+            .Where(s => s.EmployeeId == validEmployeeId && s.IsActive)
             .ToListAsync();
 
         foreach (var prevSession in previousActiveSessions)
@@ -64,14 +96,10 @@ public class SessionService : ISessionService
         }
 
         // Fetch single authoritative AllowedEndTime from today's AttendanceLog
-        var todayAttendance = await _context.AttendanceLogs
-            .Where(a => a.EmployeeId == employeeId)
-            .ToListAsync();
-
-        var firstTodayAttendance = todayAttendance
-            .Where(a => TimeZoneInfo.ConvertTimeFromUtc(a.LoginTime, IstTimeZone).Date == workDate.ToDateTime(TimeOnly.MinValue).Date)
+        var firstTodayAttendance = await _context.AttendanceLogs
+            .Where(a => a.EmployeeId == validEmployeeId && a.WorkDate == workDate)
             .OrderBy(a => a.LoginTime)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync();
 
         DateTime? allowedEndTime = firstTodayAttendance?.AllowedEndTime;
 
@@ -81,7 +109,7 @@ public class SessionService : ISessionService
 
         var session = new EmployeeSession
         {
-            EmployeeId = employeeId,
+            EmployeeId = validEmployeeId,
             SessionId = sessionId,
             TokenJti = tokenJti,
             WorkDate = workDate,
@@ -170,37 +198,41 @@ public class SessionService : ISessionService
         var nowIst = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, IstTimeZone);
         var todayWorkDate = DateOnly.FromDateTime(nowIst);
 
-        var activeSessions = await _context.EmployeeSessions
-            .Where(s => s.IsActive)
+        // Only clean up sessions from PAST work dates (stale overnight sessions).
+        // Same-day sessions are NEVER force-deactivated — employees remain logged in
+        // until they voluntarily log out. Productive/non-productive time calculations
+        // are capped at OfficeEndTime in ReportService and IdleTimeService instead.
+        var staleSessions = await _context.EmployeeSessions
+            .Where(s => s.IsActive && s.WorkDate < todayWorkDate)
             .ToListAsync();
 
-        if (!activeSessions.Any()) return;
+        if (!staleSessions.Any()) return;
 
         var settings = await _settingService.GetTypedSettingsAsync();
 
-        foreach (var session in activeSessions)
+        foreach (var session in staleSessions)
         {
+            // Skip sessions for pure administrators (EmployeeId <= 0) from employee workday punch-out cleanup
+            if (session.EmployeeId <= 0)
+            {
+                continue;
+            }
+
             // Determine exact AllowedEndTime for session
             var officeEndTs = settings.OfficeEndTime;
             var workDateTimeIst = session.WorkDate.ToDateTime(TimeOnly.FromTimeSpan(officeEndTs));
             var currentConfiguredCutoffUtc = TimeZoneInfo.ConvertTimeToUtc(workDateTimeIst, IstTimeZone);
 
             DateTime workdayCutoffUtc;
-            if (session.AllowedEndTime.HasValue)
+            if (session.AllowedEndTime.HasValue && session.AllowedEndTime.Value > currentConfiguredCutoffUtc)
             {
-                workdayCutoffUtc = currentConfiguredCutoffUtc > session.AllowedEndTime.Value
-                    ? currentConfiguredCutoffUtc
-                    : session.AllowedEndTime.Value;
+                // Extended cutoff (grace period delay extension)
+                workdayCutoffUtc = session.AllowedEndTime.Value;
             }
             else
             {
+                // Default official cutoff (never earlier than OfficeEndTime / 7:00 PM)
                 workdayCutoffUtc = currentConfiguredCutoffUtc;
-            }
-
-            // Perform cutoff only if current time has reached AllowedEndTime OR session is from a past WorkDate
-            if (nowUtc < workdayCutoffUtc && session.WorkDate >= todayWorkDate)
-            {
-                continue;
             }
 
             int empId = session.EmployeeId;

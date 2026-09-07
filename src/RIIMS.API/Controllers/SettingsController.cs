@@ -43,4 +43,24 @@ public class SettingsController : ControllerBase
         var result = await _service.UpdateAsync(key, request);
         return Ok(ApiResponse<SystemSettingDto>.SuccessResponse(result));
     }
+
+    /// <summary>
+    /// Returns only task reminder settings. Accessible to any authenticated user (no Settings.View required).
+    /// </summary>
+    [HttpGet("task-reminders")]
+    public async Task<IActionResult> GetTaskReminderSettings()
+    {
+        var result = await _service.GetTaskReminderSettingsAsync();
+        return Ok(ApiResponse<TaskReminderSettingsDto>.SuccessResponse(result));
+    }
+
+    /// <summary>
+    /// Returns only idle notification settings. Accessible to any authenticated user (no Settings.View required).
+    /// </summary>
+    [HttpGet("idle-notifications")]
+    public async Task<IActionResult> GetIdleNotificationSettings()
+    {
+        var result = await _service.GetIdleNotificationSettingsAsync();
+        return Ok(ApiResponse<IdleNotificationSettingsDto>.SuccessResponse(result));
+    }
 }

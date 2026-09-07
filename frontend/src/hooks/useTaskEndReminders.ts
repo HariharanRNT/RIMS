@@ -1,0 +1,99 @@
+import { useEffect, useRef } from 'react';
+import { showTaskReminder } from '../utils/notificationUtils';
+
+interface TaskForReminder {
+  id: number;
+  moduleName: string;
+  status: string;
+  plannedDurationMinutes?: number;
+  totalProductiveSeconds: number;
+}
+
+interface ReminderSettings {
+  firstMinutes: number;
+  secondMinutes: number;
+  completionEnabled: boolean;
+}
+
+/**
+ * Isolated hook that evaluates task end-time reminder thresholds
+ * based on the live-ticking timerSeconds and fires browser notifications.
+ *
+ * - Reads existing task/settings data only — never mutates task or timer state.
+ * - Fires each reminder exactly once per task (tracked via useRef).
+ * - Resets fired flags when task ID changes (e.g., new task or resume of a different task).
+ * - Only evaluates while task status is Running/InProgress.
+ */
+export function useTaskEndReminders(
+  activeRunningTask: TaskForReminder | null | undefined,
+  timerSeconds: number,
+  reminderSettings: ReminderSettings
+): void {
+  // Track which reminders have already fired, keyed by "{taskId}-{type}"
+  const firedRef = useRef<Record<string, boolean>>({});
+  // Track the last task ID to reset flags on task change
+  const lastTaskIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // No active running task or no planned duration → nothing to do
+    if (!activeRunningTask) return;
+    if (!activeRunningTask.plannedDurationMinutes || activeRunningTask.plannedDurationMinutes <= 0) return;
+
+    // Only evaluate for Running/InProgress tasks
+    const status = activeRunningTask.status;
+    if (status !== 'Running' && status !== 'InProgress') return;
+
+    // Reset fired flags when switching to a different task
+    if (lastTaskIdRef.current !== activeRunningTask.id) {
+      firedRef.current = {};
+      lastTaskIdRef.current = activeRunningTask.id;
+    }
+
+    const taskId = activeRunningTask.id;
+    const taskTitle = activeRunningTask.moduleName || 'Task';
+    const plannedMinutes = activeRunningTask.plannedDurationMinutes;
+    const workedMinutes = timerSeconds / 60;
+    const remainingMinutes = plannedMinutes - workedMinutes;
+
+    const { firstMinutes = 30, secondMinutes = 15, completionEnabled = true } = reminderSettings || {};
+
+    // Check completion first (remainingMinutes <= 0)
+    if (completionEnabled && remainingMinutes <= 0 && workedMinutes > 0 && !firedRef.current[`${taskId}-complete`]) {
+      firedRef.current[`${taskId}-complete`] = true;
+      showTaskReminder(
+        `✅ Planned Duration Reached`,
+        `Planned duration reached for '${taskTitle}'. You've worked ${plannedMinutes} min as planned.`,
+        `task-reminder-${taskId}-complete`
+      );
+    }
+
+    // Check second reminder (higher urgency, fires closer to end)
+    if (remainingMinutes <= secondMinutes && remainingMinutes > 0 && plannedMinutes > secondMinutes && !firedRef.current[`${taskId}-second`]) {
+      firedRef.current[`${taskId}-second`] = true;
+      showTaskReminder(
+        `⚠ ${secondMinutes} Minutes Left`,
+        `${secondMinutes} minutes left for '${taskTitle}' — wrap up soon.`,
+        `task-reminder-${taskId}-second`
+      );
+    }
+
+    // Check first reminder (fires earlier)
+    if (remainingMinutes <= firstMinutes && remainingMinutes > secondMinutes && plannedMinutes > firstMinutes && !firedRef.current[`${taskId}-first`]) {
+      firedRef.current[`${taskId}-first`] = true;
+      showTaskReminder(
+        `⏰ ${firstMinutes} Minutes Left`,
+        `${firstMinutes} minutes left for '${taskTitle}'.`,
+        `task-reminder-${taskId}-first`
+      );
+    }
+  }, [
+    activeRunningTask?.id,
+    activeRunningTask?.status,
+    activeRunningTask?.plannedDurationMinutes,
+    activeRunningTask?.moduleName,
+    timerSeconds,
+    reminderSettings?.firstMinutes,
+    reminderSettings?.secondMinutes,
+    reminderSettings?.completionEnabled
+  ]);
+}

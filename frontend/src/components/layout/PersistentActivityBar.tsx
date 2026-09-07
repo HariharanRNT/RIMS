@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -15,7 +17,7 @@ import {
   MoreHorizontal,
   StopCircle,
   PlayCircle,
-  Clock,
+  Play,
   Check,
   Calendar,
   Sparkles,
@@ -23,6 +25,7 @@ import {
   AlertTriangle,
   X,
   Info,
+  ChevronDown,
 } from 'lucide-react';
 
 interface LookupItem {
@@ -57,8 +60,9 @@ interface Client {
   companyName: string;
 }
 
-const getBreakIcon = (name: string, isActive: boolean = false, size: number = 16) => {
-  const iconColor = isActive ? '#E8873C' : '#6b7280';
+const getBreakIcon = (name: string, isActive: boolean = false, size: number = 15, isOther?: boolean) => {
+  const isOtherBreak = isOther !== undefined ? isOther : name.toLowerCase().includes('other');
+  const iconColor = isActive ? '#ffffff' : isOtherBreak ? '#0284c7' : '#0284c7';
   const lower = name.toLowerCase();
 
   if (lower.includes('bio')) {
@@ -76,8 +80,8 @@ const getBreakIcon = (name: string, isActive: boolean = false, size: number = 16
   return <MoreHorizontal size={size} style={{ color: iconColor }} />;
 };
 
-const getSupportIcon = (name: string, isActive: boolean = false, size: number = 16) => {
-  const iconColor = isActive ? '#E8873C' : '#6b7280';
+const getSupportIcon = (name: string, isActive: boolean = false, size: number = 15) => {
+  const iconColor = isActive ? '#ffffff' : '#9333ea';
   const lower = name.toLowerCase();
 
   if (lower.includes('support')) {
@@ -98,8 +102,38 @@ const getSupportIcon = (name: string, isActive: boolean = false, size: number = 
   return <PhoneCall size={size} style={{ color: iconColor }} />;
 };
 
+import { useTaskEndReminders } from '../../hooks/useTaskEndReminders';
+import { createBackgroundInterval, showIdleNotification } from '../../utils/notificationUtils';
+
+interface ActiveTask {
+  taskId: number;
+  productId?: number;
+  productName?: string;
+  clientId?: number;
+  clientCompanyName?: string;
+  moduleName?: string;
+  description?: string;
+  status: string;
+  startTime?: string;
+  accumulatedSeconds?: number;
+  plannedDurationMinutes?: number;
+}
+
+interface ActiveConflictModal {
+  title: string;
+  message: string;
+  activeType: 'break' | 'support';
+  activeName: string;
+}
+
+interface CustomToast {
+  message: string;
+  type: 'success' | 'warning' | 'error';
+}
+
 export const PersistentActivityBar: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const employeeId = user?.employeeId || 0;
 
   const [breakTypes, setBreakTypes] = useState<LookupItem[]>([]);
@@ -108,6 +142,7 @@ export const PersistentActivityBar: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [mappings, setMappings] = useState<any[]>([]);
 
+  const [activeTask, setActiveTask] = useState<ActiveTask | null>(null);
   const [activeBreak, setActiveBreak] = useState<ActiveBreak | null>(null);
   const [pendingBreakType, setPendingBreakType] = useState<LookupItem | null>(null);
   const [startingBreak, setStartingBreak] = useState(false);
@@ -115,6 +150,20 @@ export const PersistentActivityBar: React.FC = () => {
   const [activeSupport, setActiveSupport] = useState<ActiveSupport | null>(null);
   const [pendingSupportType, setPendingSupportType] = useState<LookupItem | null>(null);
   const [startingSupport, setStartingSupport] = useState(false);
+
+  // Dropdown Popover States
+  const [showBreakMenu, setShowBreakMenu] = useState(false);
+  const [showActivityMenu, setShowActivityMenu] = useState(false);
+  const breakDropdownRef = useRef<HTMLDivElement>(null);
+  const activityDropdownRef = useRef<HTMLDivElement>(null);
+
+  // In-app Conflict Modal & Toast State
+  const [conflictModal, setConflictModal] = useState<ActiveConflictModal | null>(null);
+  const [toast, setToast] = useState<CustomToast | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'warning' | 'error' = 'success') => {
+    setToast({ message, type });
+  };
 
   // Stop / Demo Modal State
   const [showStopModal, setShowStopModal] = useState(false);
@@ -134,11 +183,51 @@ export const PersistentActivityBar: React.FC = () => {
   const [stopError, setStopError] = useState('');
   const [stopping, setStopping] = useState(false);
 
-  // Toast confirmation state
-  const [toastNotification, setToastNotification] = useState<string | null>(null);
-
   // Timer
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [taskElapsedSec, setTaskElapsedSec] = useState(0);
+
+  // Notification Permission State & Real-Time Sync
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | null>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : null
+  );
+
+  useEffect(() => {
+    const updatePerm = () => {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setNotifPermission(Notification.permission);
+      }
+    };
+    updatePerm();
+    window.addEventListener('focus', updatePerm);
+    window.addEventListener('click', updatePerm);
+    return () => {
+      window.removeEventListener('focus', updatePerm);
+      window.removeEventListener('click', updatePerm);
+    };
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setNotifPermission(perm);
+        if (perm === 'granted') {
+          showToast('Browser notifications enabled successfully!', 'success');
+          showIdleNotification(
+            '🔔 Notifications Enabled',
+            'You will now receive desktop alerts for task timers and idle duration.',
+            'perm-enabled-' + Date.now()
+          );
+        } else if (perm === 'denied') {
+          showToast('Notifications blocked in browser settings. Please allow notifications in site settings.', 'warning');
+        }
+      } catch (err) {
+        console.error('Failed to request notification permission:', err);
+      }
+    }
+  };
+
 
   const fetchLookups = async () => {
     try {
@@ -154,7 +243,7 @@ export const PersistentActivityBar: React.FC = () => {
       if (supportRes.data.success) setSupportTypes(supportRes.data.data);
       if (prodRes.data.success) setProducts(prodRes.data.data);
       if (clientRes.data.success) setClients(clientRes.data.data);
-      if (mappingRes.data.success) setMappings(mappingRes.data.data);
+      if (mappingRes.data.success) setMappings(mappings.length ? mappings : mappingRes.data.data);
     } catch {
       // Ignore
     }
@@ -173,13 +262,15 @@ export const PersistentActivityBar: React.FC = () => {
   const fetchActiveSessions = async () => {
     if (!employeeId) return;
     try {
-      const [breakRes, supportRes] = await Promise.all([
+      const [breakRes, supportRes, taskRes] = await Promise.all([
         apiClient.get(`/breaks/active/${employeeId}`),
         apiClient.get(`/support/active/${employeeId}`),
+        apiClient.get(`/tasks/active/${employeeId}`),
       ]);
 
-      if (breakRes.data.success) setActiveBreak(breakRes.data.data);
-      if (supportRes.data.success) setActiveSupport(supportRes.data.data);
+      if (breakRes.data.success) setActiveBreak(breakRes.data.data || null);
+      if (supportRes.data.success) setActiveSupport(supportRes.data.data || null);
+      if (taskRes.data.success) setActiveTask(taskRes.data.data || null);
     } catch {
       // Ignore
     }
@@ -189,6 +280,8 @@ export const PersistentActivityBar: React.FC = () => {
     fetchLookups();
     if (employeeId) {
       fetchActiveSessions();
+      const stopPoll = createBackgroundInterval(fetchActiveSessions, 3000);
+      return () => stopPoll();
     }
   }, [employeeId]);
 
@@ -197,11 +290,15 @@ export const PersistentActivityBar: React.FC = () => {
       if (employeeId) fetchActiveSessions();
     };
     window.addEventListener('activity-changed', handleActivityChanged);
-    return () => window.removeEventListener('activity-changed', handleActivityChanged);
+    window.addEventListener('task-changed', handleActivityChanged);
+    return () => {
+      window.removeEventListener('activity-changed', handleActivityChanged);
+      window.removeEventListener('task-changed', handleActivityChanged);
+    };
   }, [employeeId]);
 
   const parseUtcMs = (dateStr: string) => {
-    const str = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+    const str = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z';
     return new Date(str).getTime();
   };
 
@@ -211,9 +308,9 @@ export const PersistentActivityBar: React.FC = () => {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
-  // Live timer for active break or support activity
+  // Live timer for active break or support activity (Web Worker backed)
   useEffect(() => {
-    let interval: any = null;
+    let stopTimer: (() => void) | null = null;
     const activeSession = activeBreak || activeSupport;
 
     if (activeSession && activeSession.startTime) {
@@ -223,28 +320,185 @@ export const PersistentActivityBar: React.FC = () => {
         setElapsedSec(diff);
       };
       updateTimer();
-      interval = setInterval(updateTimer, 1000);
+      stopTimer = createBackgroundInterval(updateTimer, 1000);
     } else {
       setElapsedSec(0);
     }
 
-    return () => clearInterval(interval);
+    return () => {
+      if (stopTimer) stopTimer();
+    };
   }, [activeBreak, activeSupport]);
+
+  // Live timer for active work task (Web Worker backed for background tab accuracy)
+  useEffect(() => {
+    let stopTimer: (() => void) | null = null;
+    const isRunning = activeTask && (activeTask.status?.toLowerCase() === 'running' || activeTask.status === '1');
+
+    if (isRunning) {
+      const baseAccumulated = activeTask.accumulatedSeconds || 0;
+      const startMs = activeTask.startTime ? parseUtcMs(activeTask.startTime) : Date.now();
+
+      const updateTaskTimer = () => {
+        const currentSegment = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        setTaskElapsedSec(baseAccumulated + currentSegment);
+      };
+
+      updateTaskTimer();
+      stopTimer = createBackgroundInterval(updateTaskTimer, 1000);
+    } else {
+      setTaskElapsedSec(activeTask?.accumulatedSeconds || 0);
+    }
+
+    return () => {
+      if (stopTimer) stopTimer();
+    };
+  }, [activeTask]);
+
+  // Task End-Time Reminders (Active app-wide in PersistentActivityBar)
+  const [reminderSettings, setReminderSettings] = useState<{
+    firstMinutes: number;
+    secondMinutes: number;
+    completionEnabled: boolean;
+  }>({ firstMinutes: 30, secondMinutes: 15, completionEnabled: true });
+
+  useEffect(() => {
+    const fetchTaskReminderSettings = () => {
+      apiClient.get('/settings/task-reminders').then(res => {
+        if (res.data?.success && res.data?.data) {
+          const d = res.data.data;
+          setReminderSettings({
+            firstMinutes: Number(d.taskReminderFirstMinutes) || 30,
+            secondMinutes: Number(d.taskReminderSecondMinutes) || 15,
+            completionEnabled: d.taskReminderCompletionEnabled === true || String(d.taskReminderCompletionEnabled).toLowerCase() === 'true',
+          });
+        }
+      }).catch(() => { /* fail silently */ });
+    };
+
+    fetchTaskReminderSettings();
+    window.addEventListener('settings-changed', fetchTaskReminderSettings);
+    const pollId = setInterval(fetchTaskReminderSettings, 10000);
+
+    return () => {
+      window.removeEventListener('settings-changed', fetchTaskReminderSettings);
+      clearInterval(pollId);
+    };
+  }, []);
+
+  const activeTaskForReminder = React.useMemo(() => {
+    if (!activeTask) return null;
+    const isRunning = activeTask.status?.toLowerCase() === 'running' || activeTask.status === '1';
+    if (!isRunning) return null;
+    return {
+      id: activeTask.taskId,
+      moduleName: activeTask.moduleName || 'Task',
+      status: 'Running',
+      plannedDurationMinutes: activeTask.plannedDurationMinutes,
+      totalProductiveSeconds: taskElapsedSec,
+    };
+  }, [activeTask?.taskId, activeTask?.status, activeTask?.plannedDurationMinutes, activeTask?.moduleName]);
+
+  useTaskEndReminders(activeTaskForReminder, taskElapsedSec, reminderSettings);
+
+  // Dropdown Popover Click-Outside & Keyboard Handling
+  useEffect(() => {
+    if (!showBreakMenu && !showActivityMenu) return;
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (showBreakMenu && breakDropdownRef.current && !breakDropdownRef.current.contains(target)) {
+        setShowBreakMenu(false);
+      }
+      if (showActivityMenu && activityDropdownRef.current && !activityDropdownRef.current.contains(target)) {
+        setShowActivityMenu(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowBreakMenu(false);
+        setShowActivityMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showBreakMenu, showActivityMenu]);
 
   // Toast auto-hide
   useEffect(() => {
-    if (toastNotification) {
-      const timer = setTimeout(() => setToastNotification(null), 5000);
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000);
       return () => clearTimeout(timer);
     }
-  }, [toastNotification]);
+  }, [toast]);
+
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = !!(activeBreak || pendingBreakType || pendingSupportType || conflictModal || showStopModal);
+    if (isAnyModalOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [activeBreak, pendingBreakType, pendingSupportType, conflictModal, showStopModal]);
+
+  // Global Escape key handler for dismissible dialogs
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (pendingBreakType && !activeBreak) {
+          setPendingBreakType(null);
+        } else if (pendingSupportType) {
+          setPendingSupportType(null);
+        } else if (conflictModal) {
+          setConflictModal(null);
+        } else if (showStopModal) {
+          setShowStopModal(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pendingBreakType, activeBreak, pendingSupportType, conflictModal, showStopModal]);
+
+  // Helper to validate and prompt in-app modal if session conflict exists
+  const checkSessionConflict = (newActivityName: string) => {
+    if (activeBreak) {
+      setConflictModal({
+        title: 'Break in Progress',
+        message: `You currently have an active "${activeBreak.breakTypeName}" break running. Please stop your active break before starting "${newActivityName}".`,
+        activeType: 'break',
+        activeName: activeBreak.breakTypeName,
+      });
+      return true;
+    }
+    if (activeSupport) {
+      setConflictModal({
+        title: 'Support Activity in Progress',
+        message: `You currently have an active "${activeSupport.activityTypeName}" activity in progress. Please complete or stop it before starting "${newActivityName}".`,
+        activeType: 'support',
+        activeName: activeSupport.activityTypeName,
+      });
+      return true;
+    }
+    return false;
+  };
 
   // Start Break
   const handleStartBreak = async (typeId: number) => {
-    if (activeBreak || activeSupport) {
-      alert('Cannot start a new activity while another session is active.');
-      return;
-    }
+    const btName = breakTypes.find((b) => b.id === typeId)?.name || 'Break';
+    if (checkSessionConflict(btName)) return;
 
     try {
       setStartingBreak(true);
@@ -256,9 +510,10 @@ export const PersistentActivityBar: React.FC = () => {
         setPendingBreakType(null);
         fetchActiveSessions();
         window.dispatchEvent(new Event('activity-changed'));
+        window.dispatchEvent(new Event('task-changed'));
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to start break.');
+      showToast(err.response?.data?.message || 'Failed to start break.', 'error');
     } finally {
       setStartingBreak(false);
     }
@@ -270,13 +525,14 @@ export const PersistentActivityBar: React.FC = () => {
     try {
       setStoppingBreak(true);
       await apiClient.post(`/breaks/${activeBreak.id}/stop`);
-      setToastNotification(`Break "${activeBreak.breakTypeName}" stopped successfully.`);
+      showToast(`Break "${activeBreak.breakTypeName}" stopped successfully.`, 'success');
       setActiveBreak(null);
       setPendingBreakType(null);
       fetchActiveSessions();
       window.dispatchEvent(new Event('activity-changed'));
+      window.dispatchEvent(new Event('task-changed'));
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to stop break.');
+      showToast(err.response?.data?.message || 'Failed to stop break.', 'error');
     } finally {
       setStoppingBreak(false);
     }
@@ -284,19 +540,18 @@ export const PersistentActivityBar: React.FC = () => {
 
   // Start Support activity
   const handleStartSupport = async (typeId: number) => {
-    if (activeBreak || activeSupport) {
-      alert('Cannot start a new activity while another session is active.');
-      return;
-    }
+    const stName = supportTypes.find((s) => s.id === typeId)?.name || 'Support Activity';
+    if (checkSessionConflict(stName)) return;
 
     try {
       const res = await apiClient.post('/support/start', { activityTypeId: typeId });
       if (res.data.success) {
         fetchActiveSessions();
         window.dispatchEvent(new Event('activity-changed'));
+        window.dispatchEvent(new Event('task-changed'));
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to start support activity.');
+      showToast(err.response?.data?.message || 'Failed to start support activity.', 'error');
     }
   };
 
@@ -378,20 +633,21 @@ export const PersistentActivityBar: React.FC = () => {
           followUpDate,
         });
 
-        setToastNotification(`Demo follow-up reminder has been scheduled for ${new Date(followUpDate).toLocaleDateString()}.`);
+        showToast(`Demo follow-up reminder has been scheduled for ${new Date(followUpDate).toLocaleDateString()}.`, 'success');
       } else {
         await apiClient.post(`/support/${activeSupport.id}/stop`, {
           remarks: stopRemarks.trim(),
           ...payload,
         });
 
-        setToastNotification(`Activity "${activeSupport.activityTypeName}" completed successfully.`);
+        showToast(`Activity "${activeSupport.activityTypeName}" completed successfully.`, 'success');
       }
 
       setShowStopModal(false);
       setActiveSupport(null);
       fetchActiveSessions();
       window.dispatchEvent(new Event('activity-changed'));
+      window.dispatchEvent(new Event('task-changed'));
     } catch (err: any) {
       setStopError(err.response?.data?.message || 'Failed to complete support activity.');
     } finally {
@@ -461,15 +717,15 @@ export const PersistentActivityBar: React.FC = () => {
       return {
         state: 'ready',
         badgeLabel: 'Ready to Start Break',
-        badgeBg: '#ecfdf5',
-        badgeBorder: '#a7f3d0',
-        badgeColor: '#065f46',
-        badgeDotColor: '#10b981',
-        ringColor: '#10b981',
-        ringTrackBg: '#f3f4f6',
-        timerTextColor: '#111827',
-        progressTextColor: '#6b7280',
-        buttonBg: '#059669',
+        badgeBg: 'var(--success-bg)',
+        badgeBorder: 'rgba(16, 185, 129, 0.3)',
+        badgeColor: 'var(--success-text)',
+        badgeDotColor: 'var(--success)',
+        ringColor: 'var(--success)',
+        ringTrackBg: 'var(--border)',
+        timerTextColor: 'var(--text-main)',
+        progressTextColor: 'var(--text-muted)',
+        buttonBg: 'var(--success)',
         buttonShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
         srAnnouncement: 'Break ready to start',
       };
@@ -478,15 +734,15 @@ export const PersistentActivityBar: React.FC = () => {
       return {
         state: 'exceeded',
         badgeLabel: 'Break Time Exceeded',
-        badgeBg: '#fef2f2',
-        badgeBorder: '#fca5a5',
-        badgeColor: '#991b1b',
-        badgeDotColor: '#dc2626',
-        ringColor: '#dc2626',
-        ringTrackBg: '#fee2e2',
-        timerTextColor: '#dc2626',
-        progressTextColor: '#dc2626',
-        buttonBg: '#dc2626',
+        badgeBg: 'var(--danger-bg)',
+        badgeBorder: 'rgba(239, 68, 68, 0.3)',
+        badgeColor: 'var(--danger-text)',
+        badgeDotColor: 'var(--danger)',
+        ringColor: 'var(--danger)',
+        ringTrackBg: 'rgba(239, 68, 68, 0.15)',
+        timerTextColor: 'var(--danger-text)',
+        progressTextColor: 'var(--danger-text)',
+        buttonBg: 'var(--danger)',
         buttonShadow: '0 2px 8px rgba(220, 38, 38, 0.35)',
         srAnnouncement: 'Break time limit exceeded',
       };
@@ -495,15 +751,15 @@ export const PersistentActivityBar: React.FC = () => {
       return {
         state: 'warning',
         badgeLabel: 'Approaching Limit',
-        badgeBg: '#fefce8',
-        badgeBorder: '#fef08a',
-        badgeColor: '#854d0e',
-        badgeDotColor: '#eab308',
-        ringColor: '#eab308',
-        ringTrackBg: '#fef9c3',
-        timerTextColor: '#a16207',
-        progressTextColor: '#854d0e',
-        buttonBg: '#E8873C',
+        badgeBg: 'var(--warning-bg)',
+        badgeBorder: 'rgba(245, 158, 11, 0.3)',
+        badgeColor: 'var(--warning-text)',
+        badgeDotColor: 'var(--warning)',
+        ringColor: 'var(--warning)',
+        ringTrackBg: 'var(--border)',
+        timerTextColor: 'var(--warning-text)',
+        progressTextColor: 'var(--warning-text)',
+        buttonBg: 'var(--primary)',
         buttonShadow: '0 2px 4px rgba(232, 135, 60, 0.25)',
         srAnnouncement: 'Break time approaching limit',
       };
@@ -511,15 +767,15 @@ export const PersistentActivityBar: React.FC = () => {
     return {
       state: 'normal',
       badgeLabel: 'Break in Progress',
-      badgeBg: '#ecfdf5',
-      badgeBorder: '#a7f3d0',
-      badgeColor: '#065f46',
-      badgeDotColor: '#10b981',
-      ringColor: '#10b981',
-      ringTrackBg: '#f3f4f6',
-      timerTextColor: '#111827',
-      progressTextColor: '#059669',
-      buttonBg: '#E8873C',
+      badgeBg: 'var(--success-bg)',
+      badgeBorder: 'rgba(16, 185, 129, 0.3)',
+      badgeColor: 'var(--success-text)',
+      badgeDotColor: 'var(--success)',
+      ringColor: 'var(--success)',
+      ringTrackBg: 'var(--border)',
+      timerTextColor: 'var(--text-main)',
+      progressTextColor: 'var(--success-text)',
+      buttonBg: 'var(--primary)',
       buttonShadow: '0 2px 4px rgba(232, 135, 60, 0.25)',
       srAnnouncement: 'Break in progress',
     };
@@ -531,24 +787,33 @@ export const PersistentActivityBar: React.FC = () => {
 
   return (
     <>
-      {/* Full-Screen Break Modal Overlay */}
-      {(activeBreak || pendingBreakType) && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(17, 24, 39, 0.45)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-          zIndex: 999999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem',
-          userSelect: 'none',
-        }}>
+      {/* Full-Screen Break Modal Overlay (Rendered at Root via Portal) */}
+      {(activeBreak || pendingBreakType) && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !activeBreak) {
+              setPendingBreakType(null);
+            }
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(17, 24, 39, 0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+          }}
+        >
           {/* Screen reader live announcement for state changes */}
           <div aria-live="polite" style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>
             {breakTheme.srAnnouncement}
@@ -556,17 +821,18 @@ export const PersistentActivityBar: React.FC = () => {
 
           <div
             style={{
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
               borderRadius: '22px',
               width: '100%',
               maxWidth: '480px',
               padding: '1.35rem 1.25rem 1.15rem',
               textAlign: 'center',
-              boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1)',
+              boxShadow: 'var(--shadow-lg)',
               animation: 'modalIn 0.2s ease-out',
               position: 'relative',
               overflow: 'hidden',
+              zIndex: 10001,
             }}
           >
             {/* 1. Header: [Break icon] {Break Type Name} / ● {Status Label} */}
@@ -584,7 +850,7 @@ export const PersistentActivityBar: React.FC = () => {
                   width: '40px',
                   height: '40px',
                   borderRadius: '50%',
-                  backgroundColor: '#fff4e6',
+                  backgroundColor: 'var(--primary-tint)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -668,14 +934,14 @@ export const PersistentActivityBar: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel-raised)',
+              border: '1px solid var(--border)',
               borderRadius: '12px',
               padding: '0.5rem 1rem',
               marginBottom: '0.85rem',
             }}>
               <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Started
                 </div>
                 <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '0.1rem' }}>
@@ -683,10 +949,10 @@ export const PersistentActivityBar: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ width: '1px', height: '22px', backgroundColor: '#e5e7eb' }} />
+              <div style={{ width: '1px', height: '22px', backgroundColor: 'var(--border)' }} />
 
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: '0.675rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Allowed
                 </div>
                 <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '0.1rem' }}>
@@ -764,22 +1030,22 @@ export const PersistentActivityBar: React.FC = () => {
                 }}>
                   {formattedElapsed}
                 </div>
-                <div style={{ fontSize: '0.625rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.05rem' }}>
+                <div style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.05rem' }}>
                   Elapsed
                 </div>
 
-                <div style={{ width: '20px', height: '1px', backgroundColor: '#e5e7eb', margin: '0.25rem 0 0.2rem' }} />
+                <div style={{ width: '20px', height: '1px', backgroundColor: 'var(--border)', margin: '0.25rem 0 0.2rem' }} />
 
                 <div style={{
                   fontFamily: 'Consolas, Monaco, "Courier New", monospace',
                   fontSize: '0.875rem',
                   fontWeight: 600,
-                  color: '#4b5563',
+                  color: 'var(--text-secondary)',
                   lineHeight: 1,
                 }}>
                   {formattedAllowed}
                 </div>
-                <div style={{ fontSize: '0.6rem', fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.05rem' }}>
+                <div style={{ fontSize: '0.6rem', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.05rem' }}>
                   Allowed
                 </div>
               </div>
@@ -798,8 +1064,8 @@ export const PersistentActivityBar: React.FC = () => {
             {/* 4. Exceeded Warning Banner (Only in Exceeded State) */}
             {isOverBreak && (
               <div style={{
-                background: '#fef2f2',
-                border: '1px solid #fca5a5',
+                background: 'var(--danger-bg)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
                 borderRadius: '10px',
                 padding: '0.5rem 0.75rem',
                 marginBottom: '0.75rem',
@@ -807,12 +1073,12 @@ export const PersistentActivityBar: React.FC = () => {
                 alignItems: 'center',
                 gap: '0.45rem',
                 textAlign: 'left',
-                color: '#991b1b',
+                color: 'var(--danger-text)',
                 fontSize: '0.775rem',
                 fontWeight: 600,
                 lineHeight: 1.3,
               }}>
-                <AlertCircle size={15} style={{ color: '#dc2626', flexShrink: 0 }} />
+                <AlertCircle size={15} style={{ color: 'var(--danger)', flexShrink: 0 }} />
                 <span>
                   ⚠ You have exceeded your allowed break time by <strong>{formattedOverage}</strong>.
                 </span>
@@ -915,38 +1181,49 @@ export const PersistentActivityBar: React.FC = () => {
               </span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Full-Screen Locked Support Activity Start Modal Overlay */}
-      {pendingSupportType && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(17, 24, 39, 0.4)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-          zIndex: 999999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1.5rem',
-          userSelect: 'none',
-        }}>
+      {/* Full-Screen Locked Support Activity Start Modal Overlay (Rendered at Root via Portal) */}
+      {pendingSupportType && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setPendingSupportType(null);
+            }
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(17, 24, 39, 0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+          }}
+        >
           <div style={{
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
+            background: 'var(--panel)',
+            border: '1px solid var(--border)',
             borderRadius: '20px',
             width: '100%',
             maxWidth: '360px',
             padding: '1.75rem 1.5rem',
             textAlign: 'center',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            boxShadow: 'var(--shadow-lg)',
             animation: 'modalIn 0.2s ease-out',
             position: 'relative',
+            zIndex: 10001,
           }}>
             {/* Close Button */}
             <button
@@ -959,7 +1236,7 @@ export const PersistentActivityBar: React.FC = () => {
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: '#9ca3af',
+                color: 'var(--text-muted)',
                 padding: '0.25rem',
                 borderRadius: '50%',
                 display: 'flex',
@@ -979,8 +1256,8 @@ export const PersistentActivityBar: React.FC = () => {
               width: '56px',
               height: '56px',
               borderRadius: '50%',
-              backgroundColor: '#eff6ff',
-              color: '#3b82f6',
+              backgroundColor: 'var(--primary-tint)',
+              color: 'var(--primary)',
               marginBottom: '0.85rem',
             }}>
               {getSupportIcon(pendingSupportType.name, true, 26)}
@@ -1034,191 +1311,755 @@ export const PersistentActivityBar: React.FC = () => {
 
             {/* Inset Callout */}
             <div style={{
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel-raised)',
+              border: '1px solid var(--border)',
               borderRadius: '12px',
               padding: '0.65rem 0.85rem',
               fontSize: '0.75rem',
-              color: '#4b5563',
+              color: 'var(--text-secondary)',
               lineHeight: 1.4,
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
               textAlign: 'left',
             }}>
-              <Info size={16} style={{ color: '#9ca3af', flexShrink: 0 }} />
+              <Info size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
               <span>Starting a support activity will automatically place your current work task <strong>on hold</strong>.</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Toast Notification Popup */}
-      {toastNotification && (
-        <div className="toast-container">
-          <div className="toast toast-success">
-            <Sparkles size={18} style={{ color: 'var(--success)' }} />
-            <span>{toastNotification}</span>
+      {/* In-App Active Session Conflict Modal Dialog (Rendered at Root via Portal) */}
+      {conflictModal && createPortal(
+        <div
+          className="modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setConflictModal(null);
+            }
+          }}
+          style={{ zIndex: 10000, pointerEvents: 'auto' }}
+        >
+          <div className="modal-content" style={{ maxWidth: '440px', textAlign: 'center', padding: '1.75rem 1.5rem', borderRadius: '22px', zIndex: 10001 }}>
+            <div style={{
+              width: '52px',
+              height: '52px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--warning-bg)',
+              color: 'var(--warning)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1rem auto',
+            }}>
+              <AlertTriangle size={26} />
+            </div>
+
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 0.5rem 0' }}>
+              {conflictModal.title}
+            </h3>
+
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 1.35rem 0' }}>
+              {conflictModal.message}
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '0.6rem 1rem', borderRadius: '10px' }}
+                onClick={() => setConflictModal(null)}
+              >
+                Dismiss
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ flex: 1.35, padding: '0.6rem 1rem', borderRadius: '10px' }}
+                onClick={() => {
+                  const type = conflictModal.activeType;
+                  setConflictModal(null);
+                  if (type === 'break') {
+                    handleStopBreak();
+                  } else {
+                    handleOpenStopSupport();
+                  }
+                }}
+              >
+                <StopCircle size={15} />
+                <span>{conflictModal.activeType === 'break' ? 'Stop Active Break' : 'Complete Activity'}</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modern In-App Toast Notification (Rendered at Root via Portal) */}
+      {toast && createPortal(
+        <div className="toast-container" style={{ zIndex: 10002 }}>
+          <div className={`toast toast-${toast.type}`}>
+            {toast.type === 'success' ? (
+              <Sparkles size={18} style={{ color: 'var(--success)' }} />
+            ) : toast.type === 'error' ? (
+              <AlertCircle size={18} style={{ color: 'var(--danger)' }} />
+            ) : (
+              <AlertTriangle size={18} style={{ color: 'var(--warning)' }} />
+            )}
+            <span>{toast.message}</span>
             <button
-              onClick={() => setToastNotification(null)}
+              onClick={() => setToast(null)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 'auto', color: 'var(--text-muted)' }}
             >
               <X size={14} />
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Persistent Activity Bar Header */}
+      {/* Compact Single-Row Sticky Status Bar */}
       <div style={{
-        background: '#ffffff',
-        borderBottom: '1px solid #e5e7eb',
-        padding: '0.6rem 1.5rem',
+        position: 'relative',
+        zIndex: 80,
+        height: '52px',
+        minHeight: '48px',
+        maxHeight: '56px',
+        background: 'var(--panel)',
+        borderBottom: '1px solid var(--border)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        padding: '0 1.5rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '0.75rem',
+        gap: '1rem',
       }}>
-        {/* Active Session Badge & Counter */}
-        {(activeBreak || activeSupport) ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            {activeBreak ? (
+        {/* Left: Priority Display Logic */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flex: 1 }}>
+          {activeBreak ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flexWrap: 'nowrap' }}>
               <span
                 className={`badge ${isOverBreak ? 'badge-danger' : isWarningStage ? 'badge-warning' : 'badge-warning'}`}
                 style={{
-                  fontSize: '0.825rem',
-                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.785rem',
+                  padding: '0.3rem 0.75rem',
                   backgroundColor: isOverBreak ? '#fef2f2' : isWarningStage ? '#fefce8' : '#ecfdf5',
                   borderColor: isOverBreak ? '#fca5a5' : isWarningStage ? '#fef08a' : '#a7f3d0',
                   color: isOverBreak ? '#dc2626' : isWarningStage ? '#854d0e' : '#065f46',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.4rem',
-                  transition: 'all 0.3s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {isOverBreak ? (
-                  <AlertCircle size={14} style={{ color: '#dc2626' }} />
+                  <AlertCircle size={14} style={{ color: '#dc2626', flexShrink: 0 }} />
                 ) : isWarningStage ? (
-                  <AlertTriangle size={14} style={{ color: '#ca8a04' }} />
+                  <AlertTriangle size={14} style={{ color: '#ca8a04', flexShrink: 0 }} />
                 ) : (
-                  <Clock size={14} style={{ color: '#059669' }} />
+                  <Coffee size={14} style={{ color: '#059669', flexShrink: 0 }} />
                 )}
-                Active: <strong>{activeBreak.breakTypeName}</strong> ({formattedElapsed} / {formattedAllowed}
-                {isOverBreak
-                  ? ` • Exceeded by ${formatExceededTime(exceededSec)}`
-                  : isWarningStage
-                  ? ` • ${formatRemainingTime(remainingSec)} left`
-                  : ''}
-                )
+                <span>Active Break: <strong style={{ color: 'inherit' }}>{activeBreak.breakTypeName}</strong></span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, marginLeft: '2px' }}>
+                  ({formattedElapsed} / {formattedAllowed})
+                </span>
+                {isOverBreak && (
+                  <span style={{ fontWeight: 700, color: '#dc2626' }}>
+                    • Exceeded by {formatExceededTime(exceededSec)}
+                  </span>
+                )}
+                {isWarningStage && (
+                  <span style={{ fontWeight: 600, color: '#854d0e' }}>
+                    • {formatRemainingTime(remainingSec)} left
+                  </span>
+                )}
               </span>
-            ) : (
-              <span className="badge badge-primary" style={{ fontSize: '0.825rem', padding: '0.35rem 0.75rem' }}>
-                <Clock size={14} />
-                Active: <strong>{activeSupport?.activityTypeName}</strong> ({formatClock(elapsedSec)})
+            </div>
+          ) : activeSupport ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flexWrap: 'nowrap' }}>
+              <span
+                className="badge badge-primary"
+                style={{
+                  fontSize: '0.785rem',
+                  padding: '0.3rem 0.75rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  whiteSpace: 'nowrap',
+                  backgroundColor: 'rgba(147, 51, 234, 0.12)',
+                  borderColor: 'rgba(147, 51, 234, 0.3)',
+                  color: '#9333ea',
+                }}
+              >
+                {getSupportIcon(activeSupport.activityTypeName, false, 14)}
+                <span>Active Support: <strong style={{ color: 'inherit' }}>{activeSupport.activityTypeName}</strong></span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, marginLeft: '2px' }}>
+                  ({formatClock(elapsedSec, true)})
+                </span>
               </span>
-            )}
-
-            {activeBreak && (
-              <button className="btn btn-danger btn-sm" onClick={handleStopBreak}>
-                <StopCircle size={14} />
-                <span>Stop Break</span>
-              </button>
-            )}
-
-            {activeSupport && (
-              <button className="btn btn-danger btn-sm" onClick={handleOpenStopSupport}>
-                <StopCircle size={14} />
-                <span>{activeSupport.activityTypeName === 'Demo' ? 'Complete Demo' : 'Stop Activity'}</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-main)' }}>
-              Quick Activities:
-            </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              (Clicking automatically holds active work task)
-            </span>
-          </div>
-        )}
-
-        {/* Quick Activity Action Buttons */}
-        <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Breaks Group */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
-              Breaks:
-            </span>
-            {breakTypes.map((bt) => {
-              const isThisActive = activeBreak?.breakTypeId === bt.id;
-              return (
-                <button
-                  key={`break-${bt.id}`}
-                  type="button"
-                  className={`activity-btn ${isThisActive ? 'active' : ''}`}
-                  disabled={!!activeSupport || (!!activeBreak && !isThisActive)}
-                  title={`${bt.name} (${bt.allowedMinutes ?? 15} mins allowed)`}
-                  onClick={() => {
-                    if (activeBreak || activeSupport) {
-                      alert('Cannot start a new activity while another session is active.');
-                      return;
-                    }
-                    setPendingBreakType(bt);
+            </div>
+          ) : (activeTask && (activeTask.status?.toLowerCase() === 'running' || activeTask.status === '1') && activeTask.startTime) ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, overflow: 'hidden' }}>
+              <div
+                className="activity-status-pill"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  padding: '0.3rem 0.75rem',
+                  borderRadius: '9999px',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  fontSize: '0.785rem',
+                  color: 'var(--text-main)',
+                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                }}
+              >
+                <span className="pulse-dot-green" style={{ flexShrink: 0 }} />
+                <span style={{ color: 'var(--text-secondary)' }}>Task:</span>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    color: 'var(--text-main)',
+                    maxWidth: '260px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-block',
+                  }}
+                  title={activeTask.moduleName}
+                >
+                  {activeTask.moduleName || 'Running Task'}
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'monospace',
+                    fontWeight: 700,
+                    color: 'var(--primary)',
+                    marginLeft: '2px',
                   }}
                 >
-                  {getBreakIcon(bt.name, isThisActive, 15)}
-                  <span>{bt.name}</span>
-                  {bt.allowedMinutes && (
-                    <span style={{ fontSize: '0.675rem', opacity: 0.7, marginLeft: '0.15rem' }}>
-                      ({bt.allowedMinutes}m)
-                    </span>
-                  )}
-                  {isThisActive && <Check size={13} style={{ color: '#E8873C', marginLeft: '0.1rem' }} />}
-                </button>
-              );
-            })}
+                  {formatClock(taskElapsedSec, true)}
+                </span>
+              </div>
+              <span
+                title="Starting any quick break or support activity will automatically put your running task on hold"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  fontSize: '0.7rem',
+                  color: 'var(--text-muted)',
+                  backgroundColor: 'rgba(100, 116, 139, 0.08)',
+                  border: '1px solid rgba(100, 116, 139, 0.15)',
+                  padding: '0.15rem 0.45rem',
+                  borderRadius: '6px',
+                  cursor: 'help',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Info size={11} />
+                <span>Auto-holds on activity</span>
+              </span>
+            </div>
+          ) : (activeTask && (activeTask.status?.toLowerCase() === 'onhold' || activeTask.status?.toLowerCase() === 'on hold' || activeTask.status === '2')) ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, overflow: 'hidden' }}>
+              <div
+                className="activity-status-pill-idle"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  padding: '0.3rem 0.75rem',
+                  borderRadius: '9999px',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  fontSize: '0.785rem',
+                  color: 'var(--warning-text)',
+                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                }}
+              >
+                <span className="dot-idle" style={{ backgroundColor: 'var(--warning)', flexShrink: 0 }} />
+                <span>Task on hold:</span>
+                <strong
+                  style={{
+                    color: 'var(--text-main)',
+                    maxWidth: '220px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={activeTask.moduleName}
+                >
+                  {activeTask.moduleName}
+                </strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/work-task')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--primary)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                Resume in Tasks →
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, overflow: 'hidden' }}>
+              <div
+                className="activity-status-pill-idle"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  padding: '0.3rem 0.75rem',
+                  borderRadius: '9999px',
+                  background: 'var(--panel-raised)',
+                  border: '1px solid var(--border)',
+                  fontSize: '0.785rem',
+                  color: 'var(--text-secondary)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span className="dot-idle" style={{ flexShrink: 0 }} />
+                <span>No active task</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/work-task')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--primary)',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  textDecoration: 'underline',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                <Play size={11} />
+                <span>Start Task</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Quick Action Dropdown Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+          {/* Active Session Stop Action Shortcut */}
+          {activeBreak && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={handleStopBreak}
+              style={{
+                borderRadius: '8px',
+                padding: '0.32rem 0.75rem',
+                fontSize: '0.785rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontWeight: 600,
+              }}
+            >
+              <StopCircle size={14} />
+              <span>Stop Break</span>
+            </button>
+          )}
+
+          {activeSupport && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={handleOpenStopSupport}
+              style={{
+                borderRadius: '8px',
+                padding: '0.32rem 0.75rem',
+                fontSize: '0.785rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontWeight: 600,
+              }}
+            >
+              <StopCircle size={14} />
+              <span>{activeSupport.activityTypeName === 'Demo' ? 'Complete Demo' : 'Stop Activity'}</span>
+            </button>
+          )}
+
+          {/* Browser Notification Permission & Test Shortcuts */}
+          {notifPermission === 'default' && (
+            <button
+              type="button"
+              onClick={handleEnableNotifications}
+              title="Click to allow desktop browser notifications for idle alerts and task timers"
+              style={{
+                background: 'rgba(232, 135, 60, 0.12)',
+                border: '1px solid rgba(232, 135, 60, 0.4)',
+                color: 'var(--primary)',
+                padding: '0.28rem 0.65rem',
+                borderRadius: '8px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>🔔 Enable Alerts</span>
+            </button>
+          )}
+
+          {notifPermission === 'denied' && (
+            <span
+              title="Desktop notifications are blocked in your browser site settings. Click the lock/tune icon next to the address bar (URL) to allow notifications."
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: 'var(--danger-text, #dc2626)',
+                padding: '0.28rem 0.65rem',
+                borderRadius: '8px',
+                fontSize: '0.725rem',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                whiteSpace: 'nowrap',
+                cursor: 'help',
+              }}
+            >
+              <span>⚠️ Alerts Blocked</span>
+            </span>
+          )}
+
+          {/* Break Dropdown */}
+          <div ref={breakDropdownRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowBreakMenu(!showBreakMenu);
+                setShowActivityMenu(false);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: activeBreak ? '1px solid var(--primary)' : '1px solid var(--border)',
+                background: activeBreak ? 'var(--primary-tint)' : 'var(--panel-raised)',
+                color: activeBreak ? 'var(--primary)' : 'var(--text-main)',
+                transition: 'all 0.15s ease',
+              }}
+              aria-expanded={showBreakMenu}
+              aria-label="Open Break Menu"
+            >
+              <Coffee size={15} style={{ color: activeBreak ? 'var(--primary)' : '#0284c7' }} />
+              <span>{activeBreak ? `Break: ${activeBreak.breakTypeName}` : 'Break'}</span>
+              <ChevronDown
+                size={14}
+                style={{
+                  color: 'var(--text-muted)',
+                  transform: showBreakMenu ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.15s ease',
+                }}
+              />
+            </button>
+
+            {showBreakMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  width: '240px',
+                  background: 'var(--panel)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px',
+                  boxShadow: 'var(--shadow-lg)',
+                  padding: '0.5rem',
+                  zIndex: 100,
+                  animation: 'fadeIn 0.15s ease-out',
+                }}
+              >
+                <div style={{ padding: '0.3rem 0.5rem 0.4rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                    Quick Breaks
+                  </span>
+                  <span style={{ fontSize: '0.675rem', color: 'var(--text-dim)' }}>Auto-holds task</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {(breakTypes.length > 0 ? breakTypes : [
+                    { id: 1, name: 'Bio Break', allowedMinutes: 5 },
+                    { id: 2, name: 'Tea Break', allowedMinutes: 15 },
+                    { id: 3, name: 'Lunch Break', allowedMinutes: 30 },
+                    { id: 4, name: 'Call Break', allowedMinutes: 5 },
+                    { id: 5, name: 'Other', allowedMinutes: 5 },
+                  ]).map((bt) => {
+                    const isThisActive = activeBreak?.breakTypeId === bt.id;
+                    const isOther = bt.name.toLowerCase().includes('other');
+                    const allowedMins = bt.allowedMinutes ?? (isOther ? 5 : bt.name.toLowerCase().includes('tea') ? 15 : bt.name.toLowerCase().includes('lunch') ? 30 : 5);
+
+                    return (
+                      <button
+                        key={`break-opt-${bt.id}`}
+                        type="button"
+                        onClick={() => {
+                          setShowBreakMenu(false);
+                          if (checkSessionConflict(bt.name)) return;
+                          setPendingBreakType({ ...bt, allowedMinutes: allowedMins });
+                        }}
+                        disabled={!!activeSupport || (!!activeBreak && !isThisActive)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.45rem 0.65rem',
+                          borderRadius: '8px',
+                          border: isThisActive ? '1px solid var(--primary)' : '1px solid transparent',
+                          background: isThisActive ? 'var(--primary-tint)' : 'transparent',
+                          color: isThisActive ? 'var(--primary)' : 'var(--text-main)',
+                          cursor: (!!activeSupport || (!!activeBreak && !isThisActive)) ? 'not-allowed' : 'pointer',
+                          opacity: (!!activeSupport || (!!activeBreak && !isThisActive)) ? 0.5 : 1,
+                          fontSize: '0.8rem',
+                          fontWeight: isThisActive ? 700 : 500,
+                          textAlign: 'left',
+                          transition: 'all 0.12s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isThisActive && !activeSupport && !activeBreak) {
+                            e.currentTarget.style.background = 'var(--panel-raised)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isThisActive) {
+                            e.currentTarget.style.background = 'transparent';
+                          }
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                          {getBreakIcon(bt.name, isThisActive, 15, isOther)}
+                          <span>{bt.name}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: 'var(--panel-raised)',
+                              border: '1px solid var(--border)',
+                              color: 'var(--text-secondary)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {allowedMins}m
+                          </span>
+                          {isThisActive && <Check size={13} style={{ color: 'var(--primary)' }} />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {activeBreak && (
+                  <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: '0.45rem', marginTop: '0.45rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBreakMenu(false);
+                        handleStopBreak();
+                      }}
+                      className="btn btn-danger btn-sm"
+                      style={{ width: '100%', justifyContent: 'center', gap: '0.35rem', borderRadius: '8px' }}
+                    >
+                      <StopCircle size={14} />
+                      <span>Stop Active Break</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div style={{ width: '1px', height: '22px', backgroundColor: '#e5e7eb' }} />
+          {/* Activity Dropdown */}
+          <div ref={activityDropdownRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowActivityMenu(!showActivityMenu);
+                setShowBreakMenu(false);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: activeSupport ? '1px solid #9333ea' : '1px solid var(--border)',
+                background: activeSupport ? 'rgba(147, 51, 234, 0.12)' : 'var(--panel-raised)',
+                color: activeSupport ? '#9333ea' : 'var(--text-main)',
+                transition: 'all 0.15s ease',
+              }}
+              aria-expanded={showActivityMenu}
+              aria-label="Open Activity Menu"
+            >
+              <Headphones size={15} style={{ color: activeSupport ? '#9333ea' : '#9333ea' }} />
+              <span>{activeSupport ? `Activity: ${activeSupport.activityTypeName}` : 'Activity'}</span>
+              <ChevronDown
+                size={14}
+                style={{
+                  color: 'var(--text-muted)',
+                  transform: showActivityMenu ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.15s ease',
+                }}
+              />
+            </button>
 
-          {/* Support Activities Group */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.725rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.2rem' }}>
-              Support Activities:
-            </span>
-            {supportTypes.map((st) => {
-              const isThisActive = activeSupport?.activityTypeId === st.id;
-              return (
-                <button
-                  key={`support-${st.id}`}
-                  type="button"
-                  className={`activity-btn ${isThisActive ? 'active' : ''}`}
-                  disabled={!!activeBreak || (!!activeSupport && !isThisActive)}
-                  onClick={() => {
-                    if (activeBreak || activeSupport) {
-                      alert('Cannot start a new activity while another session is active.');
-                      return;
-                    }
-                    setPendingSupportType(st);
-                  }}
-                >
-                  {getSupportIcon(st.name, isThisActive, 15)}
-                  <span>{st.name}</span>
-                  {isThisActive && <Check size={13} style={{ color: '#E8873C', marginLeft: '0.1rem' }} />}
-                </button>
-              );
-            })}
+            {showActivityMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  width: '230px',
+                  background: 'var(--panel)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px',
+                  boxShadow: 'var(--shadow-lg)',
+                  padding: '0.5rem',
+                  zIndex: 100,
+                  animation: 'fadeIn 0.15s ease-out',
+                }}
+              >
+                <div style={{ padding: '0.3rem 0.5rem 0.4rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                    Support Activities
+                  </span>
+                  <span style={{ fontSize: '0.675rem', color: 'var(--text-dim)' }}>Auto-holds task</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {(supportTypes.length > 0 ? supportTypes : [
+                    { id: 1, name: 'Support Call' },
+                    { id: 2, name: 'Call' },
+                    { id: 3, name: 'Meeting' },
+                    { id: 4, name: 'Discussion' },
+                    { id: 5, name: 'Demo' },
+                  ]).map((st) => {
+                    const isThisActive = activeSupport?.activityTypeId === st.id;
+
+                    return (
+                      <button
+                        key={`support-opt-${st.id}`}
+                        type="button"
+                        onClick={() => {
+                          setShowActivityMenu(false);
+                          if (checkSessionConflict(st.name)) return;
+                          setPendingSupportType(st);
+                        }}
+                        disabled={!!activeBreak || (!!activeSupport && !isThisActive)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.45rem 0.65rem',
+                          borderRadius: '8px',
+                          border: isThisActive ? '1px solid #9333ea' : '1px solid transparent',
+                          background: isThisActive ? 'rgba(147, 51, 234, 0.12)' : 'transparent',
+                          color: isThisActive ? '#9333ea' : 'var(--text-main)',
+                          cursor: (!!activeBreak || (!!activeSupport && !isThisActive)) ? 'not-allowed' : 'pointer',
+                          opacity: (!!activeBreak || (!!activeSupport && !isThisActive)) ? 0.5 : 1,
+                          fontSize: '0.8rem',
+                          fontWeight: isThisActive ? 700 : 500,
+                          textAlign: 'left',
+                          transition: 'all 0.12s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isThisActive && !activeBreak && !activeSupport) {
+                            e.currentTarget.style.background = 'var(--panel-raised)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isThisActive) {
+                            e.currentTarget.style.background = 'transparent';
+                          }
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                          {getSupportIcon(st.name, isThisActive, 15)}
+                          <span>{st.name}</span>
+                        </div>
+                        {isThisActive && <Check size={13} style={{ color: '#9333ea' }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {activeSupport && (
+                  <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: '0.45rem', marginTop: '0.45rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActivityMenu(false);
+                        handleOpenStopSupport();
+                      }}
+                      className="btn btn-danger btn-sm"
+                      style={{ width: '100%', justifyContent: 'center', gap: '0.35rem', borderRadius: '8px' }}
+                    >
+                      <StopCircle size={14} />
+                      <span>{activeSupport.activityTypeName === 'Demo' ? 'Complete Demo' : 'Stop Activity'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Demo & Support Activity Completion Modal */}
-      {showStopModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+      {/* Demo & Support Activity Completion Modal (Rendered at Root via Portal) */}
+      {showStopModal && createPortal(
+        <div
+          className="modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowStopModal(false);
+            }
+          }}
+          style={{ zIndex: 10000, pointerEvents: 'auto' }}
+        >
+          <div className="modal-content" style={{ zIndex: 10001 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <h3 style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>
                 {activeSupport?.activityTypeName === 'Demo' ? 'Complete Demo Activity' : 'Complete Support Activity'}
@@ -1265,9 +2106,9 @@ export const PersistentActivityBar: React.FC = () => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: 'var(--primary)',
+                      color: '#E8873C',
                       fontSize: '0.785rem',
-                      fontWeight: 600,
+                      fontWeight: 700,
                       cursor: 'pointer',
                       textDecoration: 'underline',
                       padding: 0
@@ -1302,7 +2143,7 @@ export const PersistentActivityBar: React.FC = () => {
                       placeholder="Enter Product Name manually..."
                       required
                     />
-                    <span style={{ fontSize: '0.725rem', color: 'var(--primary)', marginTop: '0.25rem', display: 'inline-block', fontWeight: 500 }}>
+                    <span style={{ fontSize: '0.725rem', color: '#E8873C', marginTop: '0.25rem', display: 'inline-block', fontWeight: 600 }}>
                       ✨ Custom Product Name (Stored on this activity)
                     </span>
                   </div>
@@ -1331,7 +2172,7 @@ export const PersistentActivityBar: React.FC = () => {
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
                     ))}
-                    <option value="CUSTOM" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+                    <option value="CUSTOM" style={{ fontWeight: 'bold', color: '#E8873C' }}>
                       + Add Other Product...
                     </option>
                   </select>
@@ -1351,10 +2192,10 @@ export const PersistentActivityBar: React.FC = () => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: 'var(--primary)',
+                      color: (!isCustomProduct && !stopProductId) ? '#cbd5e1' : '#E8873C',
                       fontSize: '0.785rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
+                      fontWeight: 700,
+                      cursor: (!isCustomProduct && !stopProductId) ? 'not-allowed' : 'pointer',
                       textDecoration: 'underline',
                       padding: 0
                     }}
@@ -1382,10 +2223,10 @@ export const PersistentActivityBar: React.FC = () => {
                         setCustomClientName(e.target.value);
                         if (e.target.value.trim()) setClientError('');
                       }}
-                      placeholder="Enter Client Name manually..."
+                      placeholder="Enter Client Company Name manually..."
                       required
                     />
-                    <span style={{ fontSize: '0.725rem', color: 'var(--primary)', marginTop: '0.25rem', display: 'inline-block', fontWeight: 500 }}>
+                    <span style={{ fontSize: '0.725rem', color: '#E8873C', marginTop: '0.25rem', display: 'inline-block', fontWeight: 600 }}>
                       ✨ Custom Client Name (Stored on this activity)
                     </span>
                   </div>
@@ -1431,12 +2272,25 @@ export const PersistentActivityBar: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">
-                  {activeSupport?.activityTypeName === 'Demo' ? 'Review / Discussion Field *' : 'Remarks / Summary *'}
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>
+                    {activeSupport?.activityTypeName === 'Demo' ? 'Review / Discussion Field *' : 'Remarks / Summary *'}
+                  </label>
+                  <span
+                    style={{
+                      fontSize: '0.725rem',
+                      color: stopRemarks.length >= 500 ? '#ef4444' : stopRemarks.length >= 425 ? '#f59e0b' : '#94a3b8',
+                      fontWeight: stopRemarks.length >= 425 ? 600 : 400,
+                      transition: 'color 0.15s ease',
+                    }}
+                  >
+                    {stopRemarks.length}/500
+                  </span>
+                </div>
                 <textarea
                   className="form-textarea"
                   rows={3}
+                  maxLength={500}
                   value={stopRemarks}
                   onChange={(e) => setStopRemarks(e.target.value)}
                   placeholder={activeSupport?.activityTypeName === 'Demo' ? 'Enter demo feedback, client discussion points...' : 'Enter activity outcome or notes...'}
@@ -1488,7 +2342,8 @@ export const PersistentActivityBar: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

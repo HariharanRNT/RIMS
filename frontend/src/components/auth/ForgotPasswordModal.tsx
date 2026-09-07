@@ -92,11 +92,11 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
         style={{
           width: '100%',
           maxWidth: '440px',
-          background: '#ffffff',
+          background: 'var(--panel)',
           borderRadius: '20px',
           padding: '2.25rem 2rem',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-          border: '1px solid #e5e7eb',
+          boxShadow: 'var(--shadow-lg)',
+          border: '1px solid var(--border)',
           position: 'relative',
           userSelect: 'none',
         }}
@@ -110,12 +110,12 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
             position: 'absolute',
             top: '18px',
             right: '18px',
-            background: '#f3f4f6',
+            background: 'var(--panel-raised)',
             border: 'none',
             borderRadius: '50%',
             width: '32px',
             height: '32px',
-            color: '#6b7280',
+            color: 'var(--text-muted)',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -136,10 +136,10 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
               width: '48px',
               height: '48px',
               borderRadius: '12px',
-              background: '#f8f9fa',
+              background: 'var(--panel-raised)',
               padding: '4px',
-              border: '1px solid #e5e7eb',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-xs)',
             }}
           >
             <img src={rntLogo} alt="RNT Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -150,10 +150,10 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
           <>
             {/* Title & Subtitle */}
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#111827', margin: 0 }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                 Reset Password
               </h3>
-              <p style={{ color: '#6b7280', fontSize: '0.825rem', lineHeight: 1.45, marginTop: '0.4rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.825rem', lineHeight: 1.45, marginTop: '0.4rem' }}>
                 Enter your registered email address and we'll send you a link to reset your password.
               </p>
             </div>
@@ -162,9 +162,9 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
             {serverError && (
               <div
                 style={{
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#dc2626',
+                  background: 'var(--danger-bg)',
+                  border: '1px solid rgba(216, 64, 74, 0.3)',
+                  color: 'var(--danger-text)',
                   padding: '0.7rem 0.9rem',
                   borderRadius: '12px',
                   marginBottom: '1.25rem',
@@ -181,7 +181,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
 
             <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 600, color: '#111827', fontSize: '0.825rem' }}>
+                <label className="form-label" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.825rem' }}>
                   Registered Email Address
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -192,7 +192,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                       left: '14px',
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      color: emailError ? '#dc2626' : '#9ca3af',
+                      color: emailError ? 'var(--danger)' : 'var(--text-muted)',
                       transition: 'color 0.2s ease',
                     }}
                   />
@@ -202,9 +202,9 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                     style={{
                       paddingLeft: '2.6rem',
                       borderRadius: '12px',
-                      borderColor: emailError ? '#ef4444' : '#e5e7eb',
-                      backgroundColor: emailError ? '#fef2f2' : '#ffffff',
-                      color: '#111827',
+                      borderColor: emailError ? 'var(--danger)' : 'var(--border)',
+                      backgroundColor: emailError ? 'var(--danger-bg)' : 'var(--input)',
+                      color: 'var(--text-main)',
                       fontSize: '0.875rem',
                       height: '42px',
                     }}
@@ -214,7 +214,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                   />
                 </div>
                 {emailError && (
-                  <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 500, marginTop: '0.3rem', display: 'block' }}>
                     ⚠️ {emailError}
                   </span>
                 )}
@@ -227,8 +227,9 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                   width: '100%',
                   height: '44px',
                   borderRadius: '12px',
-                  background: loading ? '#e5e7eb' : 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
-                  borderColor: 'rgba(232,135,60,0.4)',
+                  background: loading ? 'var(--panel-raised)' : 'linear-gradient(135deg, #E8873C 0%, #F5A15D 100%)',
+                  border: loading ? '1px solid var(--border)' : '1px solid rgba(232,135,60,0.4)',
+                  color: loading ? 'var(--text-muted)' : '#ffffff',
                   fontSize: '0.9rem',
                   fontWeight: 700,
                   boxShadow: loading ? 'none' : '0 8px 20px -3px rgba(232, 135, 60, 0.35)',
@@ -237,6 +238,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '0.5rem',
+                  transition: 'all 0.2s ease',
                 }}
                 disabled={loading}
               >
@@ -259,35 +261,35 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                 width: '56px',
                 height: '56px',
                 borderRadius: '50%',
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
+                background: 'var(--success-bg)',
+                border: '1px solid rgba(21, 154, 99, 0.3)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#059669',
+                color: 'var(--success)',
                 marginBottom: '1rem',
               }}
             >
               <CheckCircle2 size={32} />
             </div>
 
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#111827', marginBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
               Check Your Email
             </h3>
 
-            <p style={{ color: '#6b7280', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1.5rem' }}>
-              If an account exists with <strong style={{ color: '#111827' }}>{email}</strong>, a password reset link has been dispatched to your inbox.
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1.5rem' }}>
+              If an account exists with <strong style={{ color: 'var(--text-main)' }}>{email}</strong>, a password reset link has been dispatched to your inbox.
             </p>
 
             <div
               style={{
-                background: '#f9fafb',
-                border: '1px solid #e5e7eb',
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--border)',
                 borderRadius: '12px',
                 padding: '0.85rem 1rem',
                 textAlign: 'left',
                 fontSize: '0.775rem',
-                color: '#6b7280',
+                color: 'var(--text-secondary)',
                 marginBottom: '1.5rem',
                 lineHeight: 1.45,
               }}
@@ -303,9 +305,9 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                 width: '100%',
                 height: '42px',
                 borderRadius: '12px',
-                background: '#ffffff',
-                borderColor: '#e5e7eb',
-                color: '#374151',
+                background: 'var(--panel-raised)',
+                borderColor: 'var(--border)',
+                color: 'var(--text-main)',
                 fontSize: '0.875rem',
                 fontWeight: 600,
                 display: 'flex',

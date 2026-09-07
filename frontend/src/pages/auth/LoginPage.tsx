@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { AlertCircle, X, Loader2 } from 'lucide-react';
 import { ForgotPasswordModal } from '../../components/auth/ForgotPasswordModal';
+import { ThemeToggle } from '../../components/layout/ThemeToggle';
 import rntLogo from '../../assets/RNT-Logo.png';
 
 interface FieldErrors {
@@ -163,9 +164,18 @@ export const LoginPage: React.FC = () => {
 
     try {
       const user = await login(email.trim(), password);
+      const isEmp = user.role === 'Employee' || (user.roles && user.roles.some((r: string) => r.toLowerCase() === 'employee'));
+      const isPureAdminUser = Boolean(
+        user.isSuperAdmin ||
+        (user.roles && user.roles.some((r: string) => r.toLowerCase() === 'admin' || r.toLowerCase() === 'super admin' || r.toLowerCase() === 'system admin')) ||
+        user.role?.toLowerCase() === 'admin' ||
+        user.role?.toLowerCase() === 'super admin' ||
+        user.role?.toLowerCase() === 'system admin'
+      ) && !isEmp;
+
       if (user.mustChangePassword) {
         navigate('/change-password');
-      } else if (user.role === 'Admin') {
+      } else if (isPureAdminUser) {
         navigate('/admin/dashboard');
       } else {
         navigate('/dashboard');
@@ -179,20 +189,31 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="rims-login-container">
+      {/* Floating Theme Switcher */}
+      <div style={{ position: 'fixed', top: '18px', right: '18px', zIndex: 1000 }}>
+        <ThemeToggle variant="button" />
+      </div>
+
       <style>{`
         .rims-login-container {
-          --login-ink: #F7F5F0;
-          --login-panel: #FFFFFF;
-          --login-panel-2: #EFECE5;
-          --login-line: #DDD7CB;
-          --login-stage-bg: #FCFAF7;
-          --login-text: #211E1A;
-          --login-text-dim: #736C5E;
-          --login-amber: #C97223;
-          --login-amber-soft: rgba(201, 114, 35, 0.24);
-          --login-teal: #1F996C;
-          --login-teal-soft: rgba(31, 153, 108, 0.24);
-          --login-slate: #BCB6A8;
+          --login-ink: var(--bg-app);
+          --login-panel: var(--panel);
+          --login-panel-2: var(--panel-raised);
+          --login-line: var(--border);
+          --login-stage-bg: var(--bg-app);
+          --login-text: var(--text-main);
+          --login-text-dim: var(--text-secondary);
+          --login-amber: var(--primary);
+          --login-amber-soft: var(--primary-tint);
+          --login-teal: var(--success);
+          --login-teal-soft: var(--success-bg);
+          --login-slate: var(--text-muted);
+          --login-card-bg: var(--panel);
+          --login-card-border: var(--border);
+          --login-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 16px 36px -4px rgba(0, 0, 0, 0.1);
+          --login-input-bg: var(--input);
+          --login-input-border: var(--input-border);
+          --login-console-glow: #F5F3ED;
 
           background: var(--login-ink);
           color: var(--login-text);
@@ -206,20 +227,26 @@ export const LoginPage: React.FC = () => {
           z-index: 100;
         }
 
+        [data-theme="dark"] .rims-login-container,
+        html.dark .rims-login-container {
+          --login-console-glow: #18202C;
+          --login-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 20px 40px -4px rgba(0, 0, 0, 0.6);
+        }
+
         /* ============ LEFT: LIVE PULSE CONSOLE ============ */
         .rims-console {
           position: relative;
           flex: 1.15;
           height: 100vh;
           background:
-            radial-gradient(ellipse 900px 600px at 20% 0%, #EFECE5 0%, var(--login-ink) 70%),
+            radial-gradient(ellipse 900px 600px at 20% 0%, var(--login-console-glow) 0%, var(--login-ink) 70%),
             var(--login-ink);
           padding: clamp(24px, 4.2vh, 48px) clamp(32px, 4.5vw, 64px);
           display: flex;
           flex-direction: column;
           justify-content: space-between;
           border-right: 1px solid var(--login-line);
-          box-shadow: 4px 0 24px -4px rgba(33, 30, 26, 0.04);
+          box-shadow: 4px 0 24px -4px rgba(0, 0, 0, 0.08);
           min-width: 0;
           z-index: 2;
           overflow: hidden;
@@ -268,13 +295,13 @@ export const LoginPage: React.FC = () => {
           width: 40px;
           height: 40px;
           border-radius: 10px;
-          background: #FFFFFF;
+          background: var(--login-panel);
           border: 1px solid var(--login-line);
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          box-shadow: 0 2px 8px rgba(33, 30, 26, 0.05);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
           padding: 5px;
         }
         .rims-brand-logo-img {
@@ -461,13 +488,11 @@ export const LoginPage: React.FC = () => {
         .rims-card {
           width: 100%;
           max-width: 418px;
-          background: #FFFFFF;
-          border: 1px solid #E5E0D4;
+          background: var(--login-card-bg);
+          border: 1px solid var(--login-card-border);
           border-radius: 16px;
           padding: clamp(32px, 4.5vh, 42px) clamp(28px, 3.5vw, 36px);
-          box-shadow:
-            0 4px 6px -1px rgba(33, 30, 26, 0.03),
-            0 16px 36px -4px rgba(33, 30, 26, 0.08);
+          box-shadow: var(--login-card-shadow);
           margin: auto;
         }
         .rims-card .eyebrow {
@@ -504,7 +529,7 @@ export const LoginPage: React.FC = () => {
           display: block;
           font-size: 12px;
           font-weight: 600;
-          color: #38342E;
+          color: var(--login-text);
           margin-bottom: 7px;
           letter-spacing: 0.01em;
         }
@@ -512,23 +537,23 @@ export const LoginPage: React.FC = () => {
           position: relative;
           display: flex;
           align-items: center;
-          background: #FFFFFF;
-          border: 1px solid #DCD6CA;
+          background: var(--login-input-bg);
+          border: 1px solid var(--login-input-border);
           border-radius: 9px;
-          box-shadow: 0 1px 2px rgba(33, 30, 26, 0.04);
-          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+          box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+          transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
         }
         .rims-field .input-wrap:focus-within {
           border-color: var(--login-amber);
           box-shadow: 0 0 0 3px var(--login-amber-soft);
         }
         .rims-field .input-wrap.has-error {
-          border-color: #ef4444;
-          background-color: #fff5f5;
+          border-color: var(--danger);
+          background-color: var(--danger-bg);
         }
         .rims-field .input-wrap.has-error:focus-within {
-          border-color: #dc2626;
-          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+          border-color: var(--danger);
+          box-shadow: 0 0 0 3px var(--danger-light);
         }
         .rims-field .input-wrap svg.input-icon {
           margin-left: 13px;
@@ -536,7 +561,7 @@ export const LoginPage: React.FC = () => {
           color: var(--login-text-dim);
         }
         .rims-field .input-wrap.has-error svg.input-icon {
-          color: #dc2626;
+          color: var(--danger);
         }
         .rims-field input {
           width: 100%;
@@ -549,7 +574,7 @@ export const LoginPage: React.FC = () => {
           padding: 12px 14px;
         }
         .rims-field input::placeholder {
-          color: #ADA79A;
+          color: var(--text-faint);
         }
         .rims-toggle-eye {
           background: none;
@@ -568,16 +593,16 @@ export const LoginPage: React.FC = () => {
 
         .rims-error-text {
           font-size: 11.5px;
-          color: #dc2626;
+          color: var(--danger);
           font-weight: 500;
           margin-top: 5px;
           display: block;
         }
 
         .rims-server-banner {
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          color: #dc2626;
+          background: var(--danger-bg);
+          border: 1px solid var(--danger-light);
+          color: var(--danger);
           padding: 0.75rem 0.9rem;
           border-radius: 9px;
           margin-bottom: 0.5rem;
@@ -665,7 +690,7 @@ export const LoginPage: React.FC = () => {
           margin-top: 24px;
           text-align: center;
           font-size: 11px;
-          color: #A1998A;
+          color: var(--login-text-dim);
           display: flex;
           align-items: center;
           justify-content: center;

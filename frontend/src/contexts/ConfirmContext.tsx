@@ -99,27 +99,27 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     switch (options.type) {
       case 'danger':
         return {
-          icon: <AlertTriangle size={24} color="#dc2626" />,
-          iconBg: '#fef2f2',
-          iconBorder: '#fecaca',
+          icon: <AlertTriangle size={24} color="var(--danger)" />,
+          iconBg: 'var(--danger-bg)',
+          iconBorder: 'rgba(216, 64, 74, 0.3)',
           confirmBtnBg: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
           confirmBtnHover: '#b91c1c',
           confirmBtnShadow: '0 4px 14px rgba(220, 38, 38, 0.35)',
         };
       case 'warning':
         return {
-          icon: <AlertCircle size={24} color="#d97706" />,
-          iconBg: '#fffbeb',
-          iconBorder: '#fde68a',
+          icon: <AlertCircle size={24} color="var(--warning)" />,
+          iconBg: 'var(--warning-bg)',
+          iconBorder: 'rgba(199, 122, 14, 0.3)',
           confirmBtnBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
           confirmBtnHover: '#b45309',
           confirmBtnShadow: '0 4px 14px rgba(217, 119, 6, 0.35)',
         };
       case 'success':
         return {
-          icon: <CheckCircle2 size={24} color="#059669" />,
-          iconBg: '#ecfdf5',
-          iconBorder: '#a7f3d0',
+          icon: <CheckCircle2 size={24} color="var(--success)" />,
+          iconBg: 'var(--success-bg)',
+          iconBorder: 'rgba(21, 154, 99, 0.3)',
           confirmBtnBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
           confirmBtnHover: '#047857',
           confirmBtnShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
@@ -127,9 +127,9 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
       case 'info':
       default:
         return {
-          icon: <Info size={24} color="#E8873C" />,
-          iconBg: '#fff7ed',
-          iconBorder: '#fed7aa',
+          icon: <Info size={24} color="var(--primary)" />,
+          iconBg: 'var(--primary-tint)',
+          iconBorder: 'rgba(232, 135, 60, 0.3)',
           confirmBtnBg: 'linear-gradient(135deg, #E8873C 0%, #d4782f 100%)',
           confirmBtnHover: '#c26620',
           confirmBtnShadow: '0 4px 14px rgba(232, 135, 60, 0.35)',
@@ -150,7 +150,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
             backdropFilter: 'blur(6px)',
             WebkitBackdropFilter: 'blur(6px)',
             display: 'flex',
@@ -169,12 +169,12 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
               position: 'relative',
               width: '100%',
               maxWidth: '460px',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--panel)',
               borderRadius: '20px',
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.04)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-lg)',
               padding: '1.75rem',
-              color: '#0f172a',
+              color: 'var(--text-main)',
               overflow: 'hidden',
               animation: 'scaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
@@ -189,7 +189,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 right: '1.25rem',
                 background: 'none',
                 border: 'none',
-                color: '#94a3b8',
+                color: 'var(--text-muted)',
                 cursor: 'pointer',
                 padding: '6px',
                 borderRadius: '8px',
@@ -199,12 +199,12 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 transition: 'all 0.15s ease',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f1f5f9';
-                e.currentTarget.style.color = '#334155';
+                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                e.currentTarget.style.color = 'var(--text-main)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#94a3b8';
+                e.currentTarget.style.color = 'var(--text-muted)';
               }}
               aria-label="Close"
             >
@@ -235,7 +235,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     margin: 0,
                     fontSize: '1.15rem',
                     fontWeight: 700,
-                    color: '#0f172a',
+                    color: 'var(--text-main)',
                     letterSpacing: '-0.01em',
                   }}
                 >
@@ -245,7 +245,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   style={{
                     margin: '0.5rem 0 0 0',
                     fontSize: '0.885rem',
-                    color: '#64748b',
+                    color: 'var(--text-secondary)',
                     lineHeight: '1.5',
                   }}
                 >
@@ -263,7 +263,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 justifyContent: 'flex-end',
                 gap: '0.75rem',
                 paddingTop: '1.25rem',
-                borderTop: '1px solid #f1f5f9',
+                borderTop: '1px solid var(--border-soft)',
               }}
             >
               {!options.isAlert && (
@@ -274,54 +274,51 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     padding: '0.625rem 1.15rem',
                     fontSize: '0.875rem',
                     fontWeight: 600,
-                    color: '#475569',
-                    backgroundColor: '#f8fafc',
-                    border: '1px solid #e2e8f0',
+                    color: 'var(--text-main)',
+                    backgroundColor: 'var(--panel-raised)',
+                    border: '1px solid var(--border)',
                     borderRadius: '10px',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f1f5f9';
-                    e.currentTarget.style.borderColor = '#cbd5e1';
-                    e.currentTarget.style.color = '#1e293b';
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                    e.currentTarget.style.borderColor = 'var(--border-hover)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f8fafc';
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                    e.currentTarget.style.color = '#475569';
+                    e.currentTarget.style.backgroundColor = 'var(--panel-raised)';
+                    e.currentTarget.style.borderColor = 'var(--border)';
                   }}
                 >
-                  {options.cancelText}
+                  {options.cancelText || 'Cancel'}
                 </button>
               )}
 
               <button
                 type="button"
-                autoFocus
                 onClick={handleConfirm}
                 style={{
-                  padding: '0.625rem 1.35rem',
+                  padding: '0.625rem 1.25rem',
                   fontSize: '0.875rem',
                   fontWeight: 600,
                   color: '#ffffff',
                   background: styles.confirmBtnBg,
                   border: 'none',
                   borderRadius: '10px',
-                  cursor: 'pointer',
                   boxShadow: styles.confirmBtnShadow,
+                  cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}
                 onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = styles.confirmBtnHover;
                   e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.filter = 'brightness(1.05)';
                 }}
                 onMouseLeave={(e) => {
+                  e.currentTarget.style.background = styles.confirmBtnBg;
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.filter = 'none';
                 }}
               >
-                {options.confirmText}
+                {options.confirmText || 'Confirm'}
               </button>
             </div>
           </div>

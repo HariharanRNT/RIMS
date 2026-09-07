@@ -14,6 +14,7 @@ public interface IReportService
     Task<AdminNotificationSummaryDto> GetAdminNotificationsAsync(int adminUserId);
     Task MarkNotificationReadAsync(int adminUserId, string notificationKey);
     Task MarkAllNotificationsReadAsync(int adminUserId);
+    Task<AttendanceBreakdownSummaryDto> GetEmployeeAttendanceBreakdownAsync(int employeeId, int year, int month);
 }
 
 

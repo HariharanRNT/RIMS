@@ -21,11 +21,18 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
     {
         try
         {
-            return TimeZoneInfo.FindSystemTimeZoneById("Indian Standard Time");
+            return TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
         }
         catch
         {
-            return TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata");
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata");
+            }
+            catch
+            {
+                return TimeZoneInfo.CreateCustomTimeZone("IST", TimeSpan.FromMinutes(330), "India Standard Time", "India Standard Time");
+            }
         }
     }
 
@@ -51,6 +58,8 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
         string? salary = null,
         int? employeeId = null)
     {
+        await ValidateReportAccessRulesAsync(year, month);
+
         var activeEmployees = await _context.Employees
             .AsNoTracking()
             .Include(e => e.Department)
@@ -165,6 +174,15 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
                         .FirstOrDefaultAsync();
                 }
 
+                if (activeSalaryStructure == null || (activeSalaryStructure.MonthlyCTC <= 0m && (activeSalaryStructure.Components == null || !activeSalaryStructure.Components.Any(c => c.IsEarning && c.MonthlyAmount > 0))))
+                {
+                    payrollStatus = "No Salary Structure Configured";
+                }
+                else
+                {
+                    payrollStatus = "Pending / Live Preview";
+                }
+
                 decimal basicPay = 0m;
                 decimal hra = 0m;
                 decimal conveyance = 0m;
@@ -249,7 +267,8 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
                     }
                 }
 
-                monthlySalary = basicPay + hra + conveyance + medical + allowances + arrears;
+                decimal componentsSum = basicPay + hra + conveyance + medical + allowances + arrears;
+                monthlySalary = componentsSum > 0 ? componentsSum : (activeSalaryStructure?.MonthlyCTC ?? 0m);
 
                 var approvedPermissions = await _context.PermissionRequests
                     .AsNoTracking()
@@ -271,7 +290,7 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
 
                 dailySalary = lopResult.DailySalary;
                 monthlyAllowedLeave = settings.MonthlyAllowedLeave;
-                approvedLeaveDays = lopResult.ActualLeaveDays;
+                approvedLeaveDays = lopResult.ApprovedLeaveDays;
                 sandwichLeaveDays = lopResult.SandwichLeaveDays;
                 leaveLopDays = lopResult.LeaveLOPDays;
                 lateLoginLopDays = lopResult.LateLoginLOPDays;
@@ -394,7 +413,7 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
         var worksheet = workbook.Worksheets.Add("Monthly Payroll Report");
 
         // Title Block
-        worksheet.Cell(1, 1).Value = "RIIMS V2 - Monthly Employee Payroll Report";
+        worksheet.Cell(1, 1).Value = "RIMS - Monthly Employee Payroll Report";
         worksheet.Cell(1, 1).Style.Font.SetBold(true);
         worksheet.Cell(1, 1).Style.Font.SetFontSize(16);
         worksheet.Cell(1, 1).Style.Font.SetFontColor(XLColor.FromHtml("#1E3A8A"));
@@ -545,5 +564,14 @@ public class MonthlyEmployeeReportService : IMonthlyEmployeeReportService
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
+    }
+
+    private async Task ValidateReportAccessRulesAsync(int year, int month)
+    {
+        var validation = await _calendarService.ValidateMonthAccessRulesAsync(year, month);
+        if (!validation.CanGenerateReport)
+        {
+            throw new InvalidOperationException(validation.ReasonMessage ?? $"Monthly employee report generation for {validation.MonthName} {year} is not allowed.");
+        }
     }
 }

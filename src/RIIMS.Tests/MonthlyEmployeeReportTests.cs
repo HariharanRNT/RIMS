@@ -84,7 +84,11 @@ public class MonthlyEmployeeReportTests
 
         await context.SaveChangesAsync();
 
-        var report = await reportService.GetMonthlyReportAsync(2026, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 9);
+        await calendarService.PublishMonthlyCalendarAsync(2025, 9, 1);
+
+        var report = await reportService.GetMonthlyReportAsync(2025, 8);
 
         Assert.Equal(2, report.Items.Count);
         var r1 = report.Items.First(x => x.EmployeeId == 101);
@@ -103,39 +107,67 @@ public class MonthlyEmployeeReportTests
         var calendarService = CreateMockCalendarService(context);
         var reportService = new MonthlyEmployeeReportService(context, settingService, calendarService);
 
-        var emp1 = new Employee { Id = 201, EmployeeCode = "EMP001", Name = "Arun", Email = "arun@test.com", DepartmentId = dept.Id, DesignationId = desig.Id, IsActive = true };
-        var emp2 = new Employee { Id = 202, EmployeeCode = "EMP002", Name = "Kumar", Email = "kumar@test.com", DepartmentId = dept.Id, DesignationId = desig.Id, IsActive = true };
+        var emp1 = new Employee { Id = 201, EmployeeCode = "EMP001", Name = "Arun", Email = "arun@test.com", DepartmentId = dept.Id, DesignationId = desig.Id, IsActive = true, DateOfJoining = new DateTime(2025, 1, 1) };
+        var emp2 = new Employee { Id = 202, EmployeeCode = "EMP002", Name = "Kumar", Email = "kumar@test.com", DepartmentId = dept.Id, DesignationId = desig.Id, IsActive = true, DateOfJoining = new DateTime(2025, 1, 1) };
         context.Employees.AddRange(emp1, emp2);
+
+        var leaveType = new LeaveType { Id = 1, Name = "Casual Leave" };
+        context.LeaveTypes.Add(leaveType);
+        await context.SaveChangesAsync();
 
         context.EmployeeSalaryStructures.Add(new EmployeeSalaryStructure { EmployeeId = emp1.Id, MonthlyCTC = 31000m, IsActive = true, EffectiveFrom = new DateTime(2025, 1, 1) });
         context.EmployeeSalaryStructures.Add(new EmployeeSalaryStructure { EmployeeId = emp2.Id, MonthlyCTC = 31000m, IsActive = true, EffectiveFrom = new DateTime(2025, 1, 1) });
 
-        var leaveType = new LeaveType { Id = 1, Name = "Casual Leave" };
-        context.LeaveTypes.Add(leaveType);
-
-        // Emp 1: 2 leave days in Aug 2026 (Aug 10 Mon, Aug 11 Tue) => Allowed 1 => LOP 1
+        // Emp 1: 2 leave days in Aug 2025 (Aug 11 Mon, Aug 12 Tue) => Allowed 1 => LOP 1
         context.LeaveRequests.Add(new LeaveRequest
         {
             EmployeeId = emp1.Id,
             LeaveTypeId = leaveType.Id,
-            FromDate = new DateTime(2026, 8, 10),
-            ToDate = new DateTime(2026, 8, 11),
+            FromDate = new DateTime(2025, 8, 11, 0, 0, 0, DateTimeKind.Utc),
+            ToDate = new DateTime(2025, 8, 12, 23, 59, 59, DateTimeKind.Utc),
             Status = RequestStatus.Approved
         });
 
-        // Emp 2: 1 leave day in Aug 2026 (Aug 10 Mon) => Allowed 1 => LOP 0
+        // Emp 2: 1 leave day in Aug 2025 (Aug 11 Mon) => Allowed 1 => LOP 0
         context.LeaveRequests.Add(new LeaveRequest
         {
             EmployeeId = emp2.Id,
             LeaveTypeId = leaveType.Id,
-            FromDate = new DateTime(2026, 8, 10),
-            ToDate = new DateTime(2026, 8, 10),
+            FromDate = new DateTime(2025, 8, 11, 0, 0, 0, DateTimeKind.Utc),
+            ToDate = new DateTime(2025, 8, 11, 23, 59, 59, DateTimeKind.Utc),
             Status = RequestStatus.Approved
         });
 
+        // Seed standard attendance logs for other working days in August 2025
+        var calEntries = await calendarService.GenerateMonthlyCalendarAsync(2025, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 9);
+        await calendarService.PublishMonthlyCalendarAsync(2025, 9, 1);
+
+        foreach (var c in calEntries.Where(c => c.IsWorkingDay))
+        {
+            if (c.CalendarDate != new DateOnly(2025, 8, 11) && c.CalendarDate != new DateOnly(2025, 8, 12))
+            {
+                context.AttendanceLogs.Add(new AttendanceLog
+                {
+                    EmployeeId = emp1.Id,
+                    LoginTime = new DateTime(c.Year, c.Month, c.CalendarDate.Day, 4, 0, 0, DateTimeKind.Utc),
+                    IsLate = false
+                });
+            }
+            if (c.CalendarDate != new DateOnly(2025, 8, 11))
+            {
+                context.AttendanceLogs.Add(new AttendanceLog
+                {
+                    EmployeeId = emp2.Id,
+                    LoginTime = new DateTime(c.Year, c.Month, c.CalendarDate.Day, 4, 0, 0, DateTimeKind.Utc),
+                    IsLate = false
+                });
+            }
+        }
+
         await context.SaveChangesAsync();
 
-        var report = await reportService.GetMonthlyReportAsync(2026, 8);
+        var report = await reportService.GetMonthlyReportAsync(2025, 8);
 
         var r1 = report.Items.First(x => x.EmployeeId == emp1.Id);
         var r2 = report.Items.First(x => x.EmployeeId == emp2.Id);
@@ -161,19 +193,23 @@ public class MonthlyEmployeeReportTests
         context.Employees.AddRange(emp1, emp2);
 
         // Emp 1 has 3 approved permissions
-        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp1.Id, RequestDate = new DateTime(2026, 8, 5), Status = RequestStatus.Approved });
-        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp1.Id, RequestDate = new DateTime(2026, 8, 12), Status = RequestStatus.Approved });
-        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp1.Id, RequestDate = new DateTime(2026, 8, 18), Status = RequestStatus.Approved });
+        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp1.Id, RequestDate = new DateTime(2025, 8, 5), Status = RequestStatus.Approved });
+        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp1.Id, RequestDate = new DateTime(2025, 8, 12), Status = RequestStatus.Approved });
+        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp1.Id, RequestDate = new DateTime(2025, 8, 18), Status = RequestStatus.Approved });
 
         // Emp 2 has 1 approved permission
-        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp2.Id, RequestDate = new DateTime(2026, 8, 9), Status = RequestStatus.Approved });
+        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp2.Id, RequestDate = new DateTime(2025, 8, 9), Status = RequestStatus.Approved });
 
         // Emp 2 has 1 rejected permission (should NOT be counted)
-        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp2.Id, RequestDate = new DateTime(2026, 8, 15), Status = RequestStatus.Rejected });
+        context.PermissionRequests.Add(new PermissionRequest { EmployeeId = emp2.Id, RequestDate = new DateTime(2025, 8, 15), Status = RequestStatus.Rejected });
 
         await context.SaveChangesAsync();
 
-        var report = await reportService.GetMonthlyReportAsync(2026, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 9);
+        await calendarService.PublishMonthlyCalendarAsync(2025, 9, 1);
+
+        var report = await reportService.GetMonthlyReportAsync(2025, 8);
 
         var r1 = report.Items.First(x => x.EmployeeId == emp1.Id);
         var r2 = report.Items.First(x => x.EmployeeId == emp2.Id);
@@ -201,7 +237,7 @@ public class MonthlyEmployeeReportTests
             context.AttendanceLogs.Add(new AttendanceLog
             {
                 EmployeeId = emp1.Id,
-                LoginTime = new DateTime(2026, 8, i, 5, 0, 0, DateTimeKind.Utc),
+                LoginTime = new DateTime(2025, 8, i, 5, 0, 0, DateTimeKind.Utc),
                 IsLate = true
             });
         }
@@ -210,13 +246,17 @@ public class MonthlyEmployeeReportTests
         context.AttendanceLogs.Add(new AttendanceLog
         {
             EmployeeId = emp2.Id,
-            LoginTime = new DateTime(2026, 8, 5, 5, 0, 0, DateTimeKind.Utc),
+            LoginTime = new DateTime(2025, 8, 5, 5, 0, 0, DateTimeKind.Utc),
             IsLate = true
         });
 
         await context.SaveChangesAsync();
 
-        var report = await reportService.GetMonthlyReportAsync(2026, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 9);
+        await calendarService.PublishMonthlyCalendarAsync(2025, 9, 1);
+
+        var report = await reportService.GetMonthlyReportAsync(2025, 8);
 
         var r1 = report.Items.First(x => x.EmployeeId == emp1.Id);
         var r2 = report.Items.First(x => x.EmployeeId == emp2.Id);
@@ -242,7 +282,7 @@ public class MonthlyEmployeeReportTests
         {
             EmployeeId = emp.Id,
             Month = 8,
-            Year = 2026,
+            Year = 2025,
             TotalSalary = 33333.33m,
             DailySalary = 1075.2687m,
             MonthlyAllowedLeave = 1,
@@ -258,7 +298,11 @@ public class MonthlyEmployeeReportTests
 
         await context.SaveChangesAsync();
 
-        var report = await reportService.GetMonthlyReportAsync(2026, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 9);
+        await calendarService.PublishMonthlyCalendarAsync(2025, 9, 1);
+
+        var report = await reportService.GetMonthlyReportAsync(2025, 8);
 
         var r = report.Items.First(x => x.EmployeeId == emp.Id);
 
@@ -278,14 +322,26 @@ public class MonthlyEmployeeReportTests
         var calendarService = CreateMockCalendarService(context);
         var reportService = new MonthlyEmployeeReportService(context, settingService, calendarService);
 
-        var emp = new Employee { Id = 901, EmployeeCode = "EMP001", Name = "Arun", Email = "arun@test.com", DepartmentId = dept.Id, DesignationId = desig.Id, IsActive = true };
+        var emp = new Employee { Id = 901, EmployeeCode = "EMP001", Name = "Arun", Email = "arun@test.com", DepartmentId = dept.Id, DesignationId = desig.Id, IsActive = true, DateOfJoining = new DateTime(2025, 1, 1) };
         context.Employees.Add(emp);
+        context.EmployeeSalaryStructures.Add(new EmployeeSalaryStructure
+        {
+            EmployeeId = emp.Id,
+            MonthlyCTC = 30000m,
+            AnnualCTC = 360000m,
+            IsActive = true,
+            EffectiveFrom = new DateTime(2025, 1, 1)
+        });
         await context.SaveChangesAsync();
 
         int initialPayslipCount = await context.PayslipDetails.CountAsync();
         int initialLopCount = await context.LOPCalculations.CountAsync();
 
-        var report = await reportService.GetMonthlyReportAsync(2026, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 8);
+        await calendarService.GenerateMonthlyCalendarAsync(2025, 9);
+        await calendarService.PublishMonthlyCalendarAsync(2025, 9, 1);
+
+        var report = await reportService.GetMonthlyReportAsync(2025, 8);
 
         int postPayslipCount = await context.PayslipDetails.CountAsync();
         int postLopCount = await context.LOPCalculations.CountAsync();

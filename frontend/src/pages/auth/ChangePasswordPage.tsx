@@ -60,7 +60,7 @@ export const ChangePasswordPage: React.FC = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#f5f7fa',
+      backgroundColor: 'var(--bg-app)',
       padding: '1.5rem',
     }}>
       <div className="ui-card" style={{
@@ -73,14 +73,14 @@ export const ChangePasswordPage: React.FC = () => {
             display: 'inline-flex',
             padding: '1rem',
             borderRadius: '50%',
-            background: '#fff4e6',
-            color: '#E8873C',
+            background: 'var(--primary-tint)',
+            color: 'var(--primary)',
             marginBottom: '1rem'
           }}>
             <KeyRound size={32} />
           </div>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: '#111827', fontWeight: 800 }}>Change Password</h2>
-          <p style={{ color: '#6b7280', fontSize: '0.85rem' }}>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: 'var(--text-main)', fontWeight: 800 }}>Change Password</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             {user?.mustChangePassword
               ? 'You must change your temporary password before continuing.'
               : 'Update your account password below.'}
@@ -89,9 +89,9 @@ export const ChangePasswordPage: React.FC = () => {
 
         {error && (
           <div style={{
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            color: '#dc2626',
+            background: 'var(--danger-bg)',
+            border: '1px solid rgba(216, 64, 74, 0.3)',
+            color: 'var(--danger-text)',
             padding: '0.75rem 1rem',
             borderRadius: 'var(--radius-sm)',
             marginBottom: '1.5rem',
@@ -107,9 +107,9 @@ export const ChangePasswordPage: React.FC = () => {
 
         {success && (
           <div style={{
-            background: '#ecfdf5',
-            border: '1px solid #a7f3d0',
-            color: '#059669',
+            background: 'var(--success-bg)',
+            border: '1px solid rgba(21, 154, 99, 0.3)',
+            color: 'var(--success-text)',
             padding: '0.75rem 1rem',
             borderRadius: 'var(--radius-sm)',
             marginBottom: '1.5rem',

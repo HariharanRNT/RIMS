@@ -8,6 +8,7 @@ import { GlassSelect } from '../../components/ui/GlassSelect';
 import { GlassDatePicker } from '../../components/ui/GlassDatePicker';
 import { useDebounce } from '../../hooks/useDebounce';
 import { Pagination } from '../../components/ui/Pagination';
+import { requestNotificationPermission } from '../../utils/notificationUtils';
 import {
   Play,
   Pause,
@@ -25,7 +26,10 @@ import {
   Search,
   Calendar,
   RotateCcw,
-  Eye
+  Eye,
+  Flag,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface Product {
@@ -74,6 +78,7 @@ interface TaskItem {
   duration?: string;
   totalProductiveSeconds: number;
   isOverdue: boolean;
+  isExceededDuration?: boolean;
   timelineEvents: TaskTimelineEventDto[];
 }
 
@@ -98,6 +103,14 @@ interface TaskActionModalState {
   submitting: boolean;
   error?: string;
 }
+
+const getTodayLocalDateStr = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export const WorkTaskPage: React.FC = () => {
   const { user } = useAuth();
@@ -130,27 +143,48 @@ export const WorkTaskPage: React.FC = () => {
   const [description, setDescription] = useState('');
 
   const [selfPriority, setSelfPriority] = useState<number>(1);
-  const [selfPlannedStart, setSelfPlannedStart] = useState<string>('');
+  const [selfPlannedStart, setSelfPlannedStart] = useState<string>(getTodayLocalDateStr());
   const [selfDueDate, setSelfDueDate] = useState<string>('');
   const [selfPlannedHours, setSelfPlannedHours] = useState<string>('8');
   const [selfPlannedMinutes, setSelfPlannedMinutes] = useState<string>('00');
   const [selfInstructions, setSelfInstructions] = useState<string>('');
 
+  // Description expansion state for long text toggle
+  const [expandedDescIds, setExpandedDescIds] = useState<Record<number, boolean>>({});
+  const toggleExpandDesc = (taskId: number) => {
+    setExpandedDescIds((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
+
   const resetSelfTaskForm = () => {
     setModuleName('');
     setDescription('');
-    setProductId('');
-    setIsCustomProduct(false);
-    setCustomProductName('');
-    setClientId('');
-    setIsCustomClient(false);
-    setCustomClientName('');
     setSelfPriority(1);
-    setSelfPlannedStart('');
+    setSelfPlannedStart(getTodayLocalDateStr());
     setSelfDueDate('');
     setSelfPlannedHours('8');
     setSelfPlannedMinutes('00');
     setSelfInstructions('');
+
+    // Retain smart default product/client if available
+    const lastProd = localStorage.getItem('riims_last_product_id');
+    if (lastProd && products.some((p) => p.id === Number(lastProd))) {
+      setProductId(Number(lastProd));
+      setIsCustomProduct(false);
+      setCustomProductName('');
+      const lastClient = localStorage.getItem('riims_last_client_id');
+      if (lastClient) {
+        setClientId(Number(lastClient));
+        setIsCustomClient(false);
+        setCustomClientName('');
+      }
+    } else {
+      setProductId('');
+      setIsCustomProduct(false);
+      setCustomProductName('');
+      setClientId('');
+      setIsCustomClient(false);
+      setCustomClientName('');
+    }
   };
 
   // Task Lists
@@ -174,6 +208,7 @@ export const WorkTaskPage: React.FC = () => {
   const [teamFilterStatus, setTeamFilterStatus] = useState<string>('');
   const [teamFilterPriority, setTeamFilterPriority] = useState<string>('');
   const [teamFilterOverdue, setTeamFilterOverdue] = useState<boolean>(false);
+  const [teamFilterExceededDuration, setTeamFilterExceededDuration] = useState<boolean>(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState<string>('');
   const debouncedTeamSearch = useDebounce(teamSearchQuery, 350);
   const [teamFilterDatePreset, setTeamFilterDatePreset] = useState<string>('DEFAULT');
@@ -184,7 +219,7 @@ export const WorkTaskPage: React.FC = () => {
   // Reset teamPage to 1 whenever filters change
   useEffect(() => {
     setTeamPage(1);
-  }, [debouncedTeamSearch, teamFilterEmployeeId, teamFilterStatus, teamFilterPriority, teamFilterOverdue, teamCustomStartDate, teamCustomEndDate]);
+  }, [debouncedTeamSearch, teamFilterEmployeeId, teamFilterStatus, teamFilterPriority, teamFilterOverdue, teamFilterExceededDuration, teamCustomStartDate, teamCustomEndDate]);
 
   // Team Task Modal Form
   const [teamTargetEmployeeId, setTeamTargetEmployeeId] = useState('');
@@ -217,6 +252,9 @@ export const WorkTaskPage: React.FC = () => {
 
   // Timeline Drawer State
   const [selectedTaskForTimeline, setSelectedTaskForTimeline] = useState<TaskItem | null>(null);
+
+  // Auto-scroll highlight state
+  const [highlightedTaskId, setHighlightedTaskId] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(false);
 
@@ -277,6 +315,7 @@ export const WorkTaskPage: React.FC = () => {
       if (teamFilterStatus) params.append('status', teamFilterStatus);
       if (teamFilterPriority) params.append('priority', teamFilterPriority);
       if (teamFilterOverdue) params.append('smartView', 'overdue');
+      if (teamFilterExceededDuration) params.append('smartView', 'exceeded-duration');
       if (teamCustomStartDate) params.append('fromDate', teamCustomStartDate);
       if (teamCustomEndDate) params.append('toDate', teamCustomEndDate);
 
@@ -303,7 +342,7 @@ export const WorkTaskPage: React.FC = () => {
     if (activeTab === 'team-tasks') {
       fetchTeamTasks();
     }
-  }, [activeTab, teamPage, teamPageSize, debouncedTeamSearch, teamFilterEmployeeId, teamFilterStatus, teamFilterPriority, teamFilterOverdue, teamCustomStartDate, teamCustomEndDate]);
+  }, [activeTab, teamPage, teamPageSize, debouncedTeamSearch, teamFilterEmployeeId, teamFilterStatus, teamFilterPriority, teamFilterOverdue, teamFilterExceededDuration, teamCustomStartDate, teamCustomEndDate]);
 
   useEffect(() => {
     fetchLookups();
@@ -322,6 +361,10 @@ export const WorkTaskPage: React.FC = () => {
     window.addEventListener('activity-changed', handleActivityChanged);
     return () => window.removeEventListener('activity-changed', handleActivityChanged);
   }, [user]);
+
+
+
+
 
   // Server State & Metrics
   const [serverState, setServerState] = useState<{
@@ -441,6 +484,25 @@ export const WorkTaskPage: React.FC = () => {
     return clients.filter((c) => mappedClientIds.includes(c.id));
   }, [teamProductId, isTeamCustomProduct, clients, mappings]);
 
+  // Auto-select last-used product & client from localStorage on initial load
+  useEffect(() => {
+    if (products.length > 0 && !productId && !isCustomProduct) {
+      const lastProd = localStorage.getItem('riims_last_product_id');
+      if (lastProd && products.some((p) => p.id === Number(lastProd))) {
+        setProductId(Number(lastProd));
+      }
+    }
+  }, [products]);
+
+  useEffect(() => {
+    if (productId && typeof productId === 'number' && availableClients.length > 0 && !clientId && !isCustomClient) {
+      const lastClient = localStorage.getItem('riims_last_client_id');
+      if (lastClient && availableClients.some((c) => c.id === Number(lastClient))) {
+        setClientId(Number(lastClient));
+      }
+    }
+  }, [productId, availableClients]);
+
   // Form Submission
   const handleStartSelfTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -502,11 +564,21 @@ export const WorkTaskPage: React.FC = () => {
         const res = await apiClient.post('/tasks/start', payload);
 
         if (res.data.success) {
+          const newTaskId = res.data.data?.id;
+          if (!isCustomProduct && typeof productId === 'number') {
+            localStorage.setItem('riims_last_product_id', String(productId));
+          }
+          if (!isCustomClient && typeof clientId === 'number') {
+            localStorage.setItem('riims_last_client_id', String(clientId));
+          }
           resetSelfTaskForm();
 
           window.dispatchEvent(new Event('activity-changed'));
-          fetchMyTasksData();
+          window.dispatchEvent(new Event('task-changed'));
+          await fetchMyTasksData();
           fetchMetrics();
+          scrollToTask(newTaskId);
+          requestNotificationPermission(); // Request on first task start (user gesture)
         }
       } catch (err: any) {
         alert(err.response?.data?.message || 'Failed to start task.');
@@ -552,8 +624,10 @@ export const WorkTaskPage: React.FC = () => {
         const res = await apiClient.post(`/tasks/${taskId}/resume`);
         if (res.data.success) {
           window.dispatchEvent(new Event('activity-changed'));
+          window.dispatchEvent(new Event('task-changed'));
           fetchMyTasksData();
           fetchMetrics();
+          requestNotificationPermission(); // Request on resume (user gesture)
         }
       } catch (err: any) {
         alert(err.response?.data?.message || 'Failed to resume task.');
@@ -602,8 +676,10 @@ export const WorkTaskPage: React.FC = () => {
       const res = await apiClient.post(`/tasks/${taskId}/start-assigned`);
       if (res.data.success) {
         window.dispatchEvent(new Event('activity-changed'));
+        window.dispatchEvent(new Event('task-changed'));
         fetchMyTasksData();
         fetchMetrics();
+        requestNotificationPermission(); // Request on start-assigned (user gesture)
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to start assigned task.');
@@ -638,8 +714,15 @@ export const WorkTaskPage: React.FC = () => {
         };
         const res = await apiClient.post('/tasks/start', payload);
         if (res.data.success) {
+          const newTaskId = res.data.data?.id;
+          if (payload.productId && typeof payload.productId === 'number') {
+            localStorage.setItem('riims_last_product_id', String(payload.productId));
+          }
+          if (payload.clientId && typeof payload.clientId === 'number') {
+            localStorage.setItem('riims_last_client_id', String(payload.clientId));
+          }
           resetSelfTaskForm();
-          finishModalSuccess();
+          finishModalSuccess(newTaskId);
         }
       } else if (type === 'start-self-switch') {
         const payload = {
@@ -649,20 +732,27 @@ export const WorkTaskPage: React.FC = () => {
         };
         const res = await apiClient.post('/tasks/start', payload);
         if (res.data.success) {
+          const newTaskId = res.data.data?.id;
+          if (payload.productId && typeof payload.productId === 'number') {
+            localStorage.setItem('riims_last_product_id', String(payload.productId));
+          }
+          if (payload.clientId && typeof payload.clientId === 'number') {
+            localStorage.setItem('riims_last_client_id', String(payload.clientId));
+          }
           resetSelfTaskForm();
-          finishModalSuccess();
+          finishModalSuccess(newTaskId);
         }
       } else if (type === 'start-assigned') {
         const res = await apiClient.post(`/tasks/${taskId}/start-assigned`, {
           remarks: remarks.trim(),
         });
-        if (res.data.success) finishModalSuccess();
+        if (res.data.success) finishModalSuccess(taskId);
       } else if (type === 'start-assigned-switch') {
         const res = await apiClient.post(`/tasks/${taskId}/start-assigned`, {
           remarks: remarks.trim(),
           holdRemarks: holdRemarks.trim(),
         });
-        if (res.data.success) finishModalSuccess();
+        if (res.data.success) finishModalSuccess(taskId);
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Action failed. Please try again.';
@@ -670,11 +760,40 @@ export const WorkTaskPage: React.FC = () => {
     }
   };
 
-  const finishModalSuccess = () => {
+  const finishModalSuccess = (scrollToId?: number) => {
     setActionModal({ isOpen: false, type: 'complete', remarks: '', holdRemarks: '', submitting: false });
     window.dispatchEvent(new Event('activity-changed'));
-    fetchMyTasksData();
+    window.dispatchEvent(new Event('task-changed'));
+    fetchMyTasksData().then(() => {
+      if (scrollToId) {
+        scrollToTask(scrollToId);
+      }
+    });
     fetchMetrics();
+  };
+
+  const scrollToTask = (taskId?: number) => {
+    setActiveTab('my-tasks');
+    if (taskId) {
+      setHighlightedTaskId(taskId);
+      setTimeout(() => {
+        setHighlightedTaskId(null);
+      }, 3500);
+    }
+
+    setTimeout(() => {
+      if (taskId) {
+        const cardEl = document.getElementById(`task-card-${taskId}`);
+        if (cardEl) {
+          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
+      const sectionEl = document.getElementById('recent-work-tasks-section');
+      if (sectionEl) {
+        sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 180);
   };
 
   // Team Task Actions
@@ -795,6 +914,7 @@ export const WorkTaskPage: React.FC = () => {
     setTeamFilterStatus('');
     setTeamFilterPriority('');
     setTeamFilterOverdue(false);
+    setTeamFilterExceededDuration(false);
     setTeamSearchQuery('');
     setTeamFilterDatePreset('DEFAULT');
     setTeamCustomStartDate('');
@@ -971,6 +1091,12 @@ export const WorkTaskPage: React.FC = () => {
       return false;
     }
 
+    // Exceeded Duration Filter
+    if (teamFilterExceededDuration) {
+      const isExceeded = t.isExceededDuration || (t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 && t.totalProductiveSeconds > (t.plannedDurationMinutes * 60));
+      if (!isExceeded) return false;
+    }
+
     // Date Range Filter
     if (teamFilterDatePreset !== 'DEFAULT') {
       if (!isTaskInDateRange(t, teamFilterDatePreset, teamCustomStartDate, teamCustomEndDate)) {
@@ -1013,9 +1139,63 @@ export const WorkTaskPage: React.FC = () => {
     !!teamFilterStatus ||
     !!teamFilterPriority ||
     teamFilterOverdue ||
+    teamFilterExceededDuration ||
     !!teamSearchQuery;
 
   const selectedTeamMemberObj = teamEmployees.find((e) => e.id.toString() === teamFilterEmployeeId);
+
+  // Helper to get distinct accent colors for each status
+  const getTaskStatusColor = (status: string, isOverdue: boolean) => {
+    if (isOverdue && status !== 'Completed' && status !== 'Cancelled') {
+      return {
+        bg: 'rgba(239, 68, 68, 0.15)',
+        text: '#EF4444',
+        border: 'rgba(239, 68, 68, 0.35)',
+        accent: '#EF4444',
+      };
+    }
+    switch (status) {
+      case 'Running':
+      case 'InProgress':
+        return {
+          bg: 'rgba(16, 185, 129, 0.15)',
+          text: '#10B981',
+          border: 'rgba(16, 185, 129, 0.35)',
+          accent: '#10B981',
+        };
+      case 'Completed':
+        return {
+          bg: 'rgba(99, 102, 241, 0.15)',
+          text: '#818CF8',
+          border: 'rgba(99, 102, 241, 0.35)',
+          accent: '#818CF8',
+        };
+      case 'OnHold':
+      case 'Hold':
+        return {
+          bg: 'rgba(245, 158, 11, 0.15)',
+          text: '#F59E0B',
+          border: 'rgba(245, 158, 11, 0.35)',
+          accent: '#F59E0B',
+        };
+      case 'Cancelled':
+        return {
+          bg: 'rgba(148, 163, 184, 0.15)',
+          text: '#94A3B8',
+          border: 'rgba(148, 163, 184, 0.3)',
+          accent: '#94A3B8',
+        };
+      case 'Assigned':
+      case 'NotStarted':
+      default:
+        return {
+          bg: 'rgba(14, 165, 233, 0.15)',
+          text: '#38BDF8',
+          border: 'rgba(14, 165, 233, 0.35)',
+          accent: '#38BDF8',
+        };
+    }
+  };
 
   // Status and Priority Badges (Pill Shape, Glass Colors)
   const getPriorityBadge = (priority: number) => {
@@ -1023,22 +1203,59 @@ export const WorkTaskPage: React.FC = () => {
       display: 'inline-flex',
       alignItems: 'center',
       gap: '0.3rem',
-      padding: '0.25rem 0.65rem',
-      borderRadius: '9999px',
+      padding: '0.2rem 0.55rem',
+      borderRadius: '6px',
       fontSize: '0.725rem',
       fontWeight: 600
     };
 
     switch (priority) {
       case 3:
-        return <span style={{ ...badgeStyle, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Urgent</span>;
+        return (
+          <span style={{ ...badgeStyle, background: 'rgba(239, 68, 68, 0.12)', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+            <Flag size={11} /> Urgent
+          </span>
+        );
       case 2:
-        return <span style={{ ...badgeStyle, background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a' }}>High</span>;
+        return (
+          <span style={{ ...badgeStyle, background: 'rgba(249, 115, 22, 0.12)', color: '#EA580C', border: '1px solid rgba(249, 115, 22, 0.3)' }}>
+            <Flag size={11} /> High
+          </span>
+        );
       case 1:
-        return <span style={{ ...badgeStyle, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}>Medium</span>;
+        return (
+          <span style={{ ...badgeStyle, background: 'rgba(14, 165, 233, 0.12)', color: '#0284C7', border: '1px solid rgba(14, 165, 233, 0.3)' }}>
+            <Flag size={11} /> Medium
+          </span>
+        );
       default:
-        return <span style={{ ...badgeStyle, background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }}>Low</span>;
+        return (
+          <span style={{ ...badgeStyle, background: 'rgba(100, 116, 139, 0.12)', color: '#64748B', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+            <Flag size={11} /> Low
+          </span>
+        );
     }
+  };
+
+  const getExceededBadge = (isExceeded?: boolean) => {
+    if (!isExceeded) return null;
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.3rem',
+        padding: '0.22rem 0.6rem',
+        borderRadius: '9999px',
+        fontSize: '0.72rem',
+        fontWeight: 600,
+        background: 'rgba(217, 119, 6, 0.12)',
+        color: '#D97706',
+        border: '1px solid rgba(217, 119, 6, 0.35)',
+        whiteSpace: 'nowrap'
+      }}>
+        ⏳ Exceeded Estimate
+      </span>
+    );
   };
 
   const getStatusBadge = (status: string, isOverdue: boolean) => {
@@ -1058,9 +1275,9 @@ export const WorkTaskPage: React.FC = () => {
       return (
         <span style={{
           ...badgeStyle,
-          background: '#fef2f2',
-          color: '#dc2626',
-          border: '1px solid #fecaca'
+          background: 'rgba(225, 29, 72, 0.15)',
+          color: '#E11D48',
+          border: '1px solid rgba(225, 29, 72, 0.4)'
         }}>
           <AlertCircle size={13} />
           Overdue
@@ -1074,11 +1291,18 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: '#ecfdf5',
-            color: '#059669',
-            border: '1px solid #a7f3d0'
+            background: 'rgba(16, 185, 129, 0.15)',
+            color: '#10B981',
+            border: '1px solid rgba(16, 185, 129, 0.35)'
           }}>
-            <Clock size={13} className="spin-animation" />
+            <span style={{
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              backgroundColor: '#10B981',
+              boxShadow: '0 0 6px #10B981',
+              display: 'inline-block'
+            }} />
             Running
           </span>
         );
@@ -1086,9 +1310,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: '#ecfdf5',
-            color: '#059669',
-            border: '1px solid #a7f3d0'
+            background: 'rgba(99, 102, 241, 0.15)',
+            color: '#818CF8',
+            border: '1px solid rgba(99, 102, 241, 0.35)'
           }}>
             <CheckCircle2 size={13} />
             Completed
@@ -1099,9 +1323,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: '#fffbeb',
-            color: '#d97706',
-            border: '1px solid #fde68a'
+            background: 'rgba(245, 158, 11, 0.15)',
+            color: '#F59E0B',
+            border: '1px solid rgba(245, 158, 11, 0.35)'
           }}>
             <Pause size={13} />
             On Hold
@@ -1111,9 +1335,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: '#f3f4f6',
-            color: '#6b7280',
-            border: '1px solid #e5e7eb'
+            background: 'rgba(148, 163, 184, 0.15)',
+            color: '#94A3B8',
+            border: '1px solid rgba(148, 163, 184, 0.3)'
           }}>
             <XCircle size={13} />
             Cancelled
@@ -1125,9 +1349,9 @@ export const WorkTaskPage: React.FC = () => {
         return (
           <span style={{
             ...badgeStyle,
-            background: '#eff6ff',
-            color: '#2563eb',
-            border: '1px solid #bfdbfe'
+            background: 'rgba(14, 165, 233, 0.15)',
+            color: '#38BDF8',
+            border: '1px solid rgba(14, 165, 233, 0.35)'
           }}>
             <UserCheck size={13} />
             Assigned
@@ -1139,107 +1363,189 @@ export const WorkTaskPage: React.FC = () => {
   return (
     <div className="page-container">
       {/* Featured Active Running Task Compact Status Strip */}
-      {activeRunningTask && (
-        <div
-          className="ui-card"
-          style={{
-            marginBottom: '1.25rem',
-            padding: '0.85rem 1.25rem',
-            borderLeft: '4px solid var(--success)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.5rem',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-          }}
-        >
-          {/* Row 1: Badges & Product/Client Info Left, Right-aligned Pause & Complete Buttons */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <span style={{
-                backgroundColor: '#ecfdf5',
-                color: '#059669',
-                border: '1px solid #a7f3d0',
-                fontWeight: 600,
-                padding: '0.2rem 0.6rem',
-                borderRadius: '9999px',
-                fontSize: '0.75rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.3rem'
-              }}>
-                <Clock size={12} className="spin-animation" />
-                Running
-              </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                Product: <strong style={{ color: 'var(--text-main)' }}>{activeRunningTask.productName}</strong> • Client: <strong style={{ color: 'var(--text-main)' }}>{activeRunningTask.clientCompanyName}</strong>
-              </span>
+      {activeRunningTask && (() => {
+        const plannedSecs = (activeRunningTask.plannedDurationMinutes || 0) * 60;
+        const hasPlanned = plannedSecs > 0;
+        const progressRatio = hasPlanned ? (timerSeconds / plannedSecs) : 0;
+        const progressPercent = hasPlanned ? Math.min(100, Math.round(progressRatio * 100)) : 0;
+        const isExceeded = hasPlanned && timerSeconds > plannedSecs;
+        const isNearEnd = hasPlanned && progressRatio >= 0.75 && !isExceeded;
+        const barColor = isExceeded ? '#EF4444' : isNearEnd ? '#F59E0B' : '#10B981';
+        const timerColor = isExceeded ? '#EF4444' : isNearEnd ? '#D97706' : '#059669';
+
+        return (
+          <div
+            className="ui-card"
+            style={{
+              marginBottom: '1.25rem',
+              padding: '1rem 1.25rem',
+              borderLeft: `4px solid ${barColor}`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.65rem',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+            }}
+          >
+            {/* Row 1: Badges & Product/Client Info Left, Right-aligned Pause & Complete Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <span style={{
+                  backgroundColor: '#ecfdf5',
+                  color: '#059669',
+                  border: '1px solid #a7f3d0',
+                  fontWeight: 600,
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.75rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem'
+                }}>
+                  <Clock size={12} className="spin-animation" />
+                  Running
+                </span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  Product: <strong style={{ color: 'var(--text-main)' }}>{activeRunningTask.productName}</strong> • Client: <strong style={{ color: 'var(--text-main)' }}>{activeRunningTask.clientCompanyName}</strong> • Due: <strong style={{ color: activeRunningTask.isOverdue ? 'var(--danger-text)' : (activeRunningTask.dueDate ? 'var(--text-main)' : 'var(--text-muted)') }}>{activeRunningTask.dueDate ? formatDateIST(activeRunningTask.dueDate) : 'No due date set'}</strong>
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    borderColor: '#fde68a',
+                    color: '#d97706',
+                    backgroundColor: '#fffbeb',
+                    fontSize: '0.785rem',
+                    padding: '0.3rem 0.75rem',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                  onClick={() => handleHoldTask(activeRunningTask.id)}
+                >
+                  <Pause size={13} />
+                  <span>Pause / Hold</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    fontSize: '0.785rem',
+                    padding: '0.3rem 0.75rem',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                  onClick={() => handleCompleteTask(activeRunningTask.id)}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Complete</span>
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                style={{
-                  borderColor: '#fde68a',
-                  color: '#d97706',
-                  backgroundColor: '#fffbeb',
-                  fontSize: '0.785rem',
-                  padding: '0.3rem 0.75rem',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem'
-                }}
-                onClick={() => handleHoldTask(activeRunningTask.id)}
-              >
-                <Pause size={13} />
-                <span>Pause / Hold</span>
-              </button>
+            {/* Row 2: Task Title + Description on single line */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', flexShrink: 0 }}>
+                {activeRunningTask.moduleName}
+              </h4>
+              {activeRunningTask.description && (
+                <span style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  — {activeRunningTask.description}
+                </span>
+              )}
+            </div>
 
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                style={{
-                  fontSize: '0.785rem',
-                  padding: '0.3rem 0.75rem',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem'
-                }}
-                onClick={() => handleCompleteTask(activeRunningTask.id)}
-              >
-                <CheckCircle2 size={13} />
-                <span>Complete</span>
-              </button>
+            {/* Row 3: Prominent Timer & Visual Progress Bar */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.2rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <span style={{ fontSize: '1.35rem', fontWeight: 800, fontFamily: 'monospace', color: timerColor, letterSpacing: '0.5px' }}>
+                    {formatSecondsToHHMMSS(timerSeconds)}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Running Duration
+                  </span>
+                </div>
+
+                {hasPlanned && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--text-secondary)',
+                      background: 'var(--panel-raised)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      padding: '0.2rem 0.55rem',
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}>
+                      <Clock size={12} style={{ color: 'var(--primary)' }} />
+                      Planned: {formatDurationToHoursMinutes(activeRunningTask.plannedDurationMinutes! / 60)}
+                    </span>
+                    {isExceeded ? (
+                      <span style={{
+                        fontSize: '0.725rem',
+                        color: '#EF4444',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '6px',
+                        padding: '0.2rem 0.55rem',
+                        fontWeight: 700
+                      }}>
+                        ⚠️ +{formatDurationToHoursMinutes((timerSeconds - plannedSecs) / 3600)} over estimate
+                      </span>
+                    ) : (
+                      <span style={{
+                        fontSize: '0.725rem',
+                        color: isNearEnd ? '#D97706' : 'var(--text-muted)',
+                        fontWeight: 600
+                      }}>
+                        {formatDurationToHoursMinutes(Math.max(0, plannedSecs - timerSeconds) / 3600)} remaining
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Visual Progress Bar */}
+              {hasPlanned && (
+                <div style={{ width: '100%', marginTop: '0.15rem' }}>
+                  <div style={{
+                    width: '100%',
+                    height: '6px',
+                    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+                    borderRadius: '9999px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${Math.min(100, Math.round(progressRatio * 100))}%`,
+                      height: '100%',
+                      backgroundColor: barColor,
+                      borderRadius: '9999px',
+                      transition: 'width 0.4s ease, background-color 0.3s ease'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    <span>0%</span>
+                    <span style={{ fontWeight: 600, color: barColor }}>
+                      {isExceeded ? 'Exceeded 100%' : `${progressPercent}% completed`}
+                    </span>
+                    <span>100% ({formatDurationToHoursMinutes(activeRunningTask.plannedDurationMinutes! / 60)})</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Row 2: Task Title + Description on single line */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', flexShrink: 0 }}>
-              {activeRunningTask.moduleName}
-            </h4>
-            {activeRunningTask.description && (
-              <span style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                — {activeRunningTask.description}
-              </span>
-            )}
-          </div>
-
-          {/* Row 3: Compact Inline Timer */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'monospace', color: '#059669', letterSpacing: '0.5px' }}>
-              {formatSecondsToHHMMSS(timerSeconds)}
-            </span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
-              Running Duration
-            </span>
-          </div>
-        </div>
-      )}
-
-
+        );
+      })()}
 
       {/* Summary Metrics Cards (4 Columns) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -1271,8 +1577,28 @@ export const WorkTaskPage: React.FC = () => {
           <div className="icon-badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', padding: '0.65rem', borderRadius: '10px' }}>
             <Clock size={20} />
           </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Idle Time</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Idle Time</span>
+              <span
+                title="Time with no detected activity while task was running"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '15px',
+                  height: '15px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--panel-raised)',
+                  border: '1px solid var(--border)',
+                  fontSize: '0.65rem',
+                  color: 'var(--text-muted)',
+                  cursor: 'help'
+                }}
+              >
+                ⓘ
+              </span>
+            </div>
             <h4 style={{ margin: '0.1rem 0 0 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
               {formatDurationToHoursMinutes(
                 serverState?.todayIdleSeconds != null
@@ -1375,199 +1701,334 @@ export const WorkTaskPage: React.FC = () => {
       {/* TAB 1: My Self-Tasks — Single-Column Full-Width Stacked Layout */}
       {activeTab === 'my-tasks' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          {/* Full-Width "Start New Work Task" Form Card */}
-          <div className="ui-card" style={{ padding: '1.5rem', width: '100%' }}>
-            <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#000000' }}>
-              Start New Work Task
-            </h3>
+          {/* Full-Width "Start New Work Task" Form Card — 3-Section SaaS Design */}
+          <div className="ui-card" style={{ padding: '1.5rem', width: '100%', borderRadius: '12px' }}>
+            <div style={{ marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                Start New Work Task
+              </h3>
+              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Fill in the details below to initiate and track your work task.
+              </p>
+            </div>
 
-            <form onSubmit={handleStartSelfTask}>
-              {/* Product & Client Side-by-Side in 2 Columns */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1rem' }}>
-                {/* Product */}
-                <div className="form-group" style={{ margin: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Product Name *</label>
-                    <button
-                      type="button"
-                      style={{ background: 'none', border: 'none', color: '#E8873C', fontSize: '0.785rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                      onClick={() => {
-                        const newMode = !isCustomProduct;
-                        setIsCustomProduct(newMode);
-                        setProductId(newMode ? 'CUSTOM' : '');
-                        setCustomProductName('');
-                        setClientId('');
-                        setCustomClientName('');
-                        setIsCustomClient(false);
-                      }}
-                    >
-                      {isCustomProduct ? '← Select Existing Product' : '+ Add Other Product'}
-                    </button>
-                  </div>
+            <form onSubmit={handleStartSelfTask} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-                  {isCustomProduct ? (
-                    <div>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={customProductName}
-                        onChange={(e) => setCustomProductName(e.target.value)}
-                        placeholder="Enter custom product name..."
-                        required
-                      />
-                      <span style={{ fontSize: '0.725rem', color: '#E8873C', marginTop: '0.25rem', display: 'inline-block', fontWeight: 500 }}>
-                        ✨ Custom Product Name (Stored on this task)
-                      </span>
-                    </div>
-                  ) : (
-                    <GlassSelect
-                      placeholder="Select Product"
-                      value={productId}
-                      onChange={(val) => {
-                        if (val === 'CUSTOM') {
-                          setIsCustomProduct(true);
-                          setProductId('CUSTOM');
-                          setCustomProductName('');
-                        } else {
-                          setIsCustomProduct(false);
-                          setProductId(val ? Number(val) : '');
-                        }
-                        setClientId('');
-                        setCustomClientName('');
-                        setIsCustomClient(false);
-                      }}
-                      options={[
-                        ...products.map((p) => ({ value: p.id, label: `${p.code} - ${p.name}` })),
-                        { value: 'CUSTOM', label: '+ Add Other Product...', isAction: true, dividerAbove: true },
-                      ]}
-                    />
-                  )}
-                </div>
-
-                {/* Client */}
-                <div className="form-group" style={{ margin: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Client Name *</label>
-                    <button
-                      type="button"
-                      style={{ background: 'none', border: 'none', color: '#E8873C', fontSize: '0.785rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                      onClick={() => {
-                        const newMode = !isCustomClient;
-                        setIsCustomClient(newMode);
-                        setClientId(newMode ? 'CUSTOM' : '');
-                        setCustomClientName('');
-                      }}
-                      disabled={!isCustomProduct && !productId}
-                    >
-                      {isCustomClient ? '← Select Existing Client' : '+ Add Other Client'}
-                    </button>
-                  </div>
-
-                  {isCustomClient ? (
-                    <div>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={customClientName}
-                        onChange={(e) => setCustomClientName(e.target.value)}
-                        placeholder="Enter custom client company name..."
-                        required
-                      />
-                      <span style={{ fontSize: '0.725rem', color: '#E8873C', marginTop: '0.25rem', display: 'inline-block', fontWeight: 500 }}>
-                        ✨ Custom Client Name (Stored on this task)
-                      </span>
-                    </div>
-                  ) : (
-                    <GlassSelect
-                      disabled={!isCustomProduct && !productId}
-                      placeholder={
-                        !isCustomProduct && !productId
-                          ? 'Select Product First'
-                          : availableClients.length === 0 && !isCustomProduct
-                            ? 'No Mapped Clients'
-                            : 'Select Client'
-                      }
-                      value={clientId}
-                      onChange={(val) => {
-                        if (val === 'CUSTOM') {
-                          setIsCustomClient(true);
-                          setClientId('CUSTOM');
-                          setCustomClientName('');
-                        } else {
-                          setIsCustomClient(false);
-                          setClientId(val ? Number(val) : '');
-                        }
-                      }}
-                      options={[
-                        ...availableClients.map((c) => ({ value: c.id, label: c.companyName })),
-                        { value: 'CUSTOM', label: '+ Add Other Client...', isAction: true, dividerAbove: true },
-                      ]}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Module / Feature Name (Full Width) */}
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <label className="form-label" style={{ margin: 0 }}>Module / Feature Name *</label>
-                  <span
-                    style={{
-                      fontSize: '0.725rem',
-                      color: moduleName.length >= 100 ? '#ef4444' : moduleName.length >= 90 ? '#E8873C' : '#9ca3af',
-                      fontWeight: moduleName.length >= 90 ? 600 : 400,
-                      transition: 'color 0.15s ease',
-                    }}
-                  >
-                    {moduleName.length}/100
+              {/* SECTION 1: TASK DETAILS */}
+              <div style={{
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                padding: '1.15rem 1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.15rem' }}>
+                  <Briefcase size={14} style={{ color: 'var(--text-muted)' }} />
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-main)',
+                  }}>
+                    Task Details
                   </span>
                 </div>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={moduleName}
-                  onChange={(e) => setModuleName(e.target.value)}
-                  placeholder="e.g. Employee Payslip Generation"
-                  maxLength={100}
-                  required
-                />
-              </div>
-
-              {/* Task Description (Full Width) */}
-              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <label className="form-label" style={{ margin: 0 }}>Task Description *</label>
-                  <span
-                    style={{
-                      fontSize: '0.725rem',
-                      color: description.length >= 500 ? '#ef4444' : description.length >= 450 ? '#E8873C' : '#9ca3af',
-                      fontWeight: description.length >= 450 ? 600 : 400,
-                      transition: 'color 0.15s ease',
-                    }}
-                  >
-                    {description.length}/500
-                  </span>
-                </div>
-                <textarea
-                  className="form-input"
-                  rows={2}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Detailed description of task objectives..."
-                  maxLength={500}
-                  required
-                />
-              </div>
-
-              {/* SECTION 3: SCHEDULING & INSTRUCTIONS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid #f0f0f0' }}>
-
-                {/* Priority, Planned Start Date, Due Date (3 Columns) */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
-                  {/* Priority */}
+                {/* Product & Client Side-by-Side with Inline Quick-Add Button */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+                  {/* Product */}
                   <div className="form-group" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0 }}>
+                        Product Name <span style={{ color: 'var(--primary)' }}>*</span>
+                      </label>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary)',
+                          fontSize: '0.785rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          padding: 0,
+                          transition: 'color 0.15s ease',
+                        }}
+                        onClick={() => {
+                          const newMode = !isCustomProduct;
+                          setIsCustomProduct(newMode);
+                          setProductId(newMode ? 'CUSTOM' : '');
+                          setCustomProductName('');
+                          setClientId('');
+                          setCustomClientName('');
+                          setIsCustomClient(false);
+                        }}
+                      >
+                        {isCustomProduct ? '← Select Existing Product' : '+ Add Other Product'}
+                      </button>
+                    </div>
+
+                    {isCustomProduct ? (
+                      <div>
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ height: '38px', padding: '0.4rem 0.75rem', fontSize: '0.8125rem', flex: 1 }}
+                            value={customProductName}
+                            onChange={(e) => setCustomProductName(e.target.value)}
+                            placeholder="Enter custom product name..."
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ height: '38px', padding: '0 0.65rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}
+                            onClick={() => {
+                              setIsCustomProduct(false);
+                              setProductId('');
+                              setCustomProductName('');
+                              setClientId('');
+                              setCustomClientName('');
+                              setIsCustomClient(false);
+                            }}
+                            title="Switch back to standard product list"
+                          >
+                            <RotateCcw size={13} />
+                            <span style={{ fontSize: '0.75rem' }}>List</span>
+                          </button>
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--primary)', marginTop: '0.25rem', display: 'inline-block', fontWeight: 600 }}>
+                          ✨ Custom Product Name (Stored on this task)
+                        </span>
+                      </div>
+                    ) : (
+                      <GlassSelect
+                        placeholder="Select Product"
+                        value={productId}
+                        onChange={(val) => {
+                          if (val === 'CUSTOM') {
+                            setIsCustomProduct(true);
+                            setProductId('CUSTOM');
+                            setCustomProductName('');
+                          } else {
+                            setIsCustomProduct(false);
+                            setProductId(val ? Number(val) : '');
+                          }
+                          setClientId('');
+                          setCustomClientName('');
+                          setIsCustomClient(false);
+                        }}
+                        options={[
+                          ...products.map((p) => ({ value: p.id, label: `${p.code} - ${p.name}` })),
+                          { value: 'CUSTOM', label: '+ Add Other Product...', isAction: true, dividerAbove: true },
+                        ]}
+                      />
+                    )}
+                  </div>
+
+                  {/* Client */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0 }}>
+                        Client Name <span style={{ color: 'var(--primary)' }}>*</span>
+                      </label>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: (!isCustomProduct && !productId) ? 'var(--text-muted)' : 'var(--primary)',
+                          fontSize: '0.785rem',
+                          fontWeight: 700,
+                          cursor: (!isCustomProduct && !productId) ? 'not-allowed' : 'pointer',
+                          textDecoration: 'underline',
+                          padding: 0,
+                          transition: 'color 0.15s ease',
+                        }}
+                        onClick={() => {
+                          const newMode = !isCustomClient;
+                          setIsCustomClient(newMode);
+                          setClientId(newMode ? 'CUSTOM' : '');
+                          setCustomClientName('');
+                        }}
+                        disabled={!isCustomProduct && !productId}
+                      >
+                        {isCustomClient ? '← Select Existing Client' : '+ Add Other Client'}
+                      </button>
+                    </div>
+
+                    {isCustomClient ? (
+                      <div>
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ height: '38px', padding: '0.4rem 0.75rem', fontSize: '0.8125rem', flex: 1 }}
+                            value={customClientName}
+                            onChange={(e) => setCustomClientName(e.target.value)}
+                            placeholder="Enter custom client company name..."
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ height: '38px', padding: '0 0.65rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}
+                            onClick={() => {
+                              setIsCustomClient(false);
+                              setClientId('');
+                              setCustomClientName('');
+                            }}
+                            title="Switch back to standard client list"
+                          >
+                            <RotateCcw size={13} />
+                            <span style={{ fontSize: '0.75rem' }}>List</span>
+                          </button>
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--primary)', marginTop: '0.25rem', display: 'inline-block', fontWeight: 600 }}>
+                          ✨ Custom Client Name (Stored on this task)
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <GlassSelect
+                          disabled={!isCustomProduct && !productId}
+                          placeholder={
+                            !isCustomProduct && !productId
+                              ? 'Select Product First'
+                              : availableClients.length === 0 && !isCustomProduct
+                                ? 'No Mapped Clients'
+                                : 'Select Client'
+                          }
+                          value={clientId}
+                          onChange={(val) => {
+                            if (val === 'CUSTOM') {
+                              setIsCustomClient(true);
+                              setClientId('CUSTOM');
+                              setCustomClientName('');
+                            } else {
+                              setIsCustomClient(false);
+                              setClientId(val ? Number(val) : '');
+                            }
+                          }}
+                          options={[
+                            ...availableClients.map((c) => ({ value: c.id, label: c.companyName })),
+                            { value: 'CUSTOM', label: '+ Add Other Client...', isAction: true, dividerAbove: true },
+                          ]}
+                        />
+                        {!isCustomProduct && !productId && (
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem', display: 'block' }}>
+                            Select a product first
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Module / Feature Name */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0 }}>
+                      Module / Feature Name <span style={{ color: 'var(--primary)' }}>*</span>
+                    </label>
+                    <span
+                      style={{
+                        fontSize: '0.725rem',
+                        color: moduleName.length >= 95 ? '#ef4444' : moduleName.length >= 80 ? '#f59e0b' : 'var(--text-muted)',
+                        fontWeight: moduleName.length >= 80 ? 700 : 400,
+                        opacity: moduleName.length === 0 ? 0.6 : 1,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {moduleName.length}/100
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ height: '38px', padding: '0.4rem 0.75rem', fontSize: '0.8125rem' }}
+                    value={moduleName}
+                    onChange={(e) => setModuleName(e.target.value)}
+                    placeholder="e.g. Employee Payslip Generation"
+                    maxLength={100}
+                    required
+                  />
+                </div>
+
+                {/* Task Description */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0 }}>
+                      Task Description <span style={{ color: 'var(--primary)' }}>*</span>
+                    </label>
+                    <span
+                      style={{
+                        fontSize: '0.725rem',
+                        color: description.length >= 475 ? '#ef4444' : description.length >= 400 ? '#f59e0b' : 'var(--text-muted)',
+                        fontWeight: description.length >= 400 ? 700 : 400,
+                        opacity: description.length === 0 ? 0.6 : 1,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {description.length}/500
+                    </span>
+                  </div>
+                  <textarea
+                    className="form-input"
+                    rows={2}
+                    style={{
+                      height: '75px',
+                      minHeight: '75px',
+                      maxHeight: '160px',
+                      padding: '0.45rem 0.75rem',
+                      fontSize: '0.8125rem',
+                      lineHeight: 1.4,
+                      resize: 'vertical',
+                    }}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Detailed description of task objectives..."
+                    maxLength={500}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* SECTION 2: SCHEDULE */}
+              <div style={{
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                padding: '1.15rem 1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.15rem' }}>
+                  <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-main)',
+                  }}>
+                    Schedule & Estimated Effort
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                  {/* Priority with leading Flag icon */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <Flag size={13} style={{ color: 'var(--text-muted)' }} />
+                      <span>Priority</span>
+                    </label>
                     <GlassSelect
-                      label="Priority"
                       value={selfPriority}
                       onChange={(val) => setSelfPriority(Number(val))}
                       options={[
@@ -1579,10 +2040,13 @@ export const WorkTaskPage: React.FC = () => {
                     />
                   </div>
 
-                  {/* Planned Start Date */}
+                  {/* Planned Start Date with leading Calendar icon */}
                   <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
+                      <span>Planned Start Date</span>
+                    </label>
                     <GlassDatePicker
-                      label="Planned Start Date"
                       value={selfPlannedStart}
                       onChange={(val) => setSelfPlannedStart(val)}
                       minDate={new Date().toISOString().split('T')[0]}
@@ -1590,68 +2054,132 @@ export const WorkTaskPage: React.FC = () => {
                     />
                   </div>
 
-                  {/* Due Date */}
+                  {/* Due Date with leading Calendar icon */}
                   <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
+                      <span>Due Date</span>
+                    </label>
                     <GlassDatePicker
-                      label="Due Date"
                       value={selfDueDate}
                       onChange={(val) => setSelfDueDate(val)}
                       minDate={selfPlannedStart || new Date().toISOString().split('T')[0]}
                       placeholder="Select due date..."
                     />
                   </div>
-                </div>
 
-                {/* Planned Duration (Hours & Minutes) */}
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ display: 'block', marginBottom: '0.3rem' }}>
-                    Planned Duration *
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div>
-                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
-                        Hours:
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        className="form-input"
-                        placeholder="8"
-                        value={selfPlannedHours}
-                        onChange={(e) => setSelfPlannedHours(e.target.value)}
-                      />
+                  {/* Unified Planned Duration Control with Clock icon */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <Clock size={13} style={{ color: 'var(--text-muted)' }} />
+                      <span>Planned Duration <span style={{ color: 'var(--primary)' }}>*</span></span>
+                    </label>
+
+                    {/* Compact unified duration control */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      background: 'var(--input)',
+                      border: '1px solid var(--input-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '2px 4px',
+                      height: '38px',
+                      boxShadow: 'var(--shadow-xs)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', padding: '0 0.35rem' }}>
+                        <Clock size={14} style={{ color: 'var(--text-muted)', marginRight: '0.35rem', flexShrink: 0 }} />
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          placeholder="8"
+                          value={selfPlannedHours}
+                          onChange={(e) => setSelfPlannedHours(e.target.value)}
+                          style={{
+                            width: '36px',
+                            border: 'none',
+                            outline: 'none',
+                            textAlign: 'center',
+                            fontSize: '0.825rem',
+                            fontWeight: 600,
+                            color: 'var(--text-main)',
+                            background: 'transparent',
+                            padding: 0,
+                          }}
+                        />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500, marginRight: '0.4rem' }}>h</span>
+                      </div>
+
+                      <div style={{ width: '1px', height: '20px', background: 'var(--border)', margin: '0 0.25rem' }} />
+
+                      <div style={{ flex: 1 }}>
+                        <select
+                          value={selfPlannedMinutes}
+                          onChange={(e) => setSelfPlannedMinutes(e.target.value)}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontSize: '0.8125rem',
+                            fontWeight: 500,
+                            color: 'var(--text-main)',
+                            cursor: 'pointer',
+                            padding: '0 0.25rem',
+                            colorScheme: 'inherit',
+                          }}
+                        >
+                          <option value="00" style={{ background: 'var(--panel)', color: 'var(--text-main)' }}>00m</option>
+                          <option value="15" style={{ background: 'var(--panel)', color: 'var(--text-main)' }}>15m</option>
+                          <option value="30" style={{ background: 'var(--panel)', color: 'var(--text-main)' }}>30m</option>
+                          <option value="45" style={{ background: 'var(--panel)', color: 'var(--text-main)' }}>45m</option>
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
-                        Minutes:
-                      </span>
-                      <GlassSelect
-                        placeholder="00 Mins"
-                        value={selfPlannedMinutes}
-                        onChange={(val) => setSelfPlannedMinutes(String(val))}
-                        options={[
-                          { value: '00', label: '00 Mins' },
-                          { value: '15', label: '15 Mins' },
-                          { value: '30', label: '30 Mins' },
-                          { value: '45', label: '45 Mins' },
-                        ]}
-                      />
-                    </div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem', display: 'flex', alignItems: 'flex-start', gap: '0.3rem', lineHeight: 1.3 }}>
+                      <span>💡</span>
+                      <span>This is your estimated working time — can be less than the full Start–Due window</span>
+                    </span>
                   </div>
                 </div>
+              </div>
 
-                {/* Instructions / Remarks */}
+              {/* SECTION 3: NOTES */}
+              <div style={{
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                padding: '1.15rem 1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.15rem' }}>
+                  <Activity size={14} style={{ color: 'var(--text-muted)' }} />
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-main)',
+                  }}>
+                    Notes
+                  </span>
+                </div>
+
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Instructions / Remarks</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)', margin: 0 }}>
+                      Instructions / Remarks <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>
+                    </label>
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: selfInstructions.length >= 300 ? '#ef4444' : selfInstructions.length >= 270 ? '#E8873C' : '#9ca3af',
-                        fontWeight: selfInstructions.length >= 270 ? 600 : 400,
-                        transition: 'color 0.15s ease',
+                        color: selfInstructions.length >= 285 ? '#ef4444' : selfInstructions.length >= 240 ? '#f59e0b' : 'var(--text-muted)',
+                        fontWeight: selfInstructions.length >= 240 ? 700 : 400,
+                        opacity: selfInstructions.length === 0 ? 0.6 : 1,
+                        transition: 'all 0.15s ease',
                       }}
                     >
                       {selfInstructions.length}/300
@@ -1660,6 +2188,15 @@ export const WorkTaskPage: React.FC = () => {
                   <textarea
                     className="form-input"
                     rows={2}
+                    style={{
+                      height: '58px',
+                      minHeight: '58px',
+                      maxHeight: '140px',
+                      padding: '0.45rem 0.75rem',
+                      fontSize: '0.8125rem',
+                      lineHeight: 1.4,
+                      resize: 'vertical',
+                    }}
                     value={selfInstructions}
                     onChange={(e) => setSelfInstructions(e.target.value)}
                     placeholder="Optional notes or instructions for yourself..."
@@ -1668,8 +2205,14 @@ export const WorkTaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Start Button Right-Aligned */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              {/* Sticky / Dedicated Action Footer */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                paddingTop: '0.75rem',
+                borderTop: '1px solid var(--border)',
+              }}>
                 <button
                   type="submit"
                   className="btn btn-primary"
@@ -1678,14 +2221,16 @@ export const WorkTaskPage: React.FC = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '0.5rem',
-                    padding: '0.6rem 1.75rem',
-                    height: '42px',
-                    borderRadius: '10px',
+                    padding: '0.55rem 1.6rem',
+                    height: '40px',
+                    borderRadius: '8px',
                     fontSize: '0.875rem',
-                    fontWeight: 600
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(232, 135, 60, 0.25)',
                   }}
                 >
-                  <Play size={18} />
+                  <Play size={16} />
                   <span>Start Task</span>
                 </button>
               </div>
@@ -1693,7 +2238,7 @@ export const WorkTaskPage: React.FC = () => {
           </div>
 
           {/* Full-Width "Recent Work Tasks" Section Stacked Directly Below */}
-          <div>
+          <div id="recent-work-tasks-section">
             <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
               Recent Work Tasks
             </h3>
@@ -1706,24 +2251,95 @@ export const WorkTaskPage: React.FC = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {myRecentTasks.map((t) => (
-                  <div key={t.id} className="ui-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {myRecentTasks.map((t) => {
+                  const statusColor = getTaskStatusColor(t.status, t.isOverdue);
+                  const isHighlighted = highlightedTaskId === t.id;
+                  const isExceededWorked = (t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 && t.totalProductiveSeconds > (t.plannedDurationMinutes * 60)) || t.isExceededDuration;
+                  const isLongDesc = (t.description || '').length > 130;
+                  const isExpanded = !!expandedDescIds[t.id];
+
+                  return (
+                    <div
+                      key={t.id}
+                      id={`task-card-${t.id}`}
+                      className="ui-card"
+                      style={{
+                        padding: '1.5rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1rem',
+                        borderLeft: `4px solid ${statusColor.accent}`,
+                        transition: 'all 0.35s ease',
+                        ...(isHighlighted ? {
+                          boxShadow: `0 0 0 2px ${statusColor.accent}, 0 8px 24px rgba(232, 135, 60, 0.35)`,
+                          transform: 'translateY(-2px)',
+                        } : {})
+                      }}
+                    >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{t.moduleName}</h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{t.moduleName}</h4>
+                        {getPriorityBadge(t.priority)}
+                        {getExceededBadge(isExceededWorked)}
+                      </div>
                       {getStatusBadge(t.status, t.isOverdue)}
                     </div>
 
-                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                      {t.description}
-                    </p>
+                    <div>
+                      <p style={{
+                        margin: 0,
+                        fontSize: '0.875rem',
+                        color: 'var(--text-secondary)',
+                        lineHeight: 1.5,
+                        ...(!isExpanded && isLongDesc ? {
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        } : {})
+                      }}>
+                        {t.description}
+                      </p>
+                      {isLongDesc && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandDesc(t.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--primary)',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            padding: '0.25rem 0 0 0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}
+                        >
+                          {isExpanded ? (
+                            <>
+                              <span>Show less</span>
+                              <ChevronUp size={13} />
+                            </>
+                          ) : (
+                            <>
+                              <span>Show more</span>
+                              <ChevronDown size={13} />
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
 
-                    {/* Fixed 3-Column Metadata Grid */}
+                    {/* Fixed Metadata Grid - Always 5 Symmetrical Columns */}
                     <div style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gap: '1rem',
-                      background: '#f9fafb',
-                      border: '1px solid var(--border-color)',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                      gap: '0.85rem',
+                      background: 'var(--panel-raised)',
+                      border: '1px solid var(--border)',
                       borderRadius: '12px',
                       padding: '0.85rem 1.25rem'
                     }}>
@@ -1736,8 +2352,34 @@ export const WorkTaskPage: React.FC = () => {
                         <span style={{ fontSize: '0.875rem', color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.clientCompanyName || 'N/A'}</span>
                       </div>
                       <div>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Planned Duration</span>
+                        <span style={{ fontSize: '0.875rem', color: 'var(--text-main)', fontWeight: 600, display: 'block' }}>
+                          {t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0
+                            ? formatDurationToHoursMinutes(t.plannedDurationMinutes / 60)
+                            : '--'}
+                        </span>
+                      </div>
+                      <div>
                         <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Worked</span>
-                        <span style={{ fontSize: '0.875rem', color: 'var(--success-text)', fontWeight: 700, display: 'block' }}>{formatDurationToHoursMinutes(t.totalProductiveSeconds / 3600)}</span>
+                        <span style={{
+                          fontSize: '0.875rem',
+                          color: isExceededWorked ? '#EF4444' : 'var(--success-text)',
+                          fontWeight: 700,
+                          display: 'block'
+                        }}>
+                          {formatDurationToHoursMinutes(t.totalProductiveSeconds / 3600)}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Due Date</span>
+                        <span style={{
+                          fontSize: '0.875rem',
+                          color: t.isOverdue ? 'var(--danger-text)' : (t.dueDate ? 'var(--text-main)' : 'var(--text-muted)'),
+                          fontWeight: 600,
+                          display: 'block'
+                        }}>
+                          {t.dueDate ? formatDateIST(t.dueDate) : 'No due date set'}
+                        </span>
                       </div>
                     </div>
 
@@ -1768,9 +2410,9 @@ export const WorkTaskPage: React.FC = () => {
                               padding: '0.4rem 0.85rem',
                               fontSize: '0.785rem',
                               borderRadius: '8px',
-                              backgroundColor: '#fffbeb',
-                              borderColor: '#fde68a',
-                              color: '#d97706',
+                              backgroundColor: 'var(--warning-bg)',
+                              borderColor: 'rgba(245, 158, 11, 0.3)',
+                              color: 'var(--warning-text)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '0.35rem'
@@ -1807,7 +2449,8 @@ export const WorkTaskPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             )}
           </div>
@@ -1829,8 +2472,14 @@ export const WorkTaskPage: React.FC = () => {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
-              {assignedTasks.map((t) => (
-                <div key={t.id} className="ui-card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--primary)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {assignedTasks.map((t) => {
+                const statusColor = getTaskStatusColor(t.status, t.isOverdue);
+                const isExceededWorked = (t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 && t.totalProductiveSeconds > (t.plannedDurationMinutes * 60)) || t.isExceededDuration;
+                const isLongDesc = (t.description || '').length > 130;
+                const isExpanded = !!expandedDescIds[t.id];
+
+                return (
+                  <div key={t.id} id={`task-card-${t.id}`} className="ui-card" style={{ padding: '1.5rem', borderLeft: `4px solid ${statusColor.accent}`, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                     <div>
                       <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{t.moduleName}</h4>
@@ -1841,17 +2490,61 @@ export const WorkTaskPage: React.FC = () => {
                     {getPriorityBadge(t.priority)}
                   </div>
 
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    {t.description}
-                  </p>
+                  <div>
+                    <p style={{
+                      margin: 0,
+                      fontSize: '0.875rem',
+                      color: 'var(--text-secondary)',
+                      lineHeight: 1.5,
+                      ...(!isExpanded && isLongDesc ? {
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      } : {})
+                    }}>
+                      {t.description}
+                    </p>
+                    {isLongDesc && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandDesc(t.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary)',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: '0.25rem 0 0 0',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}
+                      >
+                        {isExpanded ? (
+                          <>
+                            <span>Show less</span>
+                            <ChevronUp size={13} />
+                          </>
+                        ) : (
+                          <>
+                            <span>Show more</span>
+                            <ChevronDown size={13} />
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
 
-                  {/* Fixed 3-Column Metadata Grid */}
+                  {/* Fixed Metadata Grid */}
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
                     gap: '0.75rem',
-                    background: '#f9fafb',
-                    border: '1px solid var(--border-color)',
+                    background: 'var(--panel-raised)',
+                    border: '1px solid var(--border)',
                     borderRadius: '12px',
                     padding: '0.75rem 1rem'
                   }}>
@@ -1864,17 +2557,37 @@ export const WorkTaskPage: React.FC = () => {
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.clientCompanyName || 'N/A'}</span>
                     </div>
                     <div>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Planned Duration</span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600, display: 'block' }}>
+                        {t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0
+                          ? formatDurationToHoursMinutes(t.plannedDurationMinutes / 60)
+                          : '--'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Worked</span>
+                      <span style={{
+                        fontSize: '0.85rem',
+                        color: isExceededWorked ? '#EF4444' : 'var(--success-text)',
+                        fontWeight: 700,
+                        display: 'block'
+                      }}>
+                        {formatDurationToHoursMinutes(t.totalProductiveSeconds / 3600)}
+                      </span>
+                    </div>
+                    <div>
                       <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', fontWeight: 500 }}>Due Date</span>
-                      <span style={{ fontSize: '0.85rem', color: t.isOverdue ? 'var(--danger)' : 'var(--text-main)', fontWeight: 600, display: 'block' }}>
-                        {t.dueDate ? formatDateIST(t.dueDate) : 'No due date'}
+                      <span style={{ fontSize: '0.85rem', color: t.isOverdue ? 'var(--danger-text)' : (t.dueDate ? 'var(--text-main)' : 'var(--text-muted)'), fontWeight: 600, display: 'block' }}>
+                        {t.dueDate ? formatDateIST(t.dueDate) : 'No due date set'}
                       </span>
                     </div>
                   </div>
 
                   {/* Footer & Action Buttons Row */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
-                    <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                       {getStatusBadge(t.status, t.isOverdue)}
+                      {getExceededBadge(t.isExceededDuration || (t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 && t.totalProductiveSeconds > (t.plannedDurationMinutes * 60)))}
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -1897,9 +2610,9 @@ export const WorkTaskPage: React.FC = () => {
                             padding: '0.4rem 0.85rem',
                             fontSize: '0.785rem',
                             borderRadius: '8px',
-                            backgroundColor: '#fffbeb',
-                            borderColor: '#fde68a',
-                            color: '#d97706',
+                            backgroundColor: 'var(--warning-bg)',
+                            borderColor: 'rgba(245, 158, 11, 0.3)',
+                            color: 'var(--warning-text)',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '0.35rem'
@@ -1932,20 +2645,21 @@ export const WorkTaskPage: React.FC = () => {
                           <span>Complete</span>
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.785rem', borderRadius: '8px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                        onClick={() => setSelectedTaskForTimeline(t)}
-                        title="View Audit Timeline"
-                      >
-                        <Clock size={14} />
-                        <span>Timeline</span>
-                      </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.785rem', borderRadius: '8px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                          onClick={() => setSelectedTaskForTimeline(t)}
+                          title="View Audit Timeline"
+                        >
+                          <Clock size={14} />
+                          <span>Timeline</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -2126,9 +2840,9 @@ export const WorkTaskPage: React.FC = () => {
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.8rem',
                         fontWeight: 600,
-                        background: teamShowAllTasks ? '#fff4e6' : '#ffffff',
+                        background: teamShowAllTasks ? 'var(--primary-tint)' : 'var(--panel-raised)',
                         color: teamShowAllTasks ? 'var(--primary)' : 'var(--text-secondary)',
-                        border: teamShowAllTasks ? '1px solid var(--primary)' : '1px solid #e5e7eb',
+                        border: teamShowAllTasks ? '1px solid var(--primary)' : '1px solid var(--border)',
                         cursor: 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -2147,6 +2861,15 @@ export const WorkTaskPage: React.FC = () => {
                         onChange={(e) => setTeamFilterOverdue(e.target.checked)}
                       />
                       <span style={{ color: teamFilterOverdue ? 'var(--danger)' : 'var(--text-primary)' }}>⚠️ Overdue Only</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={teamFilterExceededDuration}
+                        onChange={(e) => setTeamFilterExceededDuration(e.target.checked)}
+                      />
+                      <span style={{ color: teamFilterExceededDuration ? '#F59E0B' : 'var(--text-primary)' }}>⏳ Exceeded Estimate Only</span>
                     </label>
                   </div>
 
@@ -2182,9 +2905,9 @@ export const WorkTaskPage: React.FC = () => {
                   justifyContent: 'space-between',
                   padding: '0.75rem 1.25rem',
                   borderRadius: 'var(--radius-md)',
-                  background: '#ffffff',
-                  border: '1px solid var(--border-color)',
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                  background: 'var(--panel)',
+                  border: '1px solid var(--border)',
+                  boxShadow: 'var(--shadow-xs)',
                   marginBottom: '1rem',
                   flexWrap: 'wrap',
                   gap: '0.75rem'
@@ -2196,7 +2919,7 @@ export const WorkTaskPage: React.FC = () => {
                       width: '32px',
                       height: '32px',
                       borderRadius: '8px',
-                      background: '#fff4e6',
+                      background: 'var(--primary-tint)',
                       color: 'var(--primary)',
                       display: 'flex',
                       alignItems: 'center',
@@ -2215,7 +2938,7 @@ export const WorkTaskPage: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)' }}>
                       {teamFilterEmployeeId && selectedTeamMemberObj
                         ? `Showing full task history for ${selectedTeamMemberObj.employeeCode} - ${selectedTeamMemberObj.name}`
                         : teamFilterDatePreset !== 'DEFAULT'
@@ -2229,7 +2952,8 @@ export const WorkTaskPage: React.FC = () => {
                           fontSize: '0.75rem',
                           padding: '0.2rem 0.6rem',
                           borderRadius: '12px',
-                          background: '#f3f4f6',
+                          background: 'var(--panel-raised)',
+                          border: '1px solid var(--border)',
                           color: 'var(--text-secondary)',
                           fontWeight: 600
                         }}
@@ -2292,8 +3016,16 @@ export const WorkTaskPage: React.FC = () => {
                             <div style={{ fontSize: '0.785rem', color: 'var(--text-secondary)' }}>
                               Due: {t.dueDate ? formatDateIST(t.dueDate) : 'N/A'}
                             </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              Planned: {t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 ? formatDurationToHoursMinutes(t.plannedDurationMinutes / 60) : 'N/A'}
+                            </div>
                           </td>
-                          <td>{getStatusBadge(t.status, t.isOverdue)}</td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                              {getStatusBadge(t.status, t.isOverdue)}
+                              {getExceededBadge(t.isExceededDuration || (t.plannedDurationMinutes != null && t.plannedDurationMinutes > 0 && t.totalProductiveSeconds > (t.plannedDurationMinutes * 60)))}
+                            </div>
+                          </td>
                           <td>
                             <div style={{ fontWeight: 700, color: 'var(--success-text)' }}>
                               {formatDurationToHoursMinutes(t.totalProductiveSeconds / 3600)}
@@ -2371,32 +3103,32 @@ export const WorkTaskPage: React.FC = () => {
               maxHeight: '90vh',
               overflowY: 'auto',
               padding: '2rem',
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
               borderRadius: '20px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              boxShadow: 'var(--shadow-lg)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)' }}>
                   Assign Task to Direct Team Member
                 </h3>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#6b7280' }}>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   Create and schedule a new work task for your direct reportees.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowTeamAssignModal(false)}
-                style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '0.25rem' }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}
               >
                 <XCircle size={20} />
               </button>
             </div>
 
             {teamAssignError && (
-              <div style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
+              <div style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.825rem', fontWeight: 500 }}>
                 ⚠️ {teamAssignError}
               </div>
             )}
@@ -2404,8 +3136,8 @@ export const WorkTaskPage: React.FC = () => {
             <form onSubmit={handleCreateTeamTask} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
               {/* SECTION 1: ASSIGNMENT DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
-                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   1. Assignment Details
                 </div>
 
@@ -2430,10 +3162,10 @@ export const WorkTaskPage: React.FC = () => {
                   {/* Product */}
                   <div className="form-group" style={{ margin: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                      <label className="form-label" style={{ margin: 0 }}>Product Name *</label>
+                      <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Product Name *</label>
                       <button
                         type="button"
-                        style={{ background: 'none', border: 'none', color: '#E8873C', fontSize: '0.785rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.785rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
                         onClick={() => {
                           const newMode = !isTeamCustomProduct;
                           setIsTeamCustomProduct(newMode);
@@ -2485,10 +3217,10 @@ export const WorkTaskPage: React.FC = () => {
                   {/* Client */}
                   <div className="form-group" style={{ margin: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                      <label className="form-label" style={{ margin: 0 }}>Client Name *</label>
+                      <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Client Name *</label>
                       <button
                         type="button"
-                        style={{ background: 'none', border: 'none', color: '#E8873C', fontSize: '0.785rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                        style={{ background: 'none', border: 'none', color: (!isTeamCustomProduct && !teamProductId) ? 'var(--text-muted)' : 'var(--primary)', fontSize: '0.785rem', fontWeight: 700, cursor: (!isTeamCustomProduct && !teamProductId) ? 'not-allowed' : 'pointer', textDecoration: 'underline', padding: 0 }}
                         onClick={() => {
                           const newMode = !isTeamCustomClient;
                           setIsTeamCustomClient(newMode);
@@ -2542,19 +3274,19 @@ export const WorkTaskPage: React.FC = () => {
               </div>
 
               {/* SECTION 2: TASK DETAILS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '1.5rem' }}>
-                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   2. Task Details
                 </div>
 
                 {/* Module / Feature Name (max 100) */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Module / Feature Name *</label>
+                    <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Module / Feature Name *</label>
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: teamModuleName.length >= 100 ? '#ef4444' : teamModuleName.length >= 90 ? '#E8873C' : '#9ca3af',
+                        color: teamModuleName.length >= 100 ? '#ef4444' : teamModuleName.length >= 90 ? 'var(--primary)' : 'var(--text-muted)',
                         fontWeight: teamModuleName.length >= 90 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -2576,11 +3308,11 @@ export const WorkTaskPage: React.FC = () => {
                 {/* Task Description (max 500) */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Task Description *</label>
+                    <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Task Description *</label>
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: teamDescription.length >= 500 ? '#ef4444' : teamDescription.length >= 450 ? '#E8873C' : '#9ca3af',
+                        color: teamDescription.length >= 500 ? '#ef4444' : teamDescription.length >= 450 ? 'var(--primary)' : 'var(--text-muted)',
                         fontWeight: teamDescription.length >= 450 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -2602,7 +3334,7 @@ export const WorkTaskPage: React.FC = () => {
 
               {/* SECTION 3: SCHEDULING & INSTRUCTIONS */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: '#E8873C', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <div style={{ fontSize: '0.785rem', fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   3. Scheduling & Instructions
                 </div>
 
@@ -2648,12 +3380,12 @@ export const WorkTaskPage: React.FC = () => {
 
                 {/* Planned Duration (Hours & Minutes) */}
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ display: 'block', marginBottom: '0.3rem' }}>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '0.3rem', color: 'var(--text-main)' }}>
                     Planned Duration *
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Hours:
                       </span>
                       <input
@@ -2668,7 +3400,7 @@ export const WorkTaskPage: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.725rem', color: '#6b7280', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
+                      <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>
                         Minutes:
                       </span>
                       <GlassSelect
@@ -2688,11 +3420,11 @@ export const WorkTaskPage: React.FC = () => {
                 {/* Instructions / Remarks (max 300) */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Instructions / Remarks</label>
+                    <label className="form-label" style={{ margin: 0, color: 'var(--text-main)' }}>Instructions / Remarks</label>
                     <span
                       style={{
                         fontSize: '0.725rem',
-                        color: teamInstructions.length >= 300 ? '#ef4444' : teamInstructions.length >= 270 ? '#E8873C' : '#9ca3af',
+                        color: teamInstructions.length >= 300 ? '#ef4444' : teamInstructions.length >= 270 ? 'var(--primary)' : 'var(--text-muted)',
                         fontWeight: teamInstructions.length >= 270 ? 600 : 400,
                         transition: 'color 0.15s ease',
                       }}
@@ -2712,20 +3444,16 @@ export const WorkTaskPage: React.FC = () => {
               </div>
 
               {/* ACTION BUTTONS */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid #f0f0f0', paddingTop: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
                 <button
                   type="button"
                   onClick={() => setShowTeamAssignModal(false)}
+                  className="btn btn-secondary"
                   style={{
                     padding: '0.65rem 1.35rem',
-                    background: '#ffffff',
-                    color: '#374151',
-                    border: '1px solid #e5e7eb',
                     borderRadius: '10px',
                     fontSize: '0.875rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background 0.15s ease',
                   }}
                 >
                   Cancel
@@ -2733,22 +3461,18 @@ export const WorkTaskPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submittingTeamAssign}
+                  className="btn btn-primary"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '0.5rem',
                     padding: '0.65rem 1.85rem',
-                    background: 'linear-gradient(135deg, #E8873C 0%, #F59E0B 100%)',
-                    color: '#FFFFFF',
-                    border: 'none',
                     borderRadius: '10px',
                     fontSize: '0.875rem',
                     fontWeight: 700,
                     cursor: submittingTeamAssign ? 'not-allowed' : 'pointer',
                     opacity: submittingTeamAssign ? 0.65 : 1,
-                    boxShadow: '0 4px 16px rgba(232, 135, 60, 0.4)',
-                    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
                   }}
                 >
                   <span>{submittingTeamAssign ? 'Assigning Work Task...' : 'Assign Work Task'}</span>
@@ -2857,6 +3581,15 @@ export const WorkTaskPage: React.FC = () => {
           taskTitle={`${selectedTaskForTimeline.moduleName} (${selectedTaskForTimeline.productName || ''} - ${selectedTaskForTimeline.clientCompanyName || ''})`}
           employeeName={selectedTaskForTimeline.employeeName || user?.employeeName || ''}
           events={selectedTaskForTimeline.timelineEvents || []}
+          productName={selectedTaskForTimeline.productName}
+          clientCompanyName={selectedTaskForTimeline.clientCompanyName}
+          status={selectedTaskForTimeline.status}
+          isOverdue={selectedTaskForTimeline.isOverdue}
+          isExceededDuration={selectedTaskForTimeline.isExceededDuration}
+          plannedDurationMinutes={selectedTaskForTimeline.plannedDurationMinutes}
+          totalProductiveSeconds={selectedTaskForTimeline.totalProductiveSeconds}
+          dueDate={selectedTaskForTimeline.dueDate}
+          plannedStart={selectedTaskForTimeline.plannedStart}
         />
       )}
 
@@ -2882,10 +3615,10 @@ export const WorkTaskPage: React.FC = () => {
             style={{
               width: '100%',
               maxWidth: '540px',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--panel)',
               borderRadius: '16px',
-              border: '1px solid #e5e7eb',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-lg)',
               overflow: 'hidden',
               animation: 'modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
@@ -2895,15 +3628,11 @@ export const WorkTaskPage: React.FC = () => {
             <div
               style={{
                 padding: '1.25rem 1.5rem',
-                borderBottom: '1px solid #f0f0f0',
+                borderBottom: '1px solid var(--border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: actionModal.type.includes('switch')
-                  ? 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)'
-                  : actionModal.type === 'complete'
-                    ? 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)'
-                    : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                background: 'var(--panel-raised)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -2921,7 +3650,7 @@ export const WorkTaskPage: React.FC = () => {
                   </div>
                 )}
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
                     {actionModal.type.includes('switch')
                       ? 'Task Currently Running'
                       : actionModal.type === 'complete'
@@ -2934,7 +3663,7 @@ export const WorkTaskPage: React.FC = () => {
                               ? 'Start Assigned Task'
                               : 'Start Work Task'}
                   </h3>
-                  <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.8rem', color: '#4B5563' }}>
+                  <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                     {actionModal.taskTitle}
                   </p>
                 </div>
@@ -2947,7 +3676,7 @@ export const WorkTaskPage: React.FC = () => {
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    color: '#6B7280',
+                    color: 'var(--text-muted)',
                     cursor: 'pointer',
                     padding: '0.35rem',
                     borderRadius: '50%',
@@ -2964,20 +3693,20 @@ export const WorkTaskPage: React.FC = () => {
             {/* Body */}
             <div style={{ padding: '1.5rem' }}>
               {actionModal.error && (
-                <div style={{ padding: '0.75rem 1rem', background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                <div style={{ padding: '0.75rem 1rem', background: 'var(--danger-bg)', border: '1px solid rgba(239, 68, 68, 0.3)', color: 'var(--danger-text)', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
                   {actionModal.error}
                 </div>
               )}
 
               {actionModal.type.includes('switch') ? (
                 <>
-                  <div style={{ padding: '0.875rem 1rem', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', marginBottom: '1.25rem', fontSize: '0.875rem', color: '#92400E', lineHeight: 1.5 }}>
+                  <div style={{ padding: '0.875rem 1rem', background: 'var(--panel-raised)', border: '1px solid var(--border)', borderRadius: '10px', marginBottom: '1.25rem', fontSize: '0.875rem', color: 'var(--text-main)', lineHeight: 1.5 }}>
                     Task <strong>"{actionModal.activeTaskTitle}"</strong> is currently running.<br />
                     Do you want to put it <strong>On Hold</strong> and {actionModal.type === 'resume-switch' ? 'resume' : 'start'} <strong>"{actionModal.taskTitle}"</strong>?
                   </div>
 
                   <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
                       Remarks for putting "{actionModal.activeTaskTitle}" On Hold: <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <textarea
@@ -2985,20 +3714,16 @@ export const WorkTaskPage: React.FC = () => {
                       placeholder="Enter remarks for putting current task on hold..."
                       value={actionModal.holdRemarks}
                       onChange={(e) => setActionModal((prev) => ({ ...prev, holdRemarks: e.target.value }))}
+                      className="form-input"
                       style={{
                         width: '100%',
-                        padding: '0.6rem 0.75rem',
-                        borderRadius: '8px',
-                        border: '1px solid #D1D5DB',
-                        fontSize: '0.875rem',
-                        color: '#111827',
                         resize: 'none',
                       }}
                     />
                   </div>
 
                   <div style={{ marginBottom: '0.5rem' }}>
-                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
                       Remarks for {actionModal.type === 'resume-switch' ? 'resuming' : 'starting'} "{actionModal.taskTitle}":
                     </label>
                     <textarea
@@ -3006,13 +3731,9 @@ export const WorkTaskPage: React.FC = () => {
                       placeholder="Enter action remarks (optional)..."
                       value={actionModal.remarks}
                       onChange={(e) => setActionModal((prev) => ({ ...prev, remarks: e.target.value }))}
+                      className="form-input"
                       style={{
                         width: '100%',
-                        padding: '0.6rem 0.75rem',
-                        borderRadius: '8px',
-                        border: '1px solid #D1D5DB',
-                        fontSize: '0.875rem',
-                        color: '#111827',
                         resize: 'none',
                       }}
                     />
@@ -3020,7 +3741,7 @@ export const WorkTaskPage: React.FC = () => {
                 </>
               ) : (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
                     Remarks for {
                       actionModal.type === 'complete' ? 'completing' :
                         actionModal.type === 'hold' ? 'holding' :
@@ -3035,13 +3756,9 @@ export const WorkTaskPage: React.FC = () => {
                       } this task...`}
                     value={actionModal.remarks}
                     onChange={(e) => setActionModal((prev) => ({ ...prev, remarks: e.target.value }))}
+                    className="form-input"
                     style={{
                       width: '100%',
-                      padding: '0.6rem 0.75rem',
-                      borderRadius: '8px',
-                      border: '1px solid #D1D5DB',
-                      fontSize: '0.875rem',
-                      color: '#111827',
                       resize: 'none',
                     }}
                   />
@@ -3053,8 +3770,8 @@ export const WorkTaskPage: React.FC = () => {
             <div
               style={{
                 padding: '1rem 1.5rem',
-                background: '#F9FAFB',
-                borderTop: '1px solid #F3F4F6',
+                background: 'var(--panel-raised)',
+                borderTop: '1px solid var(--border)',
                 display: 'flex',
                 justifyContent: 'flex-end',
                 gap: '0.75rem',
@@ -3064,15 +3781,12 @@ export const WorkTaskPage: React.FC = () => {
                 type="button"
                 disabled={actionModal.submitting}
                 onClick={() => setActionModal((prev) => ({ ...prev, isOpen: false }))}
+                className="btn btn-secondary"
                 style={{
                   padding: '0.5rem 1rem',
                   borderRadius: '8px',
-                  border: '1px solid #D1D5DB',
-                  background: '#ffffff',
-                  color: '#374151',
                   fontWeight: 600,
                   fontSize: '0.875rem',
-                  cursor: 'pointer',
                 }}
               >
                 {actionModal.type.includes('switch') ? 'No' : 'Cancel'}
@@ -3086,10 +3800,10 @@ export const WorkTaskPage: React.FC = () => {
                   (!actionModal.type.includes('switch') && !actionModal.remarks.trim())
                 }
                 onClick={submitTaskActionModal}
+                className="btn btn-primary"
                 style={{
                   padding: '0.5rem 1.25rem',
                   borderRadius: '8px',
-                  border: 'none',
                   background: actionModal.type === 'complete' ? '#10B981' : '#3B82F6',
                   color: '#ffffff',
                   fontWeight: 600,

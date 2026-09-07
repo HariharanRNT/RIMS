@@ -513,10 +513,10 @@ export const MonthlyCalendarPage: React.FC = () => {
           background-color: rgba(232, 135, 60, 0.1) !important;
         }
         .kpi-stat-card {
-          background: #ffffff;
-          border: 1px solid #e5e7eb;
+          background: var(--panel);
+          border: 1px solid var(--border);
           border-radius: var(--radius-md);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          box-shadow: var(--shadow-xs);
           padding: 1.15rem 1.25rem;
           display: flex;
           flex-direction: column;
@@ -524,8 +524,8 @@ export const MonthlyCalendarPage: React.FC = () => {
           transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
         .kpi-stat-card:hover {
-          border-color: #d1d5db;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+          border-color: var(--border-hover);
+          box-shadow: var(--shadow-md);
         }
         .kpi-stat-badge {
           width: 36px;
@@ -558,8 +558,8 @@ export const MonthlyCalendarPage: React.FC = () => {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: #ffffff;
-          border: 1px solid var(--border-color);
+          background: var(--panel-raised);
+          border: 1px solid var(--border);
           color: var(--text-secondary);
           cursor: pointer;
           transition: all 0.15s ease;
@@ -573,14 +573,14 @@ export const MonthlyCalendarPage: React.FC = () => {
           position: sticky;
           top: 0;
           z-index: 20;
-          background: #f8fafc;
-          border-bottom: 2px solid var(--border-color);
+          background: var(--bg-table-header);
+          border-bottom: 2px solid var(--border);
           box-shadow: 0 1px 2px rgba(0,0,0,0.03);
         }
         .bulk-action-bar {
-          background: var(--bg-surface, #ffffff);
+          background: var(--panel);
           border: 1px solid var(--primary);
-          box-shadow: 0 4px 20px rgba(232, 135, 60, 0.15);
+          box-shadow: var(--shadow-md);
           border-radius: var(--radius-md);
           padding: 0.75rem 1.25rem;
           display: flex;
@@ -1065,9 +1065,9 @@ export const MonthlyCalendarPage: React.FC = () => {
                       borderRadius: 'var(--radius-full)',
                       fontSize: '0.75rem',
                       fontWeight: isActive ? 600 : 500,
-                      background: isActive ? 'var(--primary-tint)' : '#ffffff',
+                      background: isActive ? 'var(--primary-tint)' : 'var(--panel-raised)',
                       color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
-                      border: isActive ? '1px solid var(--primary)' : '1px solid #e2e8f0',
+                      border: isActive ? '1px solid var(--primary)' : '1px solid var(--border)',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease'
                     }}
@@ -1081,7 +1081,7 @@ export const MonthlyCalendarPage: React.FC = () => {
 
           {/* Sticky Header Table Container */}
           <div className="ui-card table-container" style={{ padding: 0, maxHeight: 'calc(100vh - 300px)', minHeight: '400px', overflowY: 'auto' }}>
-            <div style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', position: 'sticky', top: 0, zIndex: 25 }}>
+            <div style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--panel)', position: 'sticky', top: 0, zIndex: 25 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                   {currentMonthName} {selectedYear} ({filteredDays.length} Dates)
@@ -1141,7 +1141,7 @@ export const MonthlyCalendarPage: React.FC = () => {
                         id={`calendar-row-${day.calendarDate.slice(0, 10)}`}
                         className={`calendar-table-row ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
                         style={{
-                          background: isToday ? 'rgba(232, 135, 60, 0.06)' : isSelected ? 'rgba(232, 135, 60, 0.08)' : index % 2 === 0 ? '#ffffff' : '#fcfcfd',
+                          background: isToday ? 'rgba(232, 135, 60, 0.06)' : isSelected ? 'rgba(232, 135, 60, 0.08)' : index % 2 === 0 ? 'var(--panel)' : 'var(--panel-raised)',
                           borderLeft: isToday ? '3px solid var(--primary)' : '3px solid transparent'
                         }}
                       >
@@ -1306,7 +1306,7 @@ export const MonthlyCalendarPage: React.FC = () => {
 
             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: '1.5' }}>
               Once published, this calendar becomes the authoritative source of truth for:
-              <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.8125rem' }}>
+              <div style={{ background: 'var(--panel-raised)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.8125rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>✓ <strong>Attendance Login:</strong> Enforces login requirements on working days</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>✓ <strong>Leave Eligibility:</strong> Controls sandwich leave & holiday balances</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>✓ <strong>LOP Deductions:</strong> Calculates loss-of-pay penalties</div>
