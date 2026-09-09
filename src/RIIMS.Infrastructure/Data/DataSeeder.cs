@@ -100,6 +100,101 @@ public static class DataSeeder
 
                     CREATE UNIQUE INDEX [IX_AdminNotificationReads_NotificationKey] ON [dbo].[AdminNotificationReads] ([NotificationKey]);
                 END;
+
+                IF OBJECT_ID(N'[dbo].[EmployeeProductAccesses]') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[EmployeeProductAccesses] (
+                        [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [EmployeeId] INT NOT NULL,
+                        [ProductId] INT NOT NULL,
+                        [IsActive] BIT NOT NULL DEFAULT 1,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2 NOT NULL,
+                        [CreatedBy] INT NULL,
+                        CONSTRAINT [FK_EmployeeProductAccesses_Employees] FOREIGN KEY ([EmployeeId]) REFERENCES [dbo].[Employees]([Id]) ON DELETE CASCADE,
+                        CONSTRAINT [FK_EmployeeProductAccesses_Products] FOREIGN KEY ([ProductId]) REFERENCES [dbo].[Products]([Id]) ON DELETE CASCADE
+                    );
+                    CREATE INDEX [IX_EmployeeProductAccesses_EmployeeId_ProductId_IsActive] ON [dbo].[EmployeeProductAccesses] ([EmployeeId], [ProductId], [IsActive]);
+                END;
+
+                IF OBJECT_ID(N'[dbo].[ProductDeploymentHistories]') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[ProductDeploymentHistories] (
+                        [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [ProductId] INT NOT NULL,
+                        [ClientId] INT NOT NULL,
+                        [Issue] NVARCHAR(200) NOT NULL,
+                        [IssueDate] DATETIME2 NOT NULL,
+                        [RaisedBy] NVARCHAR(100) NOT NULL DEFAULT 'Client',
+                        [ModeOfContact] NVARCHAR(100) NULL,
+                        [ContactedPerson] NVARCHAR(200) NULL,
+                        [Description] NVARCHAR(MAX) NOT NULL,
+                        [DevelopmentProcess] NVARCHAR(MAX) NOT NULL,
+                        [CurrentStatus] NVARCHAR(100) NOT NULL DEFAULT 'New',
+                        [MovedToTesting] BIT NOT NULL DEFAULT 0,
+                        [MovedToTestingBy] INT NULL,
+                        [MovedToTestingAt] DATETIME2 NULL,
+                        [TestingCompleted] BIT NOT NULL DEFAULT 0,
+                        [TestingCompletedBy] INT NULL,
+                        [TestingCompletedAt] DATETIME2 NULL,
+                        [DeliveryDate] DATETIME2 NULL,
+                        [DeliveredBy] INT NULL,
+                        [DeliveredAt] DATETIME2 NULL,
+                        [Version] NVARCHAR(100) NULL,
+                        [ModifiedBy] INT NULL,
+                        [ModifiedAt] DATETIME2 NULL,
+                        [IsActive] BIT NOT NULL DEFAULT 1,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2 NOT NULL,
+                        [CreatedBy] INT NULL,
+                        CONSTRAINT [FK_ProductDeploymentHistories_Products] FOREIGN KEY ([ProductId]) REFERENCES [dbo].[Products]([Id]),
+                        CONSTRAINT [FK_ProductDeploymentHistories_Clients] FOREIGN KEY ([ClientId]) REFERENCES [dbo].[Clients]([Id]),
+                        CONSTRAINT [FK_ProductDeploymentHistories_CreatedBy] FOREIGN KEY ([CreatedBy]) REFERENCES [dbo].[Employees]([Id]),
+                        CONSTRAINT [FK_ProductDeploymentHistories_ModifiedBy] FOREIGN KEY ([ModifiedBy]) REFERENCES [dbo].[Employees]([Id]),
+                        CONSTRAINT [FK_ProductDeploymentHistories_MovedToTestingBy] FOREIGN KEY ([MovedToTestingBy]) REFERENCES [dbo].[Employees]([Id]),
+                        CONSTRAINT [FK_ProductDeploymentHistories_TestingCompletedBy] FOREIGN KEY ([TestingCompletedBy]) REFERENCES [dbo].[Employees]([Id]),
+                        CONSTRAINT [FK_ProductDeploymentHistories_DeliveredBy] FOREIGN KEY ([DeliveredBy]) REFERENCES [dbo].[Employees]([Id])
+                    );
+                    CREATE INDEX [IX_ProductDeploymentHistories_ProductId] ON [dbo].[ProductDeploymentHistories] ([ProductId]);
+                    CREATE INDEX [IX_ProductDeploymentHistories_ClientId] ON [dbo].[ProductDeploymentHistories] ([ClientId]);
+                    CREATE INDEX [IX_ProductDeploymentHistories_CurrentStatus] ON [dbo].[ProductDeploymentHistories] ([CurrentStatus]);
+                    CREATE INDEX [IX_ProductDeploymentHistories_IssueDate] ON [dbo].[ProductDeploymentHistories] ([IssueDate]);
+                    CREATE INDEX [IX_ProductDeploymentHistories_DeliveryDate] ON [dbo].[ProductDeploymentHistories] ([DeliveryDate]);
+                    CREATE INDEX [IX_ProductDeploymentHistories_CreatedBy] ON [dbo].[ProductDeploymentHistories] ([CreatedBy]);
+                END
+                ELSE
+                BEGIN
+                    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[ProductDeploymentHistories]') AND name = 'RaisedBy')
+                    BEGIN
+                        ALTER TABLE [dbo].[ProductDeploymentHistories] ADD [RaisedBy] NVARCHAR(100) NOT NULL DEFAULT 'Client';
+                    END
+                    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[ProductDeploymentHistories]') AND name = 'ModeOfContact')
+                    BEGIN
+                        ALTER TABLE [dbo].[ProductDeploymentHistories] ADD [ModeOfContact] NVARCHAR(100) NULL;
+                    END
+                    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[ProductDeploymentHistories]') AND name = 'ContactedPerson')
+                    BEGIN
+                        ALTER TABLE [dbo].[ProductDeploymentHistories] ADD [ContactedPerson] NVARCHAR(200) NULL;
+                    END
+                END;
+
+                IF OBJECT_ID(N'[dbo].[ProductDeploymentActivities]') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[ProductDeploymentActivities] (
+                        [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [DeploymentId] INT NOT NULL,
+                        [ActionType] NVARCHAR(100) NOT NULL,
+                        [PreviousStatus] NVARCHAR(100) NULL,
+                        [NewStatus] NVARCHAR(100) NULL,
+                        [Remarks] NVARCHAR(MAX) NULL,
+                        [ChangedBy] INT NOT NULL,
+                        [ChangedAt] DATETIME2 NOT NULL,
+                        CONSTRAINT [FK_ProductDeploymentActivities_Deployment] FOREIGN KEY ([DeploymentId]) REFERENCES [dbo].[ProductDeploymentHistories]([Id]) ON DELETE CASCADE,
+                        CONSTRAINT [FK_ProductDeploymentActivities_ChangedBy] FOREIGN KEY ([ChangedBy]) REFERENCES [dbo].[Employees]([Id])
+                    );
+                    CREATE INDEX [IX_ProductDeploymentActivities_DeploymentId] ON [dbo].[ProductDeploymentActivities] ([DeploymentId]);
+                    CREATE INDEX [IX_ProductDeploymentActivities_ChangedAt] ON [dbo].[ProductDeploymentActivities] ([ChangedAt]);
+                END;
             ");
         }
         catch
@@ -152,6 +247,13 @@ public static class DataSeeder
             ("Break.Manage", "Manage Breaks", "Break", "Configure break types and thresholds"),
             ("SupportActivity.View", "View Support Activities", "SupportActivity", "View support activity sessions and logs"),
             ("SupportActivity.Manage", "Manage Support Activities", "SupportActivity", "Configure support activity categories"),
+
+            // Product Deployment History Module
+            ("ProductDeployment.View", "View Product Deployments", "ProductDeployment", "View deployment records for authorized products"),
+            ("ProductDeployment.Create", "Create Product Deployment", "ProductDeployment", "Create deployment records for assigned products"),
+            ("ProductDeployment.Edit", "Edit Product Deployment", "ProductDeployment", "Update deployment records and status for assigned products"),
+            ("ProductDeployment.Export", "Export Product Deployments", "ProductDeployment", "Export authorized product deployment records and activity history to Excel"),
+            ("ProductDeployment.Manage", "Manage Product Deployment Access", "ProductDeployment", "Configure employee product access and manage all deployments"),
 
             // Payroll & Salary Structure
             ("Payroll.View", "View Payroll", "Payroll", "View monthly payroll and LOP deductions"),
@@ -298,11 +400,13 @@ public static class DataSeeder
                 "Employee.View", "Employee.Create", "Employee.Edit", "Employee.Activate", "Employee.Deactivate",
                 "Department.View", "Department.Manage",
                 "Designation.View", "Designation.Manage",
-                "MasterData.View", "MasterData.Manage"
+                "MasterData.View", "MasterData.Manage",
+                "ProductDeployment.View", "ProductDeployment.Manage"
             },
             ["Employee"] = new[]
             {
-                "Leave.Create", "AttendanceCalendar.View"
+                "Leave.Create", "AttendanceCalendar.View",
+                "ProductDeployment.View", "ProductDeployment.Create", "ProductDeployment.Edit", "ProductDeployment.Export"
             },
             ["Admin"] = permissionDefinitions.Select(p => p.Code).ToArray()
         };
@@ -701,9 +805,154 @@ public static class DataSeeder
             }
         }
 
+        // 8. Seed Default Products & Mappings if missing
+        var olmsProd = await context.Products.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Code == "OLMS" || p.Name == "OLMS");
+        if (olmsProd == null)
+        {
+            olmsProd = new Product { Name = "OLMS", Code = "OLMS", IsActive = true };
+            context.Products.Add(olmsProd);
+            await context.SaveChangesAsync();
+        }
+
+        var abcProd = await context.Products.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Code == "ABC" || p.Name == "ABC");
+        if (abcProd == null)
+        {
+            abcProd = new Product { Name = "ABC", Code = "ABC", IsActive = true };
+            context.Products.Add(abcProd);
+            await context.SaveChangesAsync();
+        }
+
+        var xyzProd = await context.Products.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Code == "XYZ" || p.Name == "XYZ");
+        if (xyzProd == null)
+        {
+            xyzProd = new Product { Name = "XYZ", Code = "XYZ", IsActive = true };
+            context.Products.Add(xyzProd);
+            await context.SaveChangesAsync();
+        }
+
+        // Seed Sample Clients if missing
+        var clients = await context.Clients.IgnoreQueryFilters().ToListAsync();
+        if (!clients.Any())
+        {
+            var c1 = new Client { CompanyName = "Client A", CustomerName = "Client A Rep", IsActive = true };
+            var c2 = new Client { CompanyName = "Client B", CustomerName = "Client B Rep", IsActive = true };
+            var c3 = new Client { CompanyName = "Client C", CustomerName = "Client C Rep", IsActive = true };
+            context.Clients.AddRange(c1, c2, c3);
+            await context.SaveChangesAsync();
+            clients = new List<Client> { c1, c2, c3 };
+        }
+
+        // Map Clients to OLMS
+        foreach (var c in clients)
+        {
+            var mapExists = await context.ProductClientMappings.IgnoreQueryFilters().AnyAsync(m => m.ProductId == olmsProd.Id && m.ClientId == c.Id);
+            if (!mapExists)
+            {
+                context.ProductClientMappings.Add(new ProductClientMapping { ProductId = olmsProd.Id, ClientId = c.Id, IsActive = true });
+            }
+        }
         await context.SaveChangesAsync();
 
-        // 8. Seed Dummy Data for last month & current month analysis
+        // Ensure employees have OLMS product access if they have none
+        var activeEmployees = await context.Employees.Where(e => e.IsActive).ToListAsync();
+        foreach (var emp in activeEmployees)
+        {
+            var hasAccess = await context.EmployeeProductAccesses.AnyAsync(epa => epa.EmployeeId == emp.Id);
+            if (!hasAccess)
+            {
+                context.EmployeeProductAccesses.Add(new EmployeeProductAccess
+                {
+                    EmployeeId = emp.Id,
+                    ProductId = olmsProd.Id,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+        }
+        await context.SaveChangesAsync();
+
+        // 9. Seed Initial Deployment Record matching OLMS Excel Template if empty
+        var hasDeployments = await context.ProductDeploymentHistories.AnyAsync();
+        if (!hasDeployments && clients.Any())
+        {
+            var firstClient = clients.First();
+            var adminEmpId = adminEmp?.Id ?? activeEmployees.FirstOrDefault()?.Id ?? 1;
+
+            var dep = new ProductDeploymentHistory
+            {
+                ProductId = olmsProd.Id,
+                ClientId = firstClient.Id,
+                Issue = "OLMS-101",
+                IssueDate = DateTime.UtcNow.AddDays(-15).Date,
+                Description = "Order status not updating after dispatch",
+                DevelopmentProcess = "Code changes completed for dispatch status sync",
+                CurrentStatus = "Testing Completed",
+                MovedToTesting = true,
+                MovedToTestingBy = adminEmpId,
+                MovedToTestingAt = DateTime.UtcNow.AddDays(-10),
+                TestingCompleted = true,
+                TestingCompletedBy = adminEmpId,
+                TestingCompletedAt = DateTime.UtcNow.AddDays(-5),
+                DeliveryDate = DateTime.UtcNow.AddDays(-2).Date,
+                DeliveredBy = adminEmpId,
+                DeliveredAt = DateTime.UtcNow.AddDays(-2),
+                Version = "v2.4.1",
+                CreatedBy = adminEmpId,
+                CreatedAt = DateTime.UtcNow.AddDays(-15),
+                ModifiedBy = adminEmpId,
+                UpdatedAt = DateTime.UtcNow.AddDays(-2)
+            };
+
+            context.ProductDeploymentHistories.Add(dep);
+            await context.SaveChangesAsync();
+
+            context.ProductDeploymentActivities.AddRange(
+                new ProductDeploymentActivity
+                {
+                    DeploymentId = dep.Id,
+                    ActionType = "Created",
+                    PreviousStatus = null,
+                    NewStatus = "New",
+                    Remarks = "Issue logged from customer support ticket",
+                    ChangedBy = adminEmpId,
+                    ChangedAt = DateTime.UtcNow.AddDays(-15)
+                },
+                new ProductDeploymentActivity
+                {
+                    DeploymentId = dep.Id,
+                    ActionType = "Status Changed",
+                    PreviousStatus = "New",
+                    NewStatus = "Development In Progress",
+                    Remarks = "Assigned and started development",
+                    ChangedBy = adminEmpId,
+                    ChangedAt = DateTime.UtcNow.AddDays(-14)
+                },
+                new ProductDeploymentActivity
+                {
+                    DeploymentId = dep.Id,
+                    ActionType = "Moved to Testing",
+                    PreviousStatus = "Development In Progress",
+                    NewStatus = "Moved to Testing",
+                    Remarks = "Build deployed to QA environment",
+                    ChangedBy = adminEmpId,
+                    ChangedAt = DateTime.UtcNow.AddDays(-10)
+                },
+                new ProductDeploymentActivity
+                {
+                    DeploymentId = dep.Id,
+                    ActionType = "Testing Completed",
+                    PreviousStatus = "Moved to Testing",
+                    NewStatus = "Testing Completed",
+                    Remarks = "QA test suite passed with 0 defects",
+                    ChangedBy = adminEmpId,
+                    ChangedAt = DateTime.UtcNow.AddDays(-5)
+                }
+            );
+            await context.SaveChangesAsync();
+        }
+
+        // 10. Seed Dummy Data for last month & current month analysis
         await DummyDataSeeder.SeedDummyDataAsync(context, userManager, roleManager);
     }
 }

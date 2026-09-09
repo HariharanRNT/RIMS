@@ -87,6 +87,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IProductClientMappingService, ProductClientMappingService>();
+builder.Services.AddScoped<IProductDeploymentService, ProductDeploymentService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IBreakService, BreakService>();
 builder.Services.AddScoped<ISupportActivityService, SupportActivityService>();
@@ -135,13 +136,13 @@ builder.Services.AddSwaggerGen(options =>
 
 // 8. CORS Policy
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
-    ?? new[] { "http://localhost:5173", "http://localhost:3000", "http://localhost:5000" };
+    ?? new[] { "http://localhost:5173", "http://localhost:3000", "http://localhost:5000", "https://10.60.121.234" };
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins(allowedOrigins)
+        policy.SetIsOriginAllowed(origin => true)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();

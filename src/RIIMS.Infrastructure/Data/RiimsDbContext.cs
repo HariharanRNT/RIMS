@@ -63,6 +63,11 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, ApplicationRole
     // Reports
     public DbSet<MonthlyReportLog> MonthlyReportLogs => Set<MonthlyReportLog>();
 
+    // Product Deployment History
+    public DbSet<ProductDeploymentHistory> ProductDeploymentHistories => Set<ProductDeploymentHistory>();
+    public DbSet<ProductDeploymentActivity> ProductDeploymentActivities => Set<ProductDeploymentActivity>();
+    public DbSet<EmployeeProductAccess> EmployeeProductAccesses => Set<EmployeeProductAccess>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -140,6 +145,82 @@ public class RiimsDbContext : IdentityDbContext<ApplicationUser, ApplicationRole
                 .WithMany()
                 .HasForeignKey(e => e.PerformedByEmployeeId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EmployeeProductAccess>(entity =>
+        {
+            entity.HasOne(epa => epa.Employee)
+                .WithMany()
+                .HasForeignKey(epa => epa.EmployeeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(epa => epa.Product)
+                .WithMany()
+                .HasForeignKey(epa => epa.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(epa => new { epa.EmployeeId, epa.ProductId, epa.IsActive });
+        });
+
+        builder.Entity<ProductDeploymentHistory>(entity =>
+        {
+            entity.HasOne(d => d.Product)
+                .WithMany()
+                .HasForeignKey(d => d.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Client)
+                .WithMany()
+                .HasForeignKey(d => d.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.CreatedByEmployee)
+                .WithMany()
+                .HasForeignKey(d => d.CreatedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.ModifiedByEmployee)
+                .WithMany()
+                .HasForeignKey(d => d.ModifiedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.MovedToTestingByEmployee)
+                .WithMany()
+                .HasForeignKey(d => d.MovedToTestingBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.TestingCompletedByEmployee)
+                .WithMany()
+                .HasForeignKey(d => d.TestingCompletedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.DeliveredByEmployee)
+                .WithMany()
+                .HasForeignKey(d => d.DeliveredBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(d => d.Activities)
+                .WithOne(a => a.Deployment)
+                .HasForeignKey(a => a.DeploymentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(d => d.ProductId);
+            entity.HasIndex(d => d.ClientId);
+            entity.HasIndex(d => d.CurrentStatus);
+            entity.HasIndex(d => d.IssueDate);
+            entity.HasIndex(d => d.DeliveryDate);
+            entity.HasIndex(d => d.CreatedBy);
+        });
+
+        builder.Entity<ProductDeploymentActivity>(entity =>
+        {
+            entity.HasOne(a => a.ChangedByEmployee)
+                .WithMany()
+                .HasForeignKey(a => a.ChangedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(a => a.DeploymentId);
+            entity.HasIndex(a => a.ChangedAt);
         });
 
         // Global query filter for soft delete on all BaseEntity-derived entities

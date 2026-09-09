@@ -42,6 +42,8 @@ import { ProfilePage } from './pages/employee/ProfilePage';
 import { EmployeeCalendarPage } from './pages/employee/EmployeeCalendarPage';
 
 import { TaskAllocationPage } from './pages/admin/tasks/TaskAllocationPage';
+import { DeploymentHistoryListPage } from './pages/deployment/DeploymentHistoryListPage';
+import { EmployeeProductAccessPage } from './pages/admin/deployments/EmployeeProductAccessPage';
 
 export const App: React.FC = () => {
   return (
@@ -170,6 +172,22 @@ export const App: React.FC = () => {
               }
             />
             <Route
+              path="deployments"
+              element={
+                <ProtectedRoute requiredPermissions={['ProductDeployment.View', 'MasterData.Manage', 'Employee.View']}>
+                  <DeploymentHistoryListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="deployment-access"
+              element={
+                <ProtectedRoute requiredPermissions={['ProductDeployment.Manage', 'MasterData.Manage']}>
+                  <EmployeeProductAccessPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="clients"
               element={
                 <ProtectedRoute requiredPermissions={['MasterData.Manage', 'Employee.View']}>
@@ -255,6 +273,7 @@ export const App: React.FC = () => {
             <Route path="permission" element={<PermissionRequestPage />} />
             <Route path="payslip" element={<PayslipPage />} />
             <Route path="calendar" element={<EmployeeCalendarPage />} />
+            <Route path="deployments" element={<DeploymentHistoryListPage />} />
           </Route>
 
           {/* Fallback */}

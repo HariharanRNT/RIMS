@@ -13,6 +13,7 @@ public class IdleTimeLog : BaseEntity
     public string Type { get; set; } = "NoActivity";
     public string? Source { get; set; }
     public string? Remarks { get; set; }
+    public string? FiredMilestones { get; set; }
 
     // Navigation
     public Employee Employee { get; set; } = null!;

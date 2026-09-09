@@ -153,8 +153,9 @@ public class IdleTimeService : IIdleTimeService
             }
             else
             {
-                // Reset start time to current activity end time so idle counts fresh from now
+                // Reset start time to current activity end time so idle counts fresh from now, and clear fired milestones for the fresh streak
                 openIdle.StartTime = activityEndTime;
+                openIdle.FiredMilestones = null;
                 await _context.SaveChangesAsync();
             }
         }
@@ -396,6 +397,20 @@ public class IdleTimeService : IIdleTimeService
         int breakCountToday = todayBreakLogs.Count;
         int totalActivities = taskCountToday + supportCountToday + breakCountToday;
 
+        // Parse fired milestones for the active idle streak
+        var firedMilestones = new List<int>();
+        if (!string.IsNullOrWhiteSpace(openIdle?.FiredMilestones))
+        {
+            firedMilestones = openIdle.FiredMilestones
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.TryParse(s.Trim(), out var val) ? val : (int?)null)
+                .Where(v => v.HasValue)
+                .Select(v => v!.Value)
+                .Distinct()
+                .OrderBy(v => v)
+                .ToList();
+        }
+
         return new EmployeeCurrentStateDto
         {
             State = currentState,
@@ -408,7 +423,54 @@ public class IdleTimeService : IIdleTimeService
             TodayWorkSeconds = workSeconds + supportSeconds,
             TodayBreakSeconds = breakSeconds,
             TodayIdleSeconds = idleSeconds,
-            TodayActivitiesCount = totalActivities
+            TodayActivitiesCount = totalActivities,
+            IdleMilestonesFired = firedMilestones
         };
+    }
+
+    public async Task MarkIdleReminderFiredAsync(int employeeId, int milestoneMinutes)
+    {
+        var nowUtc = DateTime.UtcNow;
+        var nowIst = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, IstTimeZone);
+        var todayWorkDate = DateOnly.FromDateTime(nowIst);
+
+        var openIdle = await _context.IdleTimeLogs
+            .FirstOrDefaultAsync(i => i.EmployeeId == employeeId && i.EndTime == null && i.WorkDate == todayWorkDate);
+
+        if (openIdle == null)
+        {
+            openIdle = new IdleTimeLog
+            {
+                EmployeeId = employeeId,
+                WorkDate = todayWorkDate,
+                StartTime = nowUtc.AddMinutes(-milestoneMinutes),
+                EndTime = null,
+                DurationMinutes = milestoneMinutes,
+                DurationSeconds = milestoneMinutes * 60,
+                Type = "NoActivity",
+                Source = "MilestoneRecorded",
+                Remarks = "Auto-created open idle session on reminder fired",
+                FiredMilestones = milestoneMinutes.ToString()
+            };
+            _context.IdleTimeLogs.Add(openIdle);
+            await _context.SaveChangesAsync();
+            return;
+        }
+
+        var existing = new HashSet<int>();
+        if (!string.IsNullOrWhiteSpace(openIdle.FiredMilestones))
+        {
+            foreach (var part in openIdle.FiredMilestones.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(part.Trim(), out var val))
+                {
+                    existing.Add(val);
+                }
+            }
+        }
+
+        existing.Add(milestoneMinutes);
+        openIdle.FiredMilestones = string.Join(",", existing.OrderBy(x => x));
+        await _context.SaveChangesAsync();
     }
 }

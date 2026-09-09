@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RIIMS.Application.Common;
+using RIIMS.Application.DTOs.IdleTime;
 using RIIMS.Application.Interfaces;
 
 namespace RIIMS.API.Controllers;
@@ -31,5 +32,18 @@ public class IdleTimeController : ControllerBase
 
         var state = await _idleTimeService.GetCurrentStateAsync(employeeId);
         return Ok(new { success = true, data = state });
+    }
+
+    [HttpPost("reminder-fired")]
+    public async Task<IActionResult> MarkReminderFired([FromBody] IdleReminderFiredRequest request)
+    {
+        int employeeId = _currentUserService.EmployeeId ?? 0;
+        if (employeeId <= 0)
+        {
+            return Unauthorized(new { success = false, message = "Employee context not found." });
+        }
+
+        await _idleTimeService.MarkIdleReminderFiredAsync(employeeId, request.MilestoneMinutes);
+        return Ok(new { success = true, message = "Idle reminder marked as fired." });
     }
 }

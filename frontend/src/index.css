@@ -1677,40 +1677,84 @@ html.dark .activity-chip.chip-idle:hover {
    RIIMS V2 COMMAND CENTER UI SYSTEM
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Topbar */
+/* Context Strip / Topbar */
 .topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  margin-bottom: 26px;
+  min-height: 60px;
+  padding: 0 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
 }
 
-.search {
-  flex: 1;
+.context-strip-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.context-shift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.context-shift-badge .shift-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.context-live-summary {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.context-live-summary .summary-divider {
+  color: var(--border);
+  font-weight: 400;
+}
+
+.topbar-cluster-right {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  color: var(--text-faint);
-  font-size: 13px;
-  box-shadow: var(--shadow);
+  flex-shrink: 0;
 }
 
-.search input {
-  border: none;
-  background: transparent;
-  outline: none;
-  color: var(--text);
-  font-size: 13px;
-  width: 100%;
-  font-family: inherit;
+@media (max-width: 900px) {
+  .context-live-summary {
+    display: none;
+  }
 }
 
-.search input::placeholder {
-  color: var(--text-faint);
+@media (max-width: 600px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .topbar-cluster-right {
+    justify-content: space-between;
+  }
 }
 
 .clock {
@@ -2124,12 +2168,47 @@ html.dark .activity-chip.chip-idle:hover {
   gap: 12px;
 }
 
+@media (max-width: 900px) {
+  .status-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .status-tile {
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent, var(--text-faint));
   border-radius: 8px;
   padding: 14px 16px;
   background: var(--panel-raised);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.status-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent, var(--border));
+  box-shadow: 0 4px 12px var(--accent-dim, rgba(0, 0, 0, 0.05));
+}
+
+.status-tile.active {
+  border-color: var(--accent, var(--border));
+  background: var(--accent-dim, var(--panel-raised));
+  box-shadow: 0 0 0 1px var(--accent, var(--border)), 0 4px 14px var(--accent-dim, rgba(0, 0, 0, 0.08));
+}
+
+.status-tile .tile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .status-tile .ic {
@@ -2142,7 +2221,16 @@ html.dark .activity-chip.chip-idle:hover {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
+}
+
+.status-tile .active-indicator {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .status-tile .label {
@@ -2166,6 +2254,286 @@ html.dark .activity-chip.chip-idle:hover {
   font-weight: 500;
 }
 
+/* Expandable Workforce Status Drawer */
+.status-drawer-panel {
+  margin-top: 16px;
+  background: var(--panel-raised);
+  border: 1px solid var(--accent, var(--border));
+  border-radius: 10px;
+  padding: 16px 20px;
+  animation: drawerSlideDown 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.08);
+}
+
+@keyframes drawerSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    max-height: 900px;
+  }
+}
+
+.status-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.status-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.status-drawer-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--accent-dim, var(--border));
+  color: var(--accent, var(--text));
+}
+
+.status-drawer-close {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.status-drawer-close:hover {
+  background: var(--border-soft);
+  color: var(--text);
+}
+
+.status-employee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.status-employee-grid::-webkit-scrollbar {
+  width: 6px;
+}
+.status-employee-grid::-webkit-scrollbar-track {
+  background: var(--border-soft);
+  border-radius: 3px;
+}
+.status-employee-grid::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.status-employee-grid::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+.status-employee-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.status-employee-card:hover {
+  border-color: var(--accent, var(--border));
+  transform: translateX(2px);
+}
+
+.status-emp-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent-dim, var(--panel-raised));
+  color: var(--accent, var(--text));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+
+.status-emp-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-emp-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-emp-meta {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-emp-detail {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent, var(--text-dim));
+  margin-top: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Activity Feed Filters */
+.feed-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.feed-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.feed-chip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.feed-chip:hover {
+  background: var(--border-soft);
+  color: var(--text);
+}
+
+.feed-chip.active {
+  background: var(--accent-dim, rgba(59, 130, 246, 0.12));
+  border-color: var(--accent, var(--primary));
+  color: var(--accent, var(--primary));
+  font-weight: 600;
+}
+
+.feed-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.feed-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.feed-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.feed-search-box input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px 4px 26px;
+  font-size: 12px;
+  color: var(--text);
+  width: 180px;
+  outline: none;
+}
+
+.feed-search-box input:focus {
+  border-color: var(--primary);
+}
+
+/* Time Group Divider in Feed */
+.activity-group-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 8px 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.activity-group-divider:first-child {
+  margin-top: 2px;
+}
+
+.activity-group-divider .divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
+}
+
+.activity-group-divider .divider-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
 /* Activity Feed */
 .feed {
   display: flex;
@@ -2176,7 +2544,7 @@ html.dark .activity-chip.chip-idle:hover {
   display: grid;
   grid-template-columns: 34px 1fr auto;
   gap: 14px;
-  padding: 14px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-soft);
   align-items: flex-start;
 }
@@ -2203,7 +2571,7 @@ html.dark .activity-chip.chip-idle:hover {
 .feed-main .row1 {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 4px;
   flex-wrap: wrap;
 }
@@ -2223,22 +2591,23 @@ html.dark .activity-chip.chip-idle:hover {
 .tag {
   font-family: inherit;
   font-size: 11.5px;
-  letter-spacing: 0.02em;
-  padding: 3px 9px;
+  letter-spacing: 0.01em;
+  padding: 2px 8px;
   border-radius: 6px;
-  text-transform: uppercase;
+  text-transform: capitalize;
   font-weight: 600;
   transition: background-color 0.15s ease;
+  white-space: nowrap;
 }
 
 .tag-task {
-  background: var(--blue-dim);
-  color: var(--blue);
+  background: var(--amber-dim);
+  color: var(--amber);
 }
 
 .tag-break {
-  background: var(--amber-dim);
-  color: var(--amber);
+  background: var(--blue-dim);
+  color: var(--blue);
 }
 
 .tag-support {
@@ -2277,6 +2646,11 @@ html.dark .activity-chip.chip-idle:hover {
 }
 
 .tag-stopped {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.tag-red {
   background: var(--red-dim);
   color: var(--red);
 }
@@ -2387,8 +2761,8 @@ html.dark .activity-chip.chip-idle:hover {
 }
 
 .empty-state-icon {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background: var(--panel-raised);
   border: 1px solid var(--border);
@@ -2400,17 +2774,281 @@ html.dark .activity-chip.chip-idle:hover {
 }
 
 .empty-state-title {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--text-main);
   margin-bottom: 0.25rem;
 }
 
 .empty-state-desc {
-  font-size: 0.8rem;
+  font-size: 0.825rem;
   color: var(--text-secondary);
-  max-width: 320px;
+  max-width: 340px;
   line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* ─── RIMS EMPLOYEE DASHBOARD REDESIGN SYSTEM ─────────────────── */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Unified Sticky Session Bar */
+.unified-session-bar {
+  position: relative;
+  z-index: 80;
+  min-height: 50px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  padding: 0.4rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.2s ease;
+}
+
+.session-cockpit {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 0.3rem 0.85rem 0.3rem 0.6rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.session-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border);
+  flex-shrink: 0;
+}
+
+.session-task-clickable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 3px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  min-width: 0;
+  border: 1px solid transparent;
+}
+
+.session-task-clickable:hover {
+  background: var(--panel);
+  border-color: var(--border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.session-task-clickable:hover .session-task-title {
+  color: var(--primary) !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.session-task-clickable:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light, rgba(59, 130, 246, 0.25));
+}
+
+.session-pulse-indicator {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.session-pulse-indicator .pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  animation: pulsePing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.session-pulse-indicator .pulse-core {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+@keyframes pulsePing {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* 2. Hero Metric Card & Grid Layout */
+.dashboard-hero-section {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.4fr) minmax(400px, 2.6fr);
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  align-items: stretch;
+}
+
+@media (max-width: 1080px) {
+  .dashboard-hero-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hero-metric-card {
+  position: relative;
+  background: linear-gradient(145deg, var(--panel) 0%, rgba(16, 185, 129, 0.04) 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem 1.65rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.hero-metric-card:hover {
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: 0 8px 28px rgba(16, 185, 129, 0.08);
+}
+
+.hero-metric-card::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.secondary-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .secondary-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.metric-card-modern {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card-modern:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow);
+}
+
+/* 3. Proportional Day Timeline Stacked Bar */
+.timeline-stacked-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.timeline-stacked-bar {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  background: rgba(100, 116, 139, 0.15);
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  position: relative;
+}
+
+.timeline-segment {
+  height: 100%;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.timeline-segment:hover {
+  opacity: 0.85;
+  filter: brightness(1.15);
+}
+
+.timeline-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  font-size: 0.725rem;
+}
+
+.timeline-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.timeline-legend-item:hover {
+  background: var(--panel-raised);
+  color: var(--text-main);
+}
+
+.timeline-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 4. Quick Shortcuts Modern Cards */
+.shortcut-card-modern {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+}
+
+.shortcut-card-modern:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  background: var(--panel-raised);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
 }
 
 /* Accessibility: reduced motion */

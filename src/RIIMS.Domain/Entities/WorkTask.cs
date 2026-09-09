@@ -30,6 +30,11 @@ public class WorkTask : BaseEntity
     public int? PlannedDurationMinutes { get; set; }
     public string? Instructions { get; set; }
 
+    // Reminder Tracking
+    public bool Reminder30Fired { get; set; }
+    public bool Reminder15Fired { get; set; }
+    public bool ReminderCompletionFired { get; set; }
+
     // Navigation
     public Employee Employee { get; set; } = null!;
     public Employee? AssignedByEmployee { get; set; }

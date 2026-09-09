@@ -136,32 +136,159 @@ public class ReportService : IReportService
 
         var activeWorkforceCount = todayAttendanceEmployeeIds.Count;
 
-        var workingCount = await _context.WorkTasks
+        // 1. Working Employees
+        var runningTasks = await _context.WorkTasks
+            .Include(t => t.Employee)
+            .ThenInclude(e => e.Department)
+            .Include(t => t.Product)
             .Where(t => t.Status == TaskStatusEnum.Running)
-            .Select(t => t.EmployeeId)
-            .Distinct()
-            .CountAsync();
+            .ToListAsync();
 
-        var onBreakCount = await _context.BreakLogs
+        var workingEmployees = runningTasks
+            .GroupBy(t => t.EmployeeId)
+            .Select(g => {
+                var t = g.First();
+                var taskTitle = !string.IsNullOrEmpty(t.ModuleName) ? t.ModuleName : (!string.IsNullOrEmpty(t.Description) ? t.Description : (t.Product != null ? t.Product.Name : "Work Task"));
+                return new WorkforceStatusEmployeeDto
+                {
+                    EmployeeId = t.EmployeeId,
+                    EmployeeName = t.Employee?.Name ?? $"Employee #{t.EmployeeId}",
+                    EmployeeCode = t.Employee?.EmployeeCode ?? string.Empty,
+                    DepartmentName = t.Employee?.Department?.Name ?? "General",
+                    StatusDetail = taskTitle,
+                    StartTime = t.CreatedAt,
+                    SecondaryDetail = t.Product != null ? t.Product.Name : null
+                };
+            })
+            .OrderBy(e => e.EmployeeName)
+            .ToList();
+
+        var workingCount = workingEmployees.Count;
+
+        // 2. On Break Employees
+        var activeBreaks = await _context.BreakLogs
+            .Include(b => b.Employee)
+            .ThenInclude(e => e.Department)
+            .Include(b => b.BreakType)
             .Where(b => b.EndTime == null)
-            .Select(b => b.EmployeeId)
-            .Distinct()
-            .CountAsync();
+            .ToListAsync();
 
-        var inSupportCount = await _context.SupportActivityLogs
+        var onBreakEmployees = activeBreaks
+            .GroupBy(b => b.EmployeeId)
+            .Select(g => {
+                var b = g.First();
+                return new WorkforceStatusEmployeeDto
+                {
+                    EmployeeId = b.EmployeeId,
+                    EmployeeName = b.Employee?.Name ?? $"Employee #{b.EmployeeId}",
+                    EmployeeCode = b.Employee?.EmployeeCode ?? string.Empty,
+                    DepartmentName = b.Employee?.Department?.Name ?? "General",
+                    StatusDetail = b.BreakType?.Name ?? "Active Break",
+                    StartTime = b.StartTime,
+                    SecondaryDetail = b.BreakType?.AllowedMinutes > 0 ? $"Allowed: {b.BreakType.AllowedMinutes}m" : null
+                };
+            })
+            .OrderBy(e => e.EmployeeName)
+            .ToList();
+
+        var onBreakCount = onBreakEmployees.Count;
+
+        // 3. In Support Call / Activity Employees
+        var activeSupports = await _context.SupportActivityLogs
+            .Include(s => s.Employee)
+            .ThenInclude(e => e.Department)
+            .Include(s => s.ActivityType)
             .Where(s => s.EndTime == null)
-            .Select(s => s.EmployeeId)
-            .Distinct()
-            .CountAsync();
+            .ToListAsync();
 
-        var offlineCount = Math.Max(0, totalEmployees - activeWorkforceCount);
+        var inSupportEmployees = activeSupports
+            .GroupBy(s => s.EmployeeId)
+            .Select(g => {
+                var s = g.First();
+                return new WorkforceStatusEmployeeDto
+                {
+                    EmployeeId = s.EmployeeId,
+                    EmployeeName = s.Employee?.Name ?? $"Employee #{s.EmployeeId}",
+                    EmployeeCode = s.Employee?.EmployeeCode ?? string.Empty,
+                    DepartmentName = s.Employee?.Department?.Name ?? "General",
+                    StatusDetail = s.ActivityType?.Name ?? "Support Activity",
+                    StartTime = s.StartTime,
+                    SecondaryDetail = !string.IsNullOrEmpty(s.Remarks) ? s.Remarks : null
+                };
+            })
+            .OrderBy(e => e.EmployeeName)
+            .ToList();
 
-        // Today Productive Hours (Tasks + Support) — capped at AllowedEndTime (or OfficeEndTime)
-        var adminSettings = await _settingService.GetTypedSettingsAsync();
+        var inSupportCount = inSupportEmployees.Count;
+
+        // 4. Offline / Absent Employees
+        var allEmployees = await _context.Employees
+            .Include(e => e.Department)
+            .Where(e => e.IsActive)
+            .OrderBy(e => e.Name)
+            .ToListAsync();
+
+        var todayApprovedLeaves = await _context.LeaveRequests
+            .Include(l => l.LeaveType)
+            .Where(l => l.Status == RIIMS.Domain.Enums.RequestStatus.Approved && l.FromDate <= nextDay && l.ToDate >= today)
+            .ToListAsync();
+        var leaveByEmp = todayApprovedLeaves.ToDictionary(l => l.EmployeeId);
 
         var todayAttendances = await _context.AttendanceLogs
             .Where(a => a.LoginTime >= today && a.LoginTime < nextDay)
             .ToListAsync();
+
+        var latestAttendanceByEmp = todayAttendances
+            .GroupBy(a => a.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.LoginTime).First());
+
+        var offlineEmployees = new List<WorkforceStatusEmployeeDto>();
+
+        foreach (var emp in allEmployees)
+        {
+            var hasAttendance = latestAttendanceByEmp.TryGetValue(emp.Id, out var att);
+            var isLoggedOut = hasAttendance && att?.LogoutTime != null;
+            var isNotLoggedIn = !hasAttendance;
+
+            if (isNotLoggedIn || isLoggedOut)
+            {
+                string statusDetail;
+                string? secondaryDetail = null;
+
+                if (leaveByEmp.TryGetValue(emp.Id, out var leave))
+                {
+                    statusDetail = $"On Leave ({leave.LeaveType?.Name ?? "Approved Leave"})";
+                    secondaryDetail = "Approved Leave";
+                }
+                else if (isLoggedOut && att?.LogoutTime != null)
+                {
+                    var logoutIst = TimeZoneInfo.ConvertTimeFromUtc(att.LogoutTime.Value, IstTimeZone);
+                    statusDetail = "Logged Out";
+                    secondaryDetail = $"Out at {logoutIst:hh:mm tt}";
+                }
+                else
+                {
+                    statusDetail = "Not Logged In Today";
+                    secondaryDetail = "No attendance record";
+                }
+
+                offlineEmployees.Add(new WorkforceStatusEmployeeDto
+                {
+                    EmployeeId = emp.Id,
+                    EmployeeName = emp.Name,
+                    EmployeeCode = emp.EmployeeCode,
+                    DepartmentName = emp.Department?.Name ?? "General",
+                    StatusDetail = statusDetail,
+                    StartTime = isLoggedOut && att?.LogoutTime != null ? att.LogoutTime : null,
+                    SecondaryDetail = secondaryDetail
+                });
+            }
+        }
+
+        var offlineCount = offlineEmployees.Count;
+
+        // Today Productive Hours (Tasks + Support) — capped at AllowedEndTime (or OfficeEndTime)
+        var adminSettings = await _settingService.GetTypedSettingsAsync();
 
         var empAllowedEndMap = todayAttendances
             .GroupBy(a => a.EmployeeId)
@@ -227,7 +354,11 @@ public class ReportService : IReportService
             OfflineCount = offlineCount,
             TodayProductiveHours = todayProductiveHours,
             TodayGraceViolations = todayGraceViolations,
-            RecentActivities = recentDtos
+            RecentActivities = recentDtos,
+            WorkingEmployees = workingEmployees,
+            OnBreakEmployees = onBreakEmployees,
+            InSupportEmployees = inSupportEmployees,
+            OfflineEmployees = offlineEmployees
         };
     }
 

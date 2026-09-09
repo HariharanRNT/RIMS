@@ -28,6 +28,9 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
   const { user } = useAuth();
   const employeeId = user?.employeeId;
 
+  // Idle time notifications are active for any authenticated employee session
+  const isEligibleEmployee = Boolean(employeeId && Number(employeeId) > 0);
+
   const settingsRef = useRef<IdleNotificationSettings>({
     idleNotificationEnabled: true,
     idleThresholdMinutes: 5,
@@ -42,7 +45,7 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
 
   // 1. Fetch system settings for idle notifications on mount, on settings-changed event, and periodically
   useEffect(() => {
-    if (!employeeId) return;
+    if (!isEligibleEmployee) return;
 
     let isMounted = true;
 
@@ -79,7 +82,7 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
       window.removeEventListener('settings-changed', fetchSettings);
       stopPoll();
     };
-  }, [overrideSettings, employeeId]);
+  }, [overrideSettings, isEligibleEmployee]);
 
   // ---------------------------------------------------------------------------
   // (A) PURE LOCAL WEB WORKER NOTIFICATION ENGINE
@@ -87,7 +90,7 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
   // Runs 100% independently of network status, API latency, or server responses.
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!employeeId) return;
+    if (!isEligibleEmployee) return;
 
     if (typeof document !== 'undefined') {
       originalTitleRef.current = document.title;
@@ -129,6 +132,9 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
           firedMilestonesRef.current[m] = true;
         }
 
+        // Persist to backend so refreshes and multi-tabs don't duplicate
+        apiClient.post('/idle/reminder-fired', { milestoneMinutes }).catch(() => {});
+
         if (milestoneMinutes === idleThresholdMinutes) {
           showIdleNotification(
             'Idle Time Alert',
@@ -153,7 +159,7 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
     return () => {
       stopTimer();
     };
-  }, [employeeId]);
+  }, [isEligibleEmployee]);
 
   // ---------------------------------------------------------------------------
   // (B) BACKGROUND SERVER RECONCILIATION ONLY
@@ -161,7 +167,7 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
   // Completely decoupled: Failures/delays here NEVER block notification Engine (A).
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!employeeId) return;
+    if (!isEligibleEmployee) return;
 
     let isMounted = true;
 
@@ -190,9 +196,18 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
           // Reconcile start timestamp if server provides a valid earlier/aligned timestamp
           if (data.idleStartedAt) {
             const serverIdleStart = parseUtcMs(data.idleStartedAt);
-            if (serverIdleStart > 0 && serverIdleStart <= Date.now()) {
-              idleStartTimestampRef.current = serverIdleStart;
+            if (serverIdleStart > 0 && serverIdleStart <= Date.now() + 60000) {
+              if (Math.abs(idleStartTimestampRef.current - serverIdleStart) > 2000) {
+                idleStartTimestampRef.current = serverIdleStart;
+              }
             }
+          }
+
+          // Sync backend-persisted fired milestones
+          if (Array.isArray(data.idleMilestonesFired)) {
+            data.idleMilestonesFired.forEach((m: number) => {
+              firedMilestonesRef.current[m] = true;
+            });
           }
         } else {
           hasActiveSessionRef.current = true;
@@ -226,13 +241,13 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
       window.removeEventListener('focus', handleReconcileTrigger);
       stopInterval();
     };
-  }, [employeeId]);
+  }, [isEligibleEmployee]);
 
   // ---------------------------------------------------------------------------
   // (C) BROWSER NOTIFICATION PERMISSION PROMPT
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!employeeId) return;
+    if (!isEligibleEmployee) return;
 
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'default') {
@@ -240,14 +255,20 @@ export function useIdleReminders(overrideSettings?: Partial<IdleNotificationSett
           requestNotificationPermission();
           window.removeEventListener('click', handleFirstInteraction);
           window.removeEventListener('keydown', handleFirstInteraction);
+          window.removeEventListener('touchstart', handleFirstInteraction);
+          window.removeEventListener('pointerdown', handleFirstInteraction);
         };
         window.addEventListener('click', handleFirstInteraction, { once: true });
         window.addEventListener('keydown', handleFirstInteraction, { once: true });
+        window.addEventListener('touchstart', handleFirstInteraction, { once: true });
+        window.addEventListener('pointerdown', handleFirstInteraction, { once: true });
         return () => {
           window.removeEventListener('click', handleFirstInteraction);
           window.removeEventListener('keydown', handleFirstInteraction);
+          window.removeEventListener('touchstart', handleFirstInteraction);
+          window.removeEventListener('pointerdown', handleFirstInteraction);
         };
       }
     }
-  }, [employeeId]);
+  }, [isEligibleEmployee]);
 }

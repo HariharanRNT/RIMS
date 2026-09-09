@@ -23,4 +23,5 @@ public interface ITaskService
     Task<TaskDto> ReassignTaskAsync(int taskId, int currentUserId, string currentUserRole, ReassignTaskRequest request);
     Task CancelTaskAsync(int taskId, int currentUserId, string currentUserRole, CancelTaskRequest request);
     Task<List<TaskTimelineEventDto>> GetTaskTimelineAsync(int taskId, int currentUserId, string currentUserRole);
+    Task MarkReminderFiredAsync(int taskId, int employeeId, string milestone);
 }

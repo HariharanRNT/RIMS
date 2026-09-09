@@ -73,6 +73,14 @@ public class TasksController : ControllerBase
         return Ok(ApiResponse.SuccessResponse("Task completed."));
     }
 
+    [HttpPost("{id}/reminder-fired")]
+    public async Task<IActionResult> MarkReminderFired(int id, [FromBody] TaskReminderFiredRequest request)
+    {
+        var employeeId = GetEmployeeId();
+        await _service.MarkReminderFiredAsync(id, employeeId, request.Milestone);
+        return Ok(ApiResponse.SuccessResponse("Task reminder marked as fired."));
+    }
+
     [HttpGet("active/{employeeId}")]
     public async Task<IActionResult> GetActive(int employeeId)
     {

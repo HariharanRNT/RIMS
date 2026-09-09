@@ -3,6 +3,18 @@ using RIIMS.Application.DTOs.Timeline;
 
 namespace RIIMS.Application.DTOs.Report;
 
+public class WorkforceStatusEmployeeDto
+{
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = string.Empty;
+    public string EmployeeCode { get; set; } = string.Empty;
+    public string DepartmentName { get; set; } = string.Empty;
+    public string? StatusDetail { get; set; }
+    public DateTime? StartTime { get; set; }
+    public string? Duration { get; set; }
+    public string? SecondaryDetail { get; set; }
+}
+
 public class AdminDashboardMetricsDto
 {
     public int TotalEmployees { get; set; }
@@ -14,6 +26,10 @@ public class AdminDashboardMetricsDto
     public double TodayProductiveHours { get; set; }
     public int TodayGraceViolations { get; set; }
     public List<ActivityTimelineDto> RecentActivities { get; set; } = new();
+    public List<WorkforceStatusEmployeeDto> WorkingEmployees { get; set; } = new();
+    public List<WorkforceStatusEmployeeDto> OnBreakEmployees { get; set; } = new();
+    public List<WorkforceStatusEmployeeDto> InSupportEmployees { get; set; } = new();
+    public List<WorkforceStatusEmployeeDto> OfflineEmployees { get; set; } = new();
 }
 
 public class EmployeeDashboardMetricsDto

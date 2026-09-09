@@ -103,7 +103,7 @@ const getSupportIcon = (name: string, isActive: boolean = false, size: number = 
 };
 
 import { useTaskEndReminders } from '../../hooks/useTaskEndReminders';
-import { createBackgroundInterval, showIdleNotification } from '../../utils/notificationUtils';
+import { createBackgroundInterval, showIdleNotification, requestNotificationPermission, unlockAudioContext } from '../../utils/notificationUtils';
 
 interface ActiveTask {
   taskId: number;
@@ -117,6 +117,9 @@ interface ActiveTask {
   startTime?: string;
   accumulatedSeconds?: number;
   plannedDurationMinutes?: number;
+  reminder30Fired?: boolean;
+  reminder15Fired?: boolean;
+  reminderCompletionFired?: boolean;
 }
 
 interface ActiveConflictModal {
@@ -208,9 +211,10 @@ export const PersistentActivityBar: React.FC = () => {
   }, []);
 
   const handleEnableNotifications = async () => {
+    unlockAudioContext();
     if (typeof window !== 'undefined' && 'Notification' in window) {
       try {
-        const perm = await Notification.requestPermission();
+        const perm = await requestNotificationPermission();
         setNotifPermission(perm);
         if (perm === 'granted') {
           showToast('Browser notifications enabled successfully!', 'success');
@@ -396,8 +400,19 @@ export const PersistentActivityBar: React.FC = () => {
       status: 'Running',
       plannedDurationMinutes: activeTask.plannedDurationMinutes,
       totalProductiveSeconds: taskElapsedSec,
+      reminder30Fired: activeTask.reminder30Fired,
+      reminder15Fired: activeTask.reminder15Fired,
+      reminderCompletionFired: activeTask.reminderCompletionFired,
     };
-  }, [activeTask?.taskId, activeTask?.status, activeTask?.plannedDurationMinutes, activeTask?.moduleName]);
+  }, [
+    activeTask?.taskId,
+    activeTask?.status,
+    activeTask?.plannedDurationMinutes,
+    activeTask?.moduleName,
+    activeTask?.reminder30Fired,
+    activeTask?.reminder15Fired,
+    activeTask?.reminderCompletionFired,
+  ]);
 
   useTaskEndReminders(activeTaskForReminder, taskElapsedSec, reminderSettings);
 
@@ -1421,629 +1436,601 @@ export const PersistentActivityBar: React.FC = () => {
         document.body
       )}
 
-      {/* Compact Single-Row Sticky Status Bar */}
-      <div style={{
-        position: 'relative',
-        zIndex: 80,
-        height: '52px',
-        minHeight: '48px',
-        maxHeight: '56px',
-        background: 'var(--panel)',
-        borderBottom: '1px solid var(--border)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-        padding: '0 1.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '1rem',
-      }}>
-        {/* Left: Priority Display Logic */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flex: 1 }}>
-          {activeBreak ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flexWrap: 'nowrap' }}>
-              <span
-                className={`badge ${isOverBreak ? 'badge-danger' : isWarningStage ? 'badge-warning' : 'badge-warning'}`}
-                style={{
-                  fontSize: '0.785rem',
-                  padding: '0.3rem 0.75rem',
-                  backgroundColor: isOverBreak ? '#fef2f2' : isWarningStage ? '#fefce8' : '#ecfdf5',
-                  borderColor: isOverBreak ? '#fca5a5' : isWarningStage ? '#fef08a' : '#a7f3d0',
-                  color: isOverBreak ? '#dc2626' : isWarningStage ? '#854d0e' : '#065f46',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {isOverBreak ? (
-                  <AlertCircle size={14} style={{ color: '#dc2626', flexShrink: 0 }} />
-                ) : isWarningStage ? (
-                  <AlertTriangle size={14} style={{ color: '#ca8a04', flexShrink: 0 }} />
-                ) : (
-                  <Coffee size={14} style={{ color: '#059669', flexShrink: 0 }} />
-                )}
-                <span>Active Break: <strong style={{ color: 'inherit' }}>{activeBreak.breakTypeName}</strong></span>
-                <span style={{ fontFamily: 'monospace', fontWeight: 700, marginLeft: '2px' }}>
-                  ({formattedElapsed} / {formattedAllowed})
-                </span>
-                {isOverBreak && (
-                  <span style={{ fontWeight: 700, color: '#dc2626' }}>
-                    • Exceeded by {formatExceededTime(exceededSec)}
-                  </span>
-                )}
-                {isWarningStage && (
-                  <span style={{ fontWeight: 600, color: '#854d0e' }}>
-                    • {formatRemainingTime(remainingSec)} left
-                  </span>
-                )}
-              </span>
-            </div>
-          ) : activeSupport ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flexWrap: 'nowrap' }}>
-              <span
-                className="badge badge-primary"
-                style={{
-                  fontSize: '0.785rem',
-                  padding: '0.3rem 0.75rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  whiteSpace: 'nowrap',
-                  backgroundColor: 'rgba(147, 51, 234, 0.12)',
-                  borderColor: 'rgba(147, 51, 234, 0.3)',
-                  color: '#9333ea',
-                }}
-              >
-                {getSupportIcon(activeSupport.activityTypeName, false, 14)}
-                <span>Active Support: <strong style={{ color: 'inherit' }}>{activeSupport.activityTypeName}</strong></span>
-                <span style={{ fontFamily: 'monospace', fontWeight: 700, marginLeft: '2px' }}>
-                  ({formatClock(elapsedSec, true)})
-                </span>
-              </span>
-            </div>
-          ) : (activeTask && (activeTask.status?.toLowerCase() === 'running' || activeTask.status === '1') && activeTask.startTime) ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, overflow: 'hidden' }}>
-              <div
-                className="activity-status-pill"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.45rem',
-                  padding: '0.3rem 0.75rem',
-                  borderRadius: '9999px',
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  border: '1px solid rgba(16, 185, 129, 0.25)',
-                  fontSize: '0.785rem',
-                  color: 'var(--text-main)',
-                  whiteSpace: 'nowrap',
-                  minWidth: 0,
-                }}
-              >
-                <span className="pulse-dot-green" style={{ flexShrink: 0 }} />
-                <span style={{ color: 'var(--text-secondary)' }}>Task:</span>
-                <span
+      {/* Unified Sticky Session Bar */}
+      <div className="unified-session-bar">
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          background: 'var(--panel-raised)',
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          padding: '0.4rem 0.85rem',
+        }}>
+          {/* Left / Center Section: Live Status + Active Task & Timer */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto', flexWrap: 'wrap' }}>
+            {activeBreak ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flexWrap: 'nowrap' }}>
+                <div className="session-pulse-indicator">
+                  <span
+                    className="pulse-ring"
+                    style={{ backgroundColor: isOverBreak ? 'var(--danger)' : isWarningStage ? 'var(--warning)' : '#10B981' }}
+                  />
+                  <span
+                    className="pulse-core"
+                    style={{ backgroundColor: isOverBreak ? 'var(--danger)' : isWarningStage ? 'var(--warning)' : '#10B981' }}
+                  />
+                </div>
+                <div
                   style={{
-                    fontWeight: 700,
-                    color: 'var(--text-main)',
-                    maxWidth: '260px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    display: 'inline-block',
-                  }}
-                  title={activeTask.moduleName}
-                >
-                  {activeTask.moduleName || 'Running Task'}
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'monospace',
-                    fontWeight: 700,
-                    color: 'var(--primary)',
-                    marginLeft: '2px',
-                  }}
-                >
-                  {formatClock(taskElapsedSec, true)}
-                </span>
-              </div>
-              <span
-                title="Starting any quick break or support activity will automatically put your running task on hold"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                  fontSize: '0.7rem',
-                  color: 'var(--text-muted)',
-                  backgroundColor: 'rgba(100, 116, 139, 0.08)',
-                  border: '1px solid rgba(100, 116, 139, 0.15)',
-                  padding: '0.15rem 0.45rem',
-                  borderRadius: '6px',
-                  cursor: 'help',
-                  flexShrink: 0,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Info size={11} />
-                <span>Auto-holds on activity</span>
-              </span>
-            </div>
-          ) : (activeTask && (activeTask.status?.toLowerCase() === 'onhold' || activeTask.status?.toLowerCase() === 'on hold' || activeTask.status === '2')) ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, overflow: 'hidden' }}>
-              <div
-                className="activity-status-pill-idle"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.45rem',
-                  padding: '0.3rem 0.75rem',
-                  borderRadius: '9999px',
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  border: '1px solid rgba(245, 158, 11, 0.25)',
-                  fontSize: '0.785rem',
-                  color: 'var(--warning-text)',
-                  whiteSpace: 'nowrap',
-                  minWidth: 0,
-                }}
-              >
-                <span className="dot-idle" style={{ backgroundColor: 'var(--warning)', flexShrink: 0 }} />
-                <span>Task on hold:</span>
-                <strong
-                  style={{
-                    color: 'var(--text-main)',
-                    maxWidth: '220px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    fontSize: '0.825rem',
+                    color: isOverBreak ? 'var(--danger-text)' : isWarningStage ? 'var(--warning-text)' : 'var(--text-main)',
+                    fontWeight: 600,
                     whiteSpace: 'nowrap',
                   }}
-                  title={activeTask.moduleName}
                 >
-                  {activeTask.moduleName}
-                </strong>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('/work-task')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--primary)',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  padding: 0,
-                  textDecoration: 'underline',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                Resume in Tasks →
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, overflow: 'hidden' }}>
-              <div
-                className="activity-status-pill-idle"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.45rem',
-                  padding: '0.3rem 0.75rem',
-                  borderRadius: '9999px',
-                  background: 'var(--panel-raised)',
-                  border: '1px solid var(--border)',
-                  fontSize: '0.785rem',
-                  color: 'var(--text-secondary)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <span className="dot-idle" style={{ flexShrink: 0 }} />
-                <span>No active task</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('/work-task')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--primary)',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  padding: 0,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                  textDecoration: 'underline',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                <Play size={11} />
-                <span>Start Task</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Right: Quick Action Dropdown Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-          {/* Active Session Stop Action Shortcut */}
-          {activeBreak && (
-            <button
-              type="button"
-              className="btn btn-danger btn-sm"
-              onClick={handleStopBreak}
-              style={{
-                borderRadius: '8px',
-                padding: '0.32rem 0.75rem',
-                fontSize: '0.785rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                fontWeight: 600,
-              }}
-            >
-              <StopCircle size={14} />
-              <span>Stop Break</span>
-            </button>
-          )}
-
-          {activeSupport && (
-            <button
-              type="button"
-              className="btn btn-danger btn-sm"
-              onClick={handleOpenStopSupport}
-              style={{
-                borderRadius: '8px',
-                padding: '0.32rem 0.75rem',
-                fontSize: '0.785rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                fontWeight: 600,
-              }}
-            >
-              <StopCircle size={14} />
-              <span>{activeSupport.activityTypeName === 'Demo' ? 'Complete Demo' : 'Stop Activity'}</span>
-            </button>
-          )}
-
-          {/* Browser Notification Permission & Test Shortcuts */}
-          {notifPermission === 'default' && (
-            <button
-              type="button"
-              onClick={handleEnableNotifications}
-              title="Click to allow desktop browser notifications for idle alerts and task timers"
-              style={{
-                background: 'rgba(232, 135, 60, 0.12)',
-                border: '1px solid rgba(232, 135, 60, 0.4)',
-                color: 'var(--primary)',
-                padding: '0.28rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span>🔔 Enable Alerts</span>
-            </button>
-          )}
-
-          {notifPermission === 'denied' && (
-            <span
-              title="Desktop notifications are blocked in your browser site settings. Click the lock/tune icon next to the address bar (URL) to allow notifications."
-              style={{
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: 'var(--danger-text, #dc2626)',
-                padding: '0.28rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.725rem',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                whiteSpace: 'nowrap',
-                cursor: 'help',
-              }}
-            >
-              <span>⚠️ Alerts Blocked</span>
-            </span>
-          )}
-
-          {/* Break Dropdown */}
-          <div ref={breakDropdownRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => {
-                setShowBreakMenu(!showBreakMenu);
-                setShowActivityMenu(false);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.45rem',
-                padding: '0.35rem 0.75rem',
-                borderRadius: '8px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                border: activeBreak ? '1px solid var(--primary)' : '1px solid var(--border)',
-                background: activeBreak ? 'var(--primary-tint)' : 'var(--panel-raised)',
-                color: activeBreak ? 'var(--primary)' : 'var(--text-main)',
-                transition: 'all 0.15s ease',
-              }}
-              aria-expanded={showBreakMenu}
-              aria-label="Open Break Menu"
-            >
-              <Coffee size={15} style={{ color: activeBreak ? 'var(--primary)' : '#0284c7' }} />
-              <span>{activeBreak ? `Break: ${activeBreak.breakTypeName}` : 'Break'}</span>
-              <ChevronDown
-                size={14}
-                style={{
-                  color: 'var(--text-muted)',
-                  transform: showBreakMenu ? 'rotate(180deg)' : 'none',
-                  transition: 'transform 0.15s ease',
-                }}
-              />
-            </button>
-
-            {showBreakMenu && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  right: 0,
-                  width: '240px',
-                  background: 'var(--panel)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '12px',
-                  boxShadow: 'var(--shadow-lg)',
-                  padding: '0.5rem',
-                  zIndex: 100,
-                  animation: 'fadeIn 0.15s ease-out',
-                }}
-              >
-                <div style={{ padding: '0.3rem 0.5rem 0.4rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                    Quick Breaks
+                  <Coffee size={15} style={{ color: isOverBreak ? 'var(--danger)' : 'var(--warning)', flexShrink: 0 }} />
+                  <span>On Break: <strong>{activeBreak.breakTypeName}</strong></span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, marginLeft: '2px', color: 'var(--text-main)' }}>
+                    ({formattedElapsed} / {formattedAllowed})
                   </span>
-                  <span style={{ fontSize: '0.675rem', color: 'var(--text-dim)' }}>Auto-holds task</span>
+                  {isOverBreak && (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--danger-text)' }}>
+                      • Exceeded +{formatExceededTime(exceededSec)}
+                    </span>
+                  )}
+                  {isWarningStage && (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--warning-text)' }}>
+                      • {formatRemainingTime(remainingSec)} left
+                    </span>
+                  )}
                 </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  {(breakTypes.length > 0 ? breakTypes : [
-                    { id: 1, name: 'Bio Break', allowedMinutes: 5 },
-                    { id: 2, name: 'Tea Break', allowedMinutes: 15 },
-                    { id: 3, name: 'Lunch Break', allowedMinutes: 30 },
-                    { id: 4, name: 'Call Break', allowedMinutes: 5 },
-                    { id: 5, name: 'Other', allowedMinutes: 5 },
-                  ]).map((bt) => {
-                    const isThisActive = activeBreak?.breakTypeId === bt.id;
-                    const isOther = bt.name.toLowerCase().includes('other');
-                    const allowedMins = bt.allowedMinutes ?? (isOther ? 5 : bt.name.toLowerCase().includes('tea') ? 15 : bt.name.toLowerCase().includes('lunch') ? 30 : 5);
-
-                    return (
-                      <button
-                        key={`break-opt-${bt.id}`}
-                        type="button"
-                        onClick={() => {
-                          setShowBreakMenu(false);
-                          if (checkSessionConflict(bt.name)) return;
-                          setPendingBreakType({ ...bt, allowedMinutes: allowedMins });
-                        }}
-                        disabled={!!activeSupport || (!!activeBreak && !isThisActive)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '0.45rem 0.65rem',
-                          borderRadius: '8px',
-                          border: isThisActive ? '1px solid var(--primary)' : '1px solid transparent',
-                          background: isThisActive ? 'var(--primary-tint)' : 'transparent',
-                          color: isThisActive ? 'var(--primary)' : 'var(--text-main)',
-                          cursor: (!!activeSupport || (!!activeBreak && !isThisActive)) ? 'not-allowed' : 'pointer',
-                          opacity: (!!activeSupport || (!!activeBreak && !isThisActive)) ? 0.5 : 1,
-                          fontSize: '0.8rem',
-                          fontWeight: isThisActive ? 700 : 500,
-                          textAlign: 'left',
-                          transition: 'all 0.12s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isThisActive && !activeSupport && !activeBreak) {
-                            e.currentTarget.style.background = 'var(--panel-raised)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isThisActive) {
-                            e.currentTarget.style.background = 'transparent';
-                          }
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                          {getBreakIcon(bt.name, isThisActive, 15, isOther)}
-                          <span>{bt.name}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <span
-                            style={{
-                              fontSize: '0.7rem',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              background: 'var(--panel-raised)',
-                              border: '1px solid var(--border)',
-                              color: 'var(--text-secondary)',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {allowedMins}m
-                          </span>
-                          {isThisActive && <Check size={13} style={{ color: 'var(--primary)' }} />}
-                        </div>
-                      </button>
-                    );
-                  })}
+              </div>
+            ) : activeSupport ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flexWrap: 'nowrap' }}>
+                <div className="session-pulse-indicator">
+                  <span className="pulse-ring" style={{ backgroundColor: '#A855F7' }} />
+                  <span className="pulse-core" style={{ backgroundColor: '#A855F7' }} />
                 </div>
-
-                {activeBreak && (
-                  <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: '0.45rem', marginTop: '0.45rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowBreakMenu(false);
-                        handleStopBreak();
-                      }}
-                      className="btn btn-danger btn-sm"
-                      style={{ width: '100%', justifyContent: 'center', gap: '0.35rem', borderRadius: '8px' }}
-                    >
-                      <StopCircle size={14} />
-                      <span>Stop Active Break</span>
-                    </button>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    fontSize: '0.825rem',
+                    color: '#A855F7',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {getSupportIcon(activeSupport.activityTypeName, false, 15)}
+                  <span>Support: <strong>{activeSupport.activityTypeName}</strong></span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, marginLeft: '2px', color: 'var(--text-main)' }}>
+                    ({formatClock(elapsedSec, true)})
+                  </span>
+                </div>
+              </div>
+            ) : (activeTask && (activeTask.status?.toLowerCase() === 'running' || activeTask.status === '1') && activeTask.startTime) ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, overflow: 'hidden', flexWrap: 'wrap' }}>
+                <div
+                  className="session-task-clickable"
+                  onClick={() => navigate('/work-task')}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate('/work-task');
+                    }
+                  }}
+                  aria-label={`View current task: ${activeTask.moduleName || 'Active Work Task'} — go to Work Task Engine`}
+                  title={`View current task: ${activeTask.moduleName || 'Active Work Task'} (Go to Work Task Engine)`}
+                >
+                  <div className="session-pulse-indicator">
+                    <span className="pulse-ring" style={{ backgroundColor: '#10B981' }} />
+                    <span className="pulse-core" style={{ backgroundColor: '#10B981' }} />
                   </div>
-                )}
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.825rem', minWidth: 0 }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Task:</span>
+                    <span
+                      className="session-task-title"
+                      style={{
+                        fontWeight: 700,
+                        color: 'var(--text-main)',
+                        maxWidth: '280px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block',
+                      }}
+                      title={activeTask.moduleName}
+                    >
+                      {activeTask.moduleName || 'Active Work Task'}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontWeight: 800,
+                        fontSize: '0.9rem',
+                        color: 'var(--primary)',
+                        marginLeft: '0.2rem',
+                        backgroundColor: 'var(--primary-light)',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      {formatClock(taskElapsedSec, true)}
+                    </span>
+                  </div>
+                </div>
+                <span
+                  title="Starting any break or support activity will automatically put your running task on hold"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    fontSize: '0.7rem',
+                    color: 'var(--text-muted)',
+                    backgroundColor: 'rgba(100, 116, 139, 0.1)',
+                    border: '1px solid rgba(100, 116, 139, 0.2)',
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '6px',
+                    cursor: 'help',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Info size={11} />
+                  <span>Auto-holds on activity</span>
+                </span>
+              </div>
+            ) : (activeTask && (activeTask.status?.toLowerCase() === 'onhold' || activeTask.status?.toLowerCase() === 'on hold' || activeTask.status === '2')) ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, overflow: 'hidden' }}>
+                <div
+                  className="session-task-clickable"
+                  onClick={() => navigate('/work-task')}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate('/work-task');
+                    }
+                  }}
+                  aria-label={`View task on hold: ${activeTask.moduleName} — go to Work Task Engine`}
+                  title={`View task on hold: ${activeTask.moduleName} (Go to Work Task Engine)`}
+                >
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--warning)', flexShrink: 0 }} />
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem' }}>
+                    <span style={{ color: 'var(--warning-text)', fontWeight: 600 }}>Task on hold:</span>
+                    <strong
+                      className="session-task-title"
+                      style={{
+                        color: 'var(--text-main)',
+                        maxWidth: '240px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={activeTask.moduleName}
+                    >
+                      {activeTask.moduleName}
+                    </strong>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/work-task')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary)',
+                    fontSize: '0.775rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: 0,
+                    textDecoration: 'underline',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                >
+                  Resume in Tasks →
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-muted)', flexShrink: 0 }} />
+                <span style={{ fontSize: '0.825rem', color: 'var(--text-secondary)' }}>No active task running</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/work-task')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary)',
+                    fontSize: '0.775rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: '0.1rem 0.3rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    textDecoration: 'underline',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Play size={12} />
+                  <span>Start Task</span>
+                </button>
               </div>
             )}
           </div>
 
-          {/* Activity Dropdown */}
-          <div ref={activityDropdownRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => {
-                setShowActivityMenu(!showActivityMenu);
-                setShowBreakMenu(false);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.45rem',
-                padding: '0.35rem 0.75rem',
-                borderRadius: '8px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                border: activeSupport ? '1px solid #9333ea' : '1px solid var(--border)',
-                background: activeSupport ? 'rgba(147, 51, 234, 0.12)' : 'var(--panel-raised)',
-                color: activeSupport ? '#9333ea' : 'var(--text-main)',
-                transition: 'all 0.15s ease',
-              }}
-              aria-expanded={showActivityMenu}
-              aria-label="Open Activity Menu"
-            >
-              <Headphones size={15} style={{ color: activeSupport ? '#9333ea' : '#9333ea' }} />
-              <span>{activeSupport ? `Activity: ${activeSupport.activityTypeName}` : 'Activity'}</span>
-              <ChevronDown
-                size={14}
+          {/* Right Section: Connected Quick Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+            {/* Active Session Stop Action Shortcut */}
+            {activeBreak && (
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={handleStopBreak}
                 style={{
-                  color: 'var(--text-muted)',
-                  transform: showActivityMenu ? 'rotate(180deg)' : 'none',
-                  transition: 'transform 0.15s ease',
-                }}
-              />
-            </button>
-
-            {showActivityMenu && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  right: 0,
-                  width: '230px',
-                  background: 'var(--panel)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '12px',
-                  boxShadow: 'var(--shadow-lg)',
-                  padding: '0.5rem',
-                  zIndex: 100,
-                  animation: 'fadeIn 0.15s ease-out',
+                  borderRadius: '8px',
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.785rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontWeight: 600,
                 }}
               >
-                <div style={{ padding: '0.3rem 0.5rem 0.4rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                    Support Activities
-                  </span>
-                  <span style={{ fontSize: '0.675rem', color: 'var(--text-dim)' }}>Auto-holds task</span>
-                </div>
+                <StopCircle size={14} />
+                <span>Stop Break</span>
+              </button>
+            )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  {(supportTypes.length > 0 ? supportTypes : [
-                    { id: 1, name: 'Support Call' },
-                    { id: 2, name: 'Call' },
-                    { id: 3, name: 'Meeting' },
-                    { id: 4, name: 'Discussion' },
-                    { id: 5, name: 'Demo' },
-                  ]).map((st) => {
-                    const isThisActive = activeSupport?.activityTypeId === st.id;
+            {activeSupport && (
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={handleOpenStopSupport}
+                style={{
+                  borderRadius: '8px',
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.785rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontWeight: 600,
+                }}
+              >
+                <StopCircle size={14} />
+                <span>{activeSupport.activityTypeName === 'Demo' ? 'Complete Demo' : 'Stop Activity'}</span>
+              </button>
+            )}
 
-                    return (
+            {/* Desktop Alerts Prompt (if default or denied) */}
+            {notifPermission === 'default' && (
+              <button
+                type="button"
+                onClick={handleEnableNotifications}
+                title="Click to allow desktop browser notifications for idle alerts and task timers"
+                style={{
+                  background: 'var(--primary-tint)',
+                  border: '1px solid var(--primary)',
+                  color: 'var(--primary)',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '8px',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span>🔔 Alerts</span>
+              </button>
+            )}
+
+            {/* Break Dropdown */}
+            <div ref={breakDropdownRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBreakMenu(!showBreakMenu);
+                  setShowActivityMenu(false);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: activeBreak ? '1px solid var(--warning)' : '1px solid var(--border)',
+                  background: activeBreak ? 'var(--warning-bg)' : 'var(--panel)',
+                  color: activeBreak ? 'var(--warning-text)' : 'var(--text-main)',
+                  transition: 'all 0.15s ease',
+                }}
+                aria-expanded={showBreakMenu}
+                aria-label="Open Break Menu"
+              >
+                <Coffee size={15} style={{ color: activeBreak ? 'var(--warning)' : 'var(--warning-text)' }} />
+                <span>{activeBreak ? `Break: ${activeBreak.breakTypeName}` : 'Break'}</span>
+                <ChevronDown
+                  size={14}
+                  style={{
+                    color: 'var(--text-muted)',
+                    transform: showBreakMenu ? 'rotate(180deg)' : 'none',
+                    transition: 'transform 0.15s ease',
+                  }}
+                />
+              </button>
+
+              {showBreakMenu && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    width: '240px',
+                    background: 'var(--panel)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '12px',
+                    boxShadow: 'var(--shadow-lg)',
+                    padding: '0.5rem',
+                    zIndex: 100,
+                    animation: 'fadeIn 0.15s ease-out',
+                  }}
+                >
+                  <div style={{ padding: '0.3rem 0.5rem 0.4rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                      Quick Breaks
+                    </span>
+                    <span style={{ fontSize: '0.675rem', color: 'var(--text-dim)' }}>Auto-holds task</span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {(breakTypes.length > 0 ? breakTypes : [
+                      { id: 1, name: 'Bio Break', allowedMinutes: 5 },
+                      { id: 2, name: 'Tea Break', allowedMinutes: 15 },
+                      { id: 3, name: 'Lunch Break', allowedMinutes: 30 },
+                      { id: 4, name: 'Call Break', allowedMinutes: 5 },
+                      { id: 5, name: 'Other', allowedMinutes: 5 },
+                    ]).map((bt) => {
+                      const isThisActive = activeBreak?.breakTypeId === bt.id;
+                      const isOther = bt.name.toLowerCase().includes('other');
+                      const allowedMins = bt.allowedMinutes ?? (isOther ? 5 : bt.name.toLowerCase().includes('tea') ? 15 : bt.name.toLowerCase().includes('lunch') ? 30 : 5);
+
+                      return (
+                        <button
+                          key={`break-opt-${bt.id}`}
+                          type="button"
+                          onClick={() => {
+                            setShowBreakMenu(false);
+                            if (checkSessionConflict(bt.name)) return;
+                            setPendingBreakType({ ...bt, allowedMinutes: allowedMins });
+                          }}
+                          disabled={!!activeSupport || (!!activeBreak && !isThisActive)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.45rem 0.65rem',
+                            borderRadius: '8px',
+                            border: isThisActive ? '1px solid var(--warning)' : '1px solid transparent',
+                            background: isThisActive ? 'var(--warning-bg)' : 'transparent',
+                            color: isThisActive ? 'var(--warning-text)' : 'var(--text-main)',
+                            cursor: (!!activeSupport || (!!activeBreak && !isThisActive)) ? 'not-allowed' : 'pointer',
+                            opacity: (!!activeSupport || (!!activeBreak && !isThisActive)) ? 0.5 : 1,
+                            fontSize: '0.8rem',
+                            fontWeight: isThisActive ? 700 : 500,
+                            textAlign: 'left',
+                            transition: 'all 0.12s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isThisActive && !activeSupport && !activeBreak) {
+                              e.currentTarget.style.background = 'var(--panel-raised)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isThisActive) {
+                              e.currentTarget.style.background = 'transparent';
+                            }
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                            {getBreakIcon(bt.name, isThisActive, 15, isOther)}
+                            <span>{bt.name}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                background: 'var(--panel-raised)',
+                                border: '1px solid var(--border)',
+                                color: 'var(--text-secondary)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {allowedMins}m
+                            </span>
+                            {isThisActive && <Check size={13} style={{ color: 'var(--warning)' }} />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeBreak && (
+                    <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: '0.45rem', marginTop: '0.45rem' }}>
                       <button
-                        key={`support-opt-${st.id}`}
+                        type="button"
+                        onClick={() => {
+                          setShowBreakMenu(false);
+                          handleStopBreak();
+                        }}
+                        className="btn btn-danger btn-sm"
+                        style={{ width: '100%', justifyContent: 'center', gap: '0.35rem', borderRadius: '8px' }}
+                      >
+                        <StopCircle size={14} />
+                        <span>Stop Active Break</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Activity Dropdown */}
+            <div ref={activityDropdownRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowActivityMenu(!showActivityMenu);
+                  setShowBreakMenu(false);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: activeSupport ? '1px solid #A855F7' : '1px solid var(--border)',
+                  background: activeSupport ? 'rgba(168, 85, 247, 0.16)' : 'var(--panel)',
+                  color: activeSupport ? '#A855F7' : 'var(--text-main)',
+                  transition: 'all 0.15s ease',
+                }}
+                aria-expanded={showActivityMenu}
+                aria-label="Open Activity Menu"
+              >
+                <Headphones size={15} style={{ color: '#A855F7' }} />
+                <span>{activeSupport ? `Activity: ${activeSupport.activityTypeName}` : 'Activity'}</span>
+                <ChevronDown
+                  size={14}
+                  style={{
+                    color: 'var(--text-muted)',
+                    transform: showActivityMenu ? 'rotate(180deg)' : 'none',
+                    transition: 'transform 0.15s ease',
+                  }}
+                />
+              </button>
+
+              {showActivityMenu && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    width: '230px',
+                    background: 'var(--panel)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '12px',
+                    boxShadow: 'var(--shadow-lg)',
+                    padding: '0.5rem',
+                    zIndex: 100,
+                    animation: 'fadeIn 0.15s ease-out',
+                  }}
+                >
+                  <div style={{ padding: '0.3rem 0.5rem 0.4rem', borderBottom: '1px solid var(--border-soft)', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                      Support Activities
+                    </span>
+                    <span style={{ fontSize: '0.675rem', color: 'var(--text-dim)' }}>Auto-holds task</span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {(supportTypes.length > 0 ? supportTypes : [
+                      { id: 1, name: 'Support Call' },
+                      { id: 2, name: 'Call' },
+                      { id: 3, name: 'Meeting' },
+                      { id: 4, name: 'Discussion' },
+                      { id: 5, name: 'Demo' },
+                    ]).map((st) => {
+                      const isThisActive = activeSupport?.activityTypeId === st.id;
+
+                      return (
+                        <button
+                          key={`support-opt-${st.id}`}
+                          type="button"
+                          onClick={() => {
+                            setShowActivityMenu(false);
+                            if (checkSessionConflict(st.name)) return;
+                            setPendingSupportType(st);
+                          }}
+                          disabled={!!activeBreak || (!!activeSupport && !isThisActive)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.45rem 0.65rem',
+                            borderRadius: '8px',
+                            border: isThisActive ? '1px solid #A855F7' : '1px solid transparent',
+                            background: isThisActive ? 'rgba(168, 85, 247, 0.16)' : 'transparent',
+                            color: isThisActive ? '#A855F7' : 'var(--text-main)',
+                            cursor: (!!activeBreak || (!!activeSupport && !isThisActive)) ? 'not-allowed' : 'pointer',
+                            opacity: (!!activeBreak || (!!activeSupport && !isThisActive)) ? 0.5 : 1,
+                            fontSize: '0.8rem',
+                            fontWeight: isThisActive ? 700 : 500,
+                            textAlign: 'left',
+                            transition: 'all 0.12s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isThisActive && !activeBreak && !activeSupport) {
+                              e.currentTarget.style.background = 'var(--panel-raised)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isThisActive) {
+                              e.currentTarget.style.background = 'transparent';
+                            }
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                            {getSupportIcon(st.name, isThisActive, 15)}
+                            <span>{st.name}</span>
+                          </div>
+                          {isThisActive && <Check size={13} style={{ color: '#A855F7' }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeSupport && (
+                    <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: '0.45rem', marginTop: '0.45rem' }}>
+                      <button
                         type="button"
                         onClick={() => {
                           setShowActivityMenu(false);
-                          if (checkSessionConflict(st.name)) return;
-                          setPendingSupportType(st);
+                          handleOpenStopSupport();
                         }}
-                        disabled={!!activeBreak || (!!activeSupport && !isThisActive)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '0.45rem 0.65rem',
-                          borderRadius: '8px',
-                          border: isThisActive ? '1px solid #9333ea' : '1px solid transparent',
-                          background: isThisActive ? 'rgba(147, 51, 234, 0.12)' : 'transparent',
-                          color: isThisActive ? '#9333ea' : 'var(--text-main)',
-                          cursor: (!!activeBreak || (!!activeSupport && !isThisActive)) ? 'not-allowed' : 'pointer',
-                          opacity: (!!activeBreak || (!!activeSupport && !isThisActive)) ? 0.5 : 1,
-                          fontSize: '0.8rem',
-                          fontWeight: isThisActive ? 700 : 500,
-                          textAlign: 'left',
-                          transition: 'all 0.12s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isThisActive && !activeBreak && !activeSupport) {
-                            e.currentTarget.style.background = 'var(--panel-raised)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isThisActive) {
-                            e.currentTarget.style.background = 'transparent';
-                          }
-                        }}
+                        className="btn btn-danger btn-sm"
+                        style={{ width: '100%', justifyContent: 'center', gap: '0.35rem', borderRadius: '8px' }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                          {getSupportIcon(st.name, isThisActive, 15)}
-                          <span>{st.name}</span>
-                        </div>
-                        {isThisActive && <Check size={13} style={{ color: '#9333ea' }} />}
+                        <StopCircle size={14} />
+                        <span>{activeSupport.activityTypeName === 'Demo' ? 'Complete Demo' : 'Stop Activity'}</span>
                       </button>
-                    );
-                  })}
+                    </div>
+                  )}
                 </div>
-
-                {activeSupport && (
-                  <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: '0.45rem', marginTop: '0.45rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowActivityMenu(false);
-                        handleOpenStopSupport();
-                      }}
-                      className="btn btn-danger btn-sm"
-                      style={{ width: '100%', justifyContent: 'center', gap: '0.35rem', borderRadius: '8px' }}
-                    >
-                      <StopCircle size={14} />
-                      <span>{activeSupport.activityTypeName === 'Demo' ? 'Complete Demo' : 'Stop Activity'}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

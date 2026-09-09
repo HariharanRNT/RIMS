@@ -70,6 +70,17 @@ export const Header: React.FC<HeaderProps> = () => {
         return { title: 'Master Lookups', category: 'System' };
       case '/admin/settings':
         return { title: 'System Settings', category: 'System' };
+      case '/calendar':
+      case '/admin/attendance-calendar':
+        return { title: 'Attendance Calendar', category: 'Overview' };
+      case '/deployments':
+      case '/admin/deployments':
+        return { title: 'Product Deployment History', category: 'Deployments' };
+      case '/admin/deployment-access':
+        return { title: 'Employee Product Access', category: 'Deployments' };
+      case '/profile':
+      case '/admin/profile':
+        return { title: 'My Profile', category: 'Account' };
       case '/admin/notifications':
         return { title: 'Notification Center', category: 'System' };
       default:

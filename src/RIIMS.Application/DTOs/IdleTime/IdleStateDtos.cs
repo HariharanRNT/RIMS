@@ -13,4 +13,10 @@ public class EmployeeCurrentStateDto
     public long TodayBreakSeconds { get; set; }
     public long TodayIdleSeconds { get; set; }
     public int TodayActivitiesCount { get; set; }
+    public List<int> IdleMilestonesFired { get; set; } = new();
+}
+
+public class IdleReminderFiredRequest
+{
+    public int MilestoneMinutes { get; set; }
 }

@@ -9,4 +9,5 @@ public interface IIdleTimeService
     Task OnActivityStartingAsync(int employeeId, DateTime activityStartTime, string activityType);
     Task OnActivityEndingAsync(int employeeId, DateTime activityEndTime, string sourceActivityType);
     Task<EmployeeCurrentStateDto> GetCurrentStateAsync(int employeeId);
+    Task MarkIdleReminderFiredAsync(int employeeId, int milestoneMinutes);
 }

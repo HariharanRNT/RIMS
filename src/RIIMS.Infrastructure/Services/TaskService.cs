@@ -752,7 +752,10 @@ public class TaskService : ITaskService
             Status = task.Status.ToString(),
             StartTime = openTimeLog?.StartTime != null ? DateTime.SpecifyKind(openTimeLog.StartTime, DateTimeKind.Utc) : null,
             AccumulatedSeconds = Math.Max(0, accumulatedSeconds),
-            PlannedDurationMinutes = task.PlannedDurationMinutes
+            PlannedDurationMinutes = task.PlannedDurationMinutes,
+            Reminder30Fired = task.Reminder30Fired,
+            Reminder15Fired = task.Reminder15Fired,
+            ReminderCompletionFired = task.ReminderCompletionFired
         };
     }
 
@@ -1251,5 +1254,27 @@ public class TaskService : ITaskService
                 Remarks = e.Remarks
             }).OrderBy(e => e.Timestamp).ToList()
         };
+    }
+
+    public async Task MarkReminderFiredAsync(int taskId, int employeeId, string milestone)
+    {
+        var task = await _context.WorkTasks.FirstOrDefaultAsync(t => t.Id == taskId && t.EmployeeId == employeeId);
+        if (task == null) return;
+
+        var norm = milestone?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (norm == "30min" || norm == "30" || norm == "first" || norm == "reminder30")
+        {
+            task.Reminder30Fired = true;
+        }
+        else if (norm == "15min" || norm == "15" || norm == "second" || norm == "reminder15")
+        {
+            task.Reminder15Fired = true;
+        }
+        else if (norm == "completion" || norm == "complete" || norm == "0" || norm == "planned")
+        {
+            task.ReminderCompletionFired = true;
+        }
+
+        await _context.SaveChangesAsync();
     }
 }

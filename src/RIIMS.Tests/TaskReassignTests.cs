@@ -25,6 +25,7 @@ public class TaskReassignTests
         public Task OnActivityStartingAsync(int employeeId, DateTime activityStartTime, string activityType) => Task.CompletedTask;
         public Task OnActivityEndingAsync(int employeeId, DateTime activityEndTime, string sourceActivityType) => Task.CompletedTask;
         public Task<EmployeeCurrentStateDto> GetCurrentStateAsync(int employeeId) => Task.FromResult(new EmployeeCurrentStateDto());
+        public Task MarkIdleReminderFiredAsync(int employeeId, int milestoneMinutes) => Task.CompletedTask;
     }
 
     private RiimsDbContext CreateInMemoryContext()

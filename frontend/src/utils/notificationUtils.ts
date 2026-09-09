@@ -1,7 +1,47 @@
 /**
- * Notification utility module for browser Notifications API.
+ * Notification utility module for browser Notifications API & Audio Chime.
  * Fails silently if notifications are unsupported or permission is denied.
  */
+
+let sharedAudioContext: AudioContext | null = null;
+
+/**
+ * Get or create the shared singleton AudioContext instance.
+ */
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!sharedAudioContext) {
+    sharedAudioContext = new AudioCtx();
+  }
+  return sharedAudioContext;
+}
+
+/**
+ * "Unlock" the shared AudioContext from a real user gesture context
+ * (such as button click or key press) so subsequent automated chimes
+ * from Web Workers or background timers can play audibly without being blocked by browser autoplay policy.
+ */
+export function unlockAudioContext(): void {
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
+}
+
+// Auto-unlock on first user gesture anywhere on the page
+if (typeof window !== 'undefined') {
+  const unlockOnFirstGesture = () => {
+    unlockAudioContext();
+    window.removeEventListener('click', unlockOnFirstGesture);
+    window.removeEventListener('keydown', unlockOnFirstGesture);
+    window.removeEventListener('touchstart', unlockOnFirstGesture);
+  };
+  window.addEventListener('click', unlockOnFirstGesture, { once: true, passive: true });
+  window.addEventListener('keydown', unlockOnFirstGesture, { once: true, passive: true });
+  window.addEventListener('touchstart', unlockOnFirstGesture, { once: true, passive: true });
+}
 
 /**
  * Check if the browser supports the Notifications API.
@@ -13,9 +53,11 @@ export function isNotificationSupported(): boolean {
 /**
  * Request notification permission from the user.
  * Must be called from a user-gesture context (e.g., button click).
+ * Also unlocks the shared AudioContext instance.
  * Returns the permission state, or 'denied' if unsupported.
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  unlockAudioContext();
   if (!isNotificationSupported()) return 'denied';
 
   try {
@@ -28,15 +70,36 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
- * Show a browser notification for a task reminder (OS alert + In-App popup + Chime).
- *
- * @param title - Notification title
- * @param body - Notification body text
- * @param tag - Unique tag to prevent duplicate notifications
+ * Play a subtle, pleasant notification chime using Web Audio API (zero assets needed).
+ * Reuses a single shared AudioContext and resumes it if suspended.
  */
-export function showTaskReminder(title: string, body: string, tag: string): void {
-  showBrowserNotification(title, body, tag);
-  showInAppToast(title, body, 'task');
+export async function playNotificationChime(): Promise<void> {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (err) {
+    console.warn('[RIIMS Notification] Chime playback failed:', err);
+  }
 }
 
 /**
@@ -120,40 +183,23 @@ export function showInAppToast(title: string, body: string, type: 'idle' | 'task
 }
 
 /**
+ * Show a browser notification for a task reminder (OS alert + In-App popup + Chime).
+ *
+ * @param title - Notification title
+ * @param body - Notification body text
+ * @param tag - Unique tag to prevent duplicate notifications
+ */
+export function showTaskReminder(title: string, body: string, tag: string): void {
+  showBrowserNotification(title, body, tag);
+  showInAppToast(title, body, 'task');
+}
+
+/**
  * Show a browser notification for an idle reminder (OS alert + In-App popup + Chime).
  */
 export function showIdleNotification(title: string, body: string, tag: string): void {
   showBrowserNotification(title, body, tag);
   showInAppToast(title, body, 'idle');
-}
-
-/**
- * Play a subtle, pleasant notification chime using Web Audio API (zero assets needed).
- */
-export function playNotificationChime(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
-
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-  } catch {
-    // AudioContext might be constrained if user has not interacted with the tab yet
-  }
 }
 
 /**
@@ -172,7 +218,7 @@ export function parseUtcMs(dateStr: string | null | undefined): number {
  * Generic browser notification helper with tab-focusing on click and optional chime.
  */
 export function showBrowserNotification(title: string, body: string, tag: string): void {
-  playNotificationChime();
+  playNotificationChime().catch(() => {});
 
   if (!isNotificationSupported()) {
     console.warn('[RIIMS Notification] Notifications API not supported in this browser.');

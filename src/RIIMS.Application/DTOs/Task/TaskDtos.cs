@@ -111,6 +111,11 @@ public class TaskDto
     public List<TaskTimelineEventDto> TimelineEvents { get; set; } = new();
 }
 
+public class TaskReminderFiredRequest
+{
+    public string Milestone { get; set; } = string.Empty; // "30min", "15min", "completion"
+}
+
 public class ActiveTaskDto
 {
     public int TaskId { get; set; }
@@ -124,6 +129,9 @@ public class ActiveTaskDto
     public DateTime? StartTime { get; set; }
     public int AccumulatedSeconds { get; set; }
     public int? PlannedDurationMinutes { get; set; }
+    public bool Reminder30Fired { get; set; }
+    public bool Reminder15Fired { get; set; }
+    public bool ReminderCompletionFired { get; set; }
 }
 
 public class TeamEmployeeDto

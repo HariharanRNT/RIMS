@@ -2,8 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import apiClient from '../../api/client';
-import { Search, Clock, Calendar, AlertTriangle, Settings, ExternalLink, CheckCircle2, PartyPopper, Bell, X } from 'lucide-react';
+import { Clock, Calendar, AlertTriangle, Settings, ExternalLink, CheckCircle2, PartyPopper, Bell, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+
+interface AdminSummary {
+  activeWorkforceCount: number;
+  totalEmployees: number;
+  workingCount: number;
+  todayGraceViolations: number;
+}
 
 export const Navbar: React.FC = () => {
   const { user, role } = useAuth();
@@ -14,8 +21,41 @@ export const Navbar: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Live Summary Stats for context strip
+  const [adminSummary, setAdminSummary] = useState<AdminSummary | null>(null);
+
   const notificationContainerRef = useRef<HTMLDivElement>(null);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Fetch admin summary for context strip
+  const fetchAdminSummary = async () => {
+    if (role !== 'Admin') return;
+    try {
+      const res = await apiClient.get('/reports/admin-dashboard');
+      if (res.data.success) {
+        const d = res.data.data;
+        setAdminSummary({
+          activeWorkforceCount: d.activeWorkforceCount,
+          totalEmployees: d.totalEmployees,
+          workingCount: d.workingCount,
+          todayGraceViolations: d.todayGraceViolations
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchAdminSummary();
+    const interval = setInterval(fetchAdminSummary, 30000);
+    const handleActivityChanged = () => fetchAdminSummary();
+    window.addEventListener('activity-changed', handleActivityChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('activity-changed', handleActivityChanged);
+    };
+  }, [role]);
 
   // Preference Filters
   const [prefLeave, setPrefLeave] = useState(true);
@@ -103,7 +143,6 @@ export const Navbar: React.FC = () => {
   const handleClearAll = async () => {
     setActionError(null);
     const backupList = [...notificationsList];
-    // Optimistic UI update: mark all as read
     setNotificationsList((prev) => prev.map((n) => ({ ...n, isRead: true })));
 
     try {
@@ -122,7 +161,6 @@ export const Navbar: React.FC = () => {
     e.stopPropagation();
     setActionError(null);
     const backupList = [...notificationsList];
-    // Optimistic UI update: mark single item as read
     setNotificationsList((prev) =>
       prev.map((n) => (n.key === key ? { ...n, isRead: true } : n))
     );
@@ -182,40 +220,76 @@ export const Navbar: React.FC = () => {
       const localPart = name.split('@')[0];
       const cleanName = localPart.replace(/[0-9._-]/g, ' ').trim();
       if (!cleanName) return userRole === 'Admin' ? 'System Admin' : 'Employee';
-      return cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      return cleanName.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
     return name;
   };
 
+  const getShiftAndDateInfo = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    const shiftName = hour >= 6 && hour < 14 ? 'Morning Shift' : hour >= 14 && hour < 22 ? 'Day Shift' : 'Night Shift';
+    const dateFormatted = now.toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+    return `${shiftName} · ${dateFormatted}`;
+  };
+
   return (
     <div className="topbar">
-      {/* Search Bar */}
-      <div className="search">
-        <Search size={15} style={{ opacity: 0.6, flexShrink: 0 }} />
-        <input
-          type="text"
-          placeholder="Search employees, tasks, ref IDs…"
-        />
+      {/* Context Strip Left (Shift info + live telemetry summary) */}
+      <div className="context-strip-left">
+        <div className="context-shift-badge">
+          <span className="shift-dot" />
+          <span>{getShiftAndDateInfo()}</span>
+        </div>
+
+        {adminSummary && (
+          <div className="context-live-summary">
+            <span>
+              <b>{adminSummary.activeWorkforceCount}</b> of {adminSummary.totalEmployees} present
+            </span>
+            <span className="summary-divider">•</span>
+            <span>
+              <b>{adminSummary.workingCount}</b> tasks active
+            </span>
+            <span className="summary-divider">•</span>
+            <span
+              style={{
+                color: adminSummary.todayGraceViolations > 0 ? 'var(--red)' : 'inherit',
+                fontWeight: adminSummary.todayGraceViolations > 0 ? 600 : 400
+              }}
+            >
+              {adminSummary.todayGraceViolations} late{' '}
+              {adminSummary.todayGraceViolations === 1 ? 'login' : 'logins'}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Clock */}
-      <div className="clock">
-        🕐 {timeStr || '12:00:00 PM'} <span className="tz">IST</span>
-      </div>
+      {/* Topbar Cluster Right */}
+      <div className="topbar-cluster-right">
+        {/* Clock */}
+        <div className="clock">
+          🕐 {timeStr || '12:00:00 PM'} <span className="tz">IST</span>
+        </div>
 
-      {/* Notification Bell */}
-      <div ref={notificationContainerRef} style={{ position: 'relative' }}>
-        <button
-          ref={bellButtonRef}
-          type="button"
-          className={`bell ${calculatedUnreadCount > 0 ? 'has-unread' : ''} ${showNotifications ? 'is-active' : ''}`}
-          onClick={() => setShowNotifications(!showNotifications)}
-          title={showNotifications ? "Close notifications" : "Notifications & Alerts"}
-          aria-expanded={showNotifications}
-          aria-label="Notifications & Alerts"
-        >
-          <Bell size={18} fill={showNotifications ? 'currentColor' : 'none'} />
-        </button>
+        {/* Notification Bell */}
+        <div ref={notificationContainerRef} style={{ position: 'relative' }}>
+          <button
+            ref={bellButtonRef}
+            type="button"
+            className={`bell ${calculatedUnreadCount > 0 ? 'has-unread' : ''} ${showNotifications ? 'is-active' : ''}`}
+            onClick={() => setShowNotifications(!showNotifications)}
+            title={showNotifications ? 'Close notifications' : 'Notifications & Alerts'}
+            aria-expanded={showNotifications}
+            aria-label="Notifications & Alerts"
+          >
+            <Bell size={18} fill={showNotifications ? 'currentColor' : 'none'} />
+          </button>
 
         {/* Notifications Dropdown Panel */}
         {showNotifications && (
@@ -538,6 +612,7 @@ export const Navbar: React.FC = () => {
             {getInitials(user?.employeeName)}
           </div>
         </div>
+      </div>
     </div>
   );
 };

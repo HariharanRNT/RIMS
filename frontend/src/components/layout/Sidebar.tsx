@@ -87,6 +87,8 @@ export const Sidebar: React.FC = () => {
     {
       title: 'CATALOG & SYSTEM',
       items: [
+        { to: '/admin/deployments', label: 'Deployment History', icon: Package, permissions: ['ProductDeployment.View', 'MasterData.Manage', 'Employee.View'] },
+        { to: '/admin/deployment-access', label: 'Employee Product Access', icon: Users, permissions: ['ProductDeployment.Manage', 'MasterData.Manage'] },
         { to: '/admin/products', label: 'Products', icon: Package, permissions: ['MasterData.Manage', 'Employee.View'] },
         { to: '/admin/clients', label: 'Clients', icon: UserCheck, permissions: ['MasterData.Manage', 'Employee.View'] },
         { to: '/admin/mappings', label: 'Product-Client Maps', icon: Link2, permissions: ['MasterData.Manage', 'Employee.View'] },
@@ -111,6 +113,7 @@ export const Sidebar: React.FC = () => {
         { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/calendar', label: 'Attendance Calendar', icon: CalendarDays },
         { to: '/work-task', label: 'Work Task Engine', icon: Briefcase },
+        { to: '/deployments', label: 'Deployment History', icon: Package },
       ]
     },
     {
@@ -125,6 +128,7 @@ export const Sidebar: React.FC = () => {
 
   // Specific additional administration tools permitted for hybrid employees (e.g. Employee Admin, HR Admin)
   const employeeAdminItems: NavItem[] = ([
+    { to: '/admin/deployment-access', label: 'Employee Product Access', icon: Users, permissions: ['ProductDeployment.Manage', 'MasterData.Manage'] },
     { to: '/admin/employees', label: 'Employees', icon: Users, permissions: ['Employee.View', 'Employee.Create'] },
     { to: '/admin/approvals', label: 'Approval Queue', icon: CheckCircle, permissions: ['Leave.Approve', 'Permission.Approve', 'Attendance.Approve'] },
     { to: '/admin/attendance-permissions', label: 'Attendance & Permissions', icon: ShieldCheck, permissions: ['Attendance.View', 'Permission.View'] },
